@@ -1,0 +1,145 @@
+firms:
+  - id: retailer_a
+    name: "RetailPro AG"
+    stage: retailer
+    archetype: standard
+    cash: 100000
+    inventory: 300
+    sell_price: 4.99
+    quality_level: 0.72
+    reputation: 0.70
+    reliability: 0.82
+    capacity: 500
+    employees: 20
+    wage_level: 5200
+    productivity_per_employee: 25
+    r_and_d_level: 0.30
+    r_and_d_budget: 5000
+    supplier_priority: reliability
+    suppliers: [wholesaler_a, wholesaler_b]
+  - id: retailer_b
+    name: "ValueMart"
+    stage: retailer
+    archetype: low_cost
+    cash: 90000
+    inventory: 320
+    sell_price: 4.29
+    quality_level: 0.60
+    reputation: 0.62
+    reliability: 0.78
+    capacity: 600
+    employees: 18
+    wage_level: 4600
+    productivity_per_employee: 28
+    r_and_d_level: 0.15
+    r_and_d_budget: 2000
+    supplier_priority: price
+    suppliers: [wholesaler_a, wholesaler_b]
+  - id: wholesaler_a
+    name: "Helvetia Wholesale"
+    stage: wholesaler
+    archetype: reliable
+    cash: 150000
+    inventory: 800
+    sell_price: 3.60
+    quality_level: 0.75
+    reputation: 0.72
+    reliability: 0.90
+    capacity: 1200
+    employees: 30
+    wage_level: 5000
+    productivity_per_employee: 40
+    r_and_d_level: 0.20
+    r_and_d_budget: 3000
+    supplier_priority: reliability
+    suppliers: [distributor_a, distributor_b]
+  - id: wholesaler_b
+    name: "SwissTrade"
+    stage: wholesaler
+    archetype: standard
+    cash: 140000
+    inventory: 850
+    sell_price: 3.40
+    quality_level: 0.68
+    reputation: 0.65
+    reliability: 0.80
+    capacity: 1400
+    employees: 28
+    wage_level: 4800
+    productivity_per_employee: 45
+    r_and_d_level: 0.15
+    r_and_d_budget: 2500
+    supplier_priority: price
+    suppliers: [distributor_a, distributor_b]
+  - id: distributor_a
+    name: "Zentrallager AG"
+    stage: distributor
+    archetype: standard
+    cash: 250000
+    inventory: 2000
+    sell_price: 2.80
+    quality_level: 0.72
+    reputation: 0.68
+    reliability: 0.84
+    capacity: 3000
+    employees: 40
+    wage_level: 5100
+    productivity_per_employee: 70
+    r_and_d_level: 0.20
+    r_and_d_budget: 4000
+    supplier_priority: reliability
+    suppliers: [factory_a, factory_b]
+  - id: distributor_b
+    name: "RapidDist"
+    stage: distributor
+    archetype: growth
+    cash: 240000
+    inventory: 2200
+    sell_price: 2.70
+    quality_level: 0.66
+    reputation: 0.63
+    reliability: 0.79
+    capacity: 3600
+    employees: 45
+    wage_level: 4900
+    productivity_per_employee: 78
+    r_and_d_level: 0.15
+    r_and_d_budget: 3500
+    supplier_priority: capacity
+    suppliers: [factory_a, factory_b]
+  - id: factory_a
+    name: "Alpen Brauerei"
+    stage: factory
+    archetype: premium
+    cash: 500000
+    inventory: 4000
+    sell_price: 2.10
+    quality_level: 0.85
+    reputation: 0.80
+    reliability: 0.88
+    capacity: 6000
+    employees: 60
+    wage_level: 5500
+    productivity_per_employee: 95
+    r_and_d_level: 0.50
+    r_and_d_budget: 120000
+    supplier_priority: quality
+    suppliers: []
+  - id: factory_b
+    name: "EasyBraeu"
+    stage: factory
+    archetype: low_cost
+    cash: 450000
+    inventory: 4500
+    sell_price: 1.95
+    quality_level: 0.65
+    reputation: 0.66
+    reliability: 0.82
+    capacity: 7000
+    employees: 55
+    wage_level: 4700
+    productivity_per_employee: 100
+    r_and_d_level: 0.25
+    r_and_d_budget: 40000
+    supplier_priority: price
+    suppliers: []
