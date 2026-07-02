@@ -37,7 +37,7 @@ def test_overtime_raises_capacity_and_wage_cost() -> None:
 
 def test_wages_reduce_and_overtime_increases_turnover() -> None:
     env = _environment(workforce=True)
-    low, high = env.network.firms_in("retailer")
+    low, high = env.network.firms_in("retailer")[:2]
     low.wage_level, low.overtime_level = 3_000, 0.0
     high.wage_level, high.overtime_level = 7_000, 0.0
     env.step(0, {})

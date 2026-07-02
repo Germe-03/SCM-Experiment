@@ -35,14 +35,25 @@ class Firm(NetworkModel):
     capacity: int
     employees: int
     wage_level: float
+    initial_wage_level: float | None = Field(default=None, ge=0, exclude=True)
     productivity_per_employee: float
     r_and_d_level: float
     r_and_d_budget: float
+    initial_r_and_d_budget: float | None = Field(default=None, ge=0, exclude=True)
     supplier_priority: str
     suppliers: list[str]
     overtime_level: float = 0.0
     machine_capacity: int = Field(default=0, ge=0)
     turnover_rate: float = 0.0
+
+    @model_validator(mode="after")
+    def _capture_initial_economic_anchors(self) -> Self:
+        """P3 fix: retain immutable inputs for non-compounding annual policy."""
+        if self.initial_wage_level is None:
+            self.initial_wage_level = self.wage_level
+        if self.initial_r_and_d_budget is None:
+            self.initial_r_and_d_budget = self.r_and_d_budget
+        return self
 
     @field_validator("stage")
     @classmethod

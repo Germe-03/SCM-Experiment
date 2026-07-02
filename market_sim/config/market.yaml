@@ -4,11 +4,31 @@ unit_scale:
 demand:
   annual_demand_units: 94400
   daily_demand_units: 259
+  # P4b fix: price-sensitive market size and summer seasonality.
+  price_elasticity: 1.2
+  reference_price: 4.99
+  elasticity_min_mult: 0.3
+  elasticity_max_mult: 2.0
+  seasonal_amplitude: 0.25
+  seasonal_phase_days: 90
+
+# P4b fix: exits are evaluated at year-end after this grace period.
+bankruptcy:
+  enabled: true
+  cash_threshold: -100000000.0
+  min_years_before_exit: 1
 
 price:
   base: 4.99
-  min: 1.99
+  min: 1.90
   max: 9.99
+
+# P3 fix: stage-specific bands preserve markup through the supply chain.
+stage_prices:
+  factory: {base: 2.10, min: 1.90, max: 2.60}
+  distributor: {base: 2.80, min: 2.50, max: 3.40}
+  wholesaler: {base: 3.60, min: 3.20, max: 4.30}
+  retailer: {base: 4.99, min: 4.20, max: 5.80}
 
 simulation:
   years: 10
@@ -18,8 +38,9 @@ logistics:
   default_lead_time_days: 2
 
 costs:
-  holding_cost_per_unit: 0.50
-  backlog_cost_per_unit: 1.00
+  # P4a tunable defaults, in real CHF per sim-unit per day.
+  holding_cost_per_unit: 27.0
+  backlog_cost_per_unit: 250.0
 
 # S7 tunable guesses: calibrate these coefficients against observed firm data.
 workforce:
@@ -36,13 +57,19 @@ workforce:
 # S7 tunable guesses: R&D effects are deliberately delayed and small.
 rnd:
   lag_days: 365
-  effect_per_chf: 0.0000005
+  effect_per_chf: 0.000001
   quality_cap: 0.98
-  daily_quality_decay: 0.00002
+  daily_quality_decay: 0.000005
 
 # S9 decision: reputation moves slowly toward equal parts service and quality.
 reputation:
   reputation_adjust_speed: 0.3
+
+# P1 fix: safety cap for daily replenishment orders.
+policy:
+  max_order_demand_multiple: 6.0
+  # P2 fix: exponent applied to supplier scores when splitting orders.
+  concentration: 4.0
 
 demand_attractiveness_weights:
   price: 0.35
@@ -51,8 +78,9 @@ demand_attractiveness_weights:
   availability: 0.15
 
 supplier_score_weights:
-  price: 0.35
-  reliability: 0.25
+  price: 0.30
+  reliability: 0.20
   quality: 0.20
-  lead_time: 0.10
+  reputation: 0.15
+  lead_time: 0.05
   capacity: 0.10

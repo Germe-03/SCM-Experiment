@@ -23,6 +23,27 @@ class UnitScaleConfig(ConfigModel):
 class DemandConfig(ConfigModel):
     annual_demand_units: int = Field(ge=0)
     daily_demand_units: int = Field(ge=0)
+    # P4b fix: market size responds to price and the annual demand cycle.
+    price_elasticity: float = Field(default=1.2, ge=0)
+    reference_price: float = Field(default=4.99, gt=0)
+    elasticity_min_mult: float = Field(default=0.3, gt=0)
+    elasticity_max_mult: float = Field(default=2.0, gt=0)
+    seasonal_amplitude: float = Field(default=0.25, ge=0, lt=1)
+    seasonal_phase_days: float = 90.0
+
+    @model_validator(mode="after")
+    def _elasticity_bounds_must_be_ordered(self) -> Self:
+        if self.elasticity_min_mult > self.elasticity_max_mult:
+            raise ValueError("elasticity_min_mult must not exceed elasticity_max_mult")
+        return self
+
+
+class BankruptcyConfig(ConfigModel):
+    """P4b fix: centrally configured market exit policy."""
+
+    enabled: bool = True
+    cash_threshold: float = -100_000_000.0
+    min_years_before_exit: int = Field(default=1, ge=0)
 
 
 class PriceConfig(ConfigModel):
@@ -35,6 +56,10 @@ class PriceConfig(ConfigModel):
         if not self.min <= self.base <= self.max:
             raise ValueError("price must satisfy min <= base <= max")
         return self
+
+
+class StagePriceConfig(PriceConfig):
+    """P3 fix: one validated selling-price band per supply-chain stage."""
 
 
 class SimulationConfig(ConfigModel):
@@ -80,6 +105,13 @@ class ReputationConfig(ConfigModel):
     reputation_adjust_speed: float = Field(default=0.3, ge=0, le=1)
 
 
+class PolicyConfig(ConfigModel):
+    """Ordering-policy safety limits and supplier concentration."""
+
+    max_order_demand_multiple: float = Field(default=6.0, ge=0)
+    concentration: float = Field(default=4.0, ge=0)
+
+
 class AttractivenessWeights(ConfigModel):
     price: float
     quality: float
@@ -101,6 +133,7 @@ class SupplierScoreWeights(ConfigModel):
     price: float
     reliability: float
     quality: float
+    reputation: float
     lead_time: float
     capacity: float
 
@@ -110,6 +143,7 @@ class SupplierScoreWeights(ConfigModel):
             self.price
             + self.reliability
             + self.quality
+            + self.reputation
             + self.lead_time
             + self.capacity
         )
@@ -122,14 +156,31 @@ class MarketConfig(ConfigModel):
     unit_scale: UnitScaleConfig
     demand: DemandConfig
     price: PriceConfig
+    stage_prices: dict[str, StagePriceConfig]
     simulation: SimulationConfig
     logistics: LogisticsConfig
     costs: CostConfig
     workforce: WorkforceConfig
     rnd: RndConfig
     reputation: ReputationConfig
+    policy: PolicyConfig = Field(default_factory=PolicyConfig)
     demand_attractiveness_weights: AttractivenessWeights
     supplier_score_weights: SupplierScoreWeights
+    bankruptcy: BankruptcyConfig = Field(default_factory=BankruptcyConfig)
+
+    @model_validator(mode="after")
+    def _validate_stage_prices(self) -> Self:
+        expected = {"factory", "distributor", "wholesaler", "retailer"}
+        if set(self.stage_prices) != expected:
+            raise ValueError(
+                "stage_prices must contain exactly: " + ", ".join(sorted(expected))
+            )
+        for stage, band in self.stage_prices.items():
+            if band.min < self.price.min or band.max > self.price.max:
+                raise ValueError(
+                    f"stage_prices.{stage} must be within the global price bounds"
+                )
+        return self
 
     @property
     def total_simulation_days(self) -> int:

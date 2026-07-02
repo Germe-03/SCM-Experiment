@@ -59,7 +59,7 @@ const pct=v=>v==null?'—':new Intl.NumberFormat('de-CH',{style:'percent',maximu
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 document.getElementById('run-meta').textContent=`${D.meta.years} Jahre · Seed ${D.meta.seed} · erstellt ${new Date(D.meta.generated_at).toLocaleString('de-CH')}`;
 const groups={}; D.meta.firms.forEach(f=>(groups[f.stage]??=[]).push(f));
-document.getElementById('actor-groups').innerHTML=Object.entries(groups).map(([stage,fs])=>`<div class="stage-group"><strong>${esc(stage)}</strong>${fs.map(f=>`<label class="actor"><input type="checkbox" value="${esc(f.id)}" checked> ${esc(f.name)} <small>· ${esc(f.archetype)}</small></label>`).join('')}</div>`).join('');
+document.getElementById('actor-groups').innerHTML=Object.entries(groups).map(([stage,fs])=>`<div class="stage-group"><strong>${esc(stage)}</strong>${fs.map((f,i)=>`<label class="actor"><input type="checkbox" value="${esc(f.id)}" ${i<2?'checked':''}> ${esc(f.name)} <small>· ${esc(f.archetype)}</small></label>`).join('')}</div>`).join('');
 const selected=()=>[...document.querySelectorAll('#actor-groups input:checked')].map(x=>x.value);
 document.querySelectorAll('#actor-selector button').forEach(b=>b.onclick=()=>{document.querySelectorAll('#actor-groups input').forEach(x=>x.checked=b.dataset.pick==='all'||x.closest('.stage-group').querySelector('strong').textContent===b.dataset.pick);render()});
 document.querySelectorAll('#actor-groups input').forEach(x=>x.onchange=render);

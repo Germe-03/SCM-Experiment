@@ -12,3 +12,6 @@ runs/
 # IDE
 .idea/
 .vscode/
+.test_tmp*/
+pytest_*tmp/
+.test_tmp*/

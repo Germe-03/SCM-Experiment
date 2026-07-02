@@ -23,7 +23,7 @@ def test_dashboard_data_is_complete_and_json_serializable():
     data = _data()
     json.dumps(data)
     assert {"meta", "firms", "system", "ranking"} <= data.keys()
-    assert len(data["ranking"]) == 8
+    assert len(data["ranking"]) == sum(len(stage.firms) for stage in load_firms().stages)
     for firm in data["firms"].values():
         assert len(firm["yearly"]) == 2
         assert firm["daily"]
@@ -34,8 +34,8 @@ def test_write_dashboard_html(tmp_path):
     path = write_dashboard_html(_data(), tmp_path / "dashboard.html")
     content = path.read_text(encoding="utf-8")
     assert path.exists() and path.stat().st_size > 0
-    assert "retailer_a" in content
-    assert "RetailPro AG" in content
+    assert "retailer_01" in content
+    assert "Aare Markt AG" in content
     assert CHART_JS_URL in content
     assert 'id="actor-selector"' in content
     assert "Alle" in content and "Keine" in content

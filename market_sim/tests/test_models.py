@@ -12,9 +12,11 @@ def network() -> SupplyNetwork:
     return load_firms()
 
 
-def test_default_network_has_two_firms_per_stage(network: SupplyNetwork) -> None:
-    assert sum(len(network.firms_in(stage)) for stage in STAGES) == 8
-    assert all(len(network.firms_in(stage)) == 2 for stage in STAGES)
+def test_default_network_has_competitive_funnel(network: SupplyNetwork) -> None:
+    counts = {stage: len(network.firms_in(stage)) for stage in STAGES}
+    assert counts == {"retailer": 10, "wholesaler": 6, "distributor": 4, "factory": 2}
+    assert sum(counts.values()) == 22
+    assert all(2 <= count <= 10 for count in counts.values())
 
 
 def test_supplier_topology_resolves_to_firms(network: SupplyNetwork) -> None:
@@ -27,7 +29,9 @@ def test_supplier_topology_resolves_to_firms(network: SupplyNetwork) -> None:
 
     for stage in STAGES[:-1]:
         expected_stage = network.upstream_stage(stage)
+        expected_ids = {firm.id for firm in network.firms_in(expected_stage)}
         for firm in network.firms_in(stage):
+            assert set(firm.suppliers) == expected_ids
             assert all(
                 supplier.stage == expected_stage
                 for supplier in network.suppliers_of(firm.id)
@@ -35,15 +39,15 @@ def test_supplier_topology_resolves_to_firms(network: SupplyNetwork) -> None:
 
 
 def test_archetypes_are_loaded(network: SupplyNetwork) -> None:
-    assert network.firm("retailer_a").archetype == "standard"
-    assert network.firm("retailer_b").archetype == "low_cost"
-    assert network.firm("factory_a").archetype == "premium"
+    assert network.firm("retailer_01").archetype == "standard"
+    assert network.firm("retailer_02").archetype == "low_cost"
+    assert network.firm("factory_01").archetype == "premium"
 
 
 def test_wrong_stage_supplier_raises_value_error() -> None:
     network = load_firms()
-    retailer = network.firm("retailer_a").model_copy(
-        update={"suppliers": ["factory_a"]}
+    retailer = network.firm("retailer_01").model_copy(
+        update={"suppliers": ["factory_01"]}
     )
     stages = [
         Stage(

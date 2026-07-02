@@ -27,7 +27,7 @@ def test_cash_identity_and_result_totals() -> None:
         expected = (
             firm.cash + runtime.revenue - runtime.purchase_cost
             - runtime.cumulative_holding_cost - runtime.cumulative_backlog_cost
-            - runtime.wage_cost
+            - runtime.wage_cost - runtime.hiring_cost - runtime.rnd_spend
         )
         assert runtime.initial_cash == firm.cash
         assert runtime.cash == pytest.approx(expected)
@@ -49,7 +49,7 @@ def test_b2b_revenue_and_purchase_cost_are_symmetric() -> None:
 
 def test_capacity_flag_gates_b2b_shipping() -> None:
     network = load_firms()
-    supplier = network.firm("wholesaler_a")
+    supplier = network.firm("wholesaler_01")
     supplier.capacity = 3
 
     def shipped(enforce: bool) -> int:
@@ -60,7 +60,8 @@ def test_capacity_flag_gates_b2b_shipping() -> None:
         market.reset()
         runtime = market.runtimes[supplier.id]
         runtime.inventory = 100
-        runtime.incoming_orders[0] = {"retailer_a": 20, "retailer_b": 20}
+        buyers = sorted(network.firms_in("retailer"), key=lambda firm: firm.id)[:2]
+        runtime.incoming_orders[0] = {buyer.id: 20 for buyer in buyers}
         _, info = market.step(0, {})
         return sum(info["shipments"][supplier.id].values())
 
@@ -71,7 +72,7 @@ def test_capacity_flag_gates_b2b_shipping() -> None:
 def test_wages_accrue_daily() -> None:
     days = 5
     market = _run(days)
-    firm = market.network.firm("retailer_a")
+    firm = market.network.firm("retailer_01")
     assert firm.employees > 0
     assert market.runtimes[firm.id].wage_cost == pytest.approx(
         days * firm.employees * firm.wage_level / 30

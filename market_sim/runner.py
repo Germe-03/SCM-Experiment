@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import math
 import random
 
 from market_sim.config import MarketConfig
@@ -26,6 +27,8 @@ class YearSummary:
     service_level: float
     avg_sell_price: float
     quality: float
+    capacity_utilization: float
+    cash: float
 
 
 @dataclass(frozen=True)
@@ -42,16 +45,44 @@ class RunResult:
 
 
 class ConsumerDemandGenerator:
-    """Simple seeded iid demand with symmetric noise around the configured mean."""
+    """P4b fix: seeded demand with price elasticity and annual seasonality."""
 
-    def __init__(self, mean: int, seed: int) -> None:
+    def __init__(
+        self, mean: int, seed: int, *, days_per_year: int = 365,
+        price_elasticity: float = 0.0, reference_price: float = 4.99,
+        min_mult: float = 0.3, max_mult: float = 2.0,
+        seasonal_amplitude: float = 0.0, seasonal_phase_days: float = 90.0,
+    ) -> None:
         self.mean = max(0, int(mean))
+        self.days_per_year = max(1, int(days_per_year))
+        self.price_elasticity = max(0.0, price_elasticity)
+        self.reference_price = reference_price
+        self.min_mult = min_mult
+        self.max_mult = max_mult
+        self.seasonal_amplitude = seasonal_amplitude
+        self.seasonal_phase_days = seasonal_phase_days
         self._rng = random.Random(seed)
 
-    def __call__(self, global_day: int) -> int:
-        del global_day
-        width = max(1, round(self.mean * 0.10))
-        return max(0, self.mean + self._rng.randint(-width, width))
+    def seasonal_factor(self, global_day: int) -> float:
+        factor = 1 + self.seasonal_amplitude * math.sin(
+            2 * math.pi * ((global_day % self.days_per_year) - self.seasonal_phase_days)
+            / self.days_per_year
+        )
+        return max(float.fromhex("0x1.0p-1022"), factor)
+
+    def elasticity_multiplier(self, avg_active_retail_price: float | None) -> float:
+        if avg_active_retail_price is None or avg_active_retail_price <= 0:
+            return 1.0
+        raw = (self.reference_price / avg_active_retail_price) ** self.price_elasticity
+        return max(self.min_mult, min(self.max_mult, raw))
+
+    def __call__(self, global_day: int, avg_active_retail_price: float | None = None) -> int:
+        noise = self._rng.uniform(0.9, 1.1)
+        effective = (
+            self.mean * self.seasonal_factor(global_day)
+            * self.elasticity_multiplier(avg_active_retail_price) * noise
+        )
+        return max(0, round(effective))
 
 
 class SimulationRunner:
@@ -65,7 +96,17 @@ class SimulationRunner:
         firm_ids = {firm.id for firm in self._firms()}
         if set(policies) != firm_ids:
             raise ValueError("policies must contain exactly one policy per firm")
-        self.demand = ConsumerDemandGenerator(config.demand.daily_demand_units, seed)
+        demand = config.demand
+        self.demand = ConsumerDemandGenerator(
+            demand.daily_demand_units, seed,
+            days_per_year=config.simulation.days_per_year,
+            price_elasticity=demand.price_elasticity,
+            reference_price=demand.reference_price,
+            min_mult=demand.elasticity_min_mult,
+            max_mult=demand.elasticity_max_mult,
+            seasonal_amplitude=demand.seasonal_amplitude,
+            seasonal_phase_days=demand.seasonal_phase_days,
+        )
         self.env = MarketEnvironment(
             network, config=config,
             horizon=config.simulation.days_per_year * config.simulation.years,
@@ -118,6 +159,8 @@ class SimulationRunner:
             b2b_shipped = {firm.id: 0 for firm in self._firms()}
 
             for firm in self._firms():
+                if not self.env.runtimes[firm.id].active:
+                    continue
                 strategy = self.policies[firm.id].decide_annual(
                     firm, previous.get(firm.id), self.config
                 ).validate_for_config(self.config)
@@ -128,9 +171,12 @@ class SimulationRunner:
                 decisions = {}
                 for firm in self._firms():
                     runtime = self.env.runtimes[firm.id]
+                    if not runtime.active:
+                        continue
                     obs = FirmObservation(
                         inventory=runtime.inventory, backlog=runtime.backlog,
                         pipeline_units=sum(runtime.incoming_shipments),
+                        on_order=runtime.on_order,
                         recent_demand=self._moving_average(recent_demand[firm.id], 1.0),
                         recent_sales=self._moving_average(recent_sales[firm.id], 0.0),
                         cash=runtime.cash, day_of_year=day,
@@ -140,16 +186,29 @@ class SimulationRunner:
                         firm, obs, self.strategies[firm.id], self.config
                     ).clamped_to(self.strategies[firm.id])
                 for firm in self._firms():
+                    if firm.id not in decisions:
+                        continue
                     decision = decisions[firm.id]
                     firm.sell_price = decision.sell_price
                     firm.overtime_level = decision.overtime_level
                     price_totals[firm.id] += firm.sell_price
                     band = self.strategies[firm.id]
                     self.applied_prices.append((firm.id, firm.sell_price, band.min_price, band.max_price))
-                total_demand = self.demand(global_day)
+                active_retail_prices = [
+                    firm.sell_price for firm in self.network.firms_in("retailer")
+                    if self.env.runtimes[firm.id].active
+                ]
+                average_price = (
+                    sum(active_retail_prices) / len(active_retail_prices)
+                    if active_retail_prices else None
+                )
+                total_demand = self.demand(global_day, average_price)
                 _, info = self.env.step(total_demand, {key: value.order_qty for key, value in decisions.items()})
                 demand_series.append(total_demand)
-                factory_order_series.append(sum(decisions[f.id].order_qty for f in self.network.firms_in("factory")))
+                factory_order_series.append(sum(
+                    decisions[f.id].order_qty for f in self.network.firms_in("factory")
+                    if f.id in decisions
+                ))
                 global_day += 1
                 for firm in self._firms():
                     runtime = self.env.runtimes[firm.id]
@@ -185,17 +244,17 @@ class SimulationRunner:
                     recent_sales[firm.id] = (recent_sales[firm.id] + [sold])[-7:]
                     capacity = self.env._effective_capacity(firm.id)
                     utilization[firm.id].append(min(1.0, shipped_total / capacity) if capacity else 0.0)
-                    supplier_id = info["selected_suppliers"].get(firm.id)
-                    if supplier_id:
+                    for supplier_id, quantity in info["split_orders"].get(firm.id, {}).items():
                         edge = ordered_edges[firm.id]
-                        edge[supplier_id] = edge.get(supplier_id, 0) + decisions[firm.id].order_qty
+                        edge[supplier_id] = edge.get(supplier_id, 0) + quantity
                 for supplier_id, allocations in info["shipments"].items():
                     for buyer_id, quantity in allocations.items():
                         if buyer_id in shipped_edges:
                             edge = shipped_edges[buyer_id]
                             edge[supplier_id] = edge.get(supplier_id, 0) + quantity
             summaries.append(self._summarize_year(
-                starts, history_starts, price_totals, retailer_served, retailer_lost
+                starts, history_starts, price_totals, retailer_served, retailer_lost,
+                utilization,
             ))
             reports, kpis = self._build_reports(
                 year + 1, summaries[-1], price_totals, retailer_served,
@@ -218,6 +277,9 @@ class SimulationRunner:
                         "rnd_cost", "profit",
                     )
                 } | {"cash": end["cash"]})
+            # P4b fix: exits are deterministic year-end events; cash freezes
+            # from the following tick after the configured grace period.
+            self._apply_bankruptcy(year + 1)
         return RunResult(
             years=years, network=self.network, yearly_summaries=summaries,
             final_result=self.env.get_result(), annual_reports=annual_reports,
@@ -306,10 +368,19 @@ class SimulationRunner:
         firm.r_and_d_budget = strategy.r_and_d_budget
         firm.overtime_level = strategy.overtime_level
         firm.supplier_priority = strategy.supplier_priority
-        firm.employees = max(0, firm.employees + strategy.hiring_plan)
+        firm.employees = max(5, firm.employees + strategy.hiring_plan)
         runtime = self.env.runtimes[firm.id]
         runtime.wage_level = firm.wage_level
         runtime.employees = firm.employees
+
+    def _apply_bankruptcy(self, completed_years: int) -> None:
+        """P4b fix: close insolvent firms at year-end after the grace period."""
+        cfg = self.config.bankruptcy
+        if not cfg.enabled or completed_years < cfg.min_years_before_exit:
+            return
+        for runtime in self.env.runtimes.values():
+            if runtime.active and runtime.cash < cfg.cash_threshold:
+                runtime.active = False
 
     def _financial_starts(self) -> dict[str, tuple[float, float]]:
         return {key: (runtime.revenue, runtime.profit) for key, runtime in self.env.runtimes.items()}
@@ -331,7 +402,7 @@ class SimulationRunner:
             for firm_id, runtime in self.env.runtimes.items()
         }
 
-    def _summarize_year(self, starts, history_starts, prices, served, lost):
+    def _summarize_year(self, starts, history_starts, prices, served, lost, utilization):
         days = self.config.simulation.days_per_year
         result = {}
         for firm in self._firms():
@@ -350,6 +421,11 @@ class SimulationRunner:
                 service_level=served[firm.id] / denominator if denominator else 1.0,
                 avg_sell_price=prices[firm.id] / days,
                 quality=runtime.quality_level,
+                capacity_utilization=(
+                    sum(utilization[firm.id]) / len(utilization[firm.id])
+                    if utilization[firm.id] else 0.0
+                ),
+                cash=runtime.cash,
             )
         return result
 

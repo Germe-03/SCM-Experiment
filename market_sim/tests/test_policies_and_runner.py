@@ -22,9 +22,9 @@ def test_archetype_strategies_are_distinct():
     config = load_market_config()
     network = load_firms()
     policy = FirmPolicy()
-    premium = policy.decide_annual(network.firm("factory_a"), None, config)
-    low_cost = policy.decide_annual(network.firm("factory_b"), None, config)
-    reliable = policy.decide_annual(network.firm("wholesaler_a"), None, config)
+    premium = policy.decide_annual(network.firm("retailer_03"), None, config)
+    low_cost = policy.decide_annual(network.firm("retailer_02"), None, config)
+    reliable = policy.decide_annual(network.firm("retailer_09"), None, config)
 
     assert premium.base_price > low_cost.base_price
     assert reliable.target_safety_stock_days > low_cost.target_safety_stock_days
@@ -35,7 +35,7 @@ def test_archetype_strategies_are_distinct():
 
 def test_base_stock_daily_behavior_and_price_band():
     config = load_market_config()
-    firm = load_firms().firm("retailer_b")
+    firm = load_firms().firm("retailer_02")
     policy = FirmPolicy()
     strategy = policy.decide_annual(firm, None, config)
     common = dict(
@@ -63,7 +63,7 @@ def test_runner_runs_two_years_for_all_firms_and_applies_bands():
 
     assert result.years == 2
     assert len(result.yearly_summaries) == 2
-    assert all(len(year) == 8 for year in result.yearly_summaries)
+    assert all(len(year) == len(_firms(network)) for year in result.yearly_summaries)
     assert all(low <= price <= high for _, price, low, high in runner.applied_prices)
     assert all(quantity >= 0 for runtime in runner.env.runtimes.values() for quantity in runtime.order_history)
 

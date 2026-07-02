@@ -60,4 +60,4 @@ class FirmObservation(StrategyModel):
     cash: float
     day_of_year: int = Field(ge=0)
     quality_level: float = Field(ge=0, le=1)
-
+    on_order: int = Field(default=0, ge=0)

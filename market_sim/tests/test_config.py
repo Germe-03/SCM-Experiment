@@ -21,8 +21,8 @@ def test_default_config_contains_swiss_market_values(
     assert market_config.price.base == 4.99
     assert market_config.total_simulation_days == 3_650
     assert market_config.logistics.default_lead_time_days == 2
-    assert market_config.costs.holding_cost_per_unit == 0.50
-    assert market_config.costs.backlog_cost_per_unit == 1.00
+    assert market_config.costs.holding_cost_per_unit == 27.0
+    assert market_config.costs.backlog_cost_per_unit == 250.0
 
 
 def test_weight_groups_sum_to_one(market_config: MarketConfig) -> None:
@@ -39,6 +39,7 @@ def test_weight_groups_sum_to_one(market_config: MarketConfig) -> None:
         supplier.price
         + supplier.reliability
         + supplier.quality
+        + supplier.reputation
         + supplier.lead_time
         + supplier.capacity
     ) == pytest.approx(1.0)
