@@ -23,11 +23,20 @@ def test_default_config_contains_swiss_market_values(
     assert market_config.logistics.default_lead_time_days == 2
     assert market_config.costs.holding_cost_per_unit == 27.0
     assert market_config.costs.backlog_cost_per_unit == 250.0
+    assert market_config.costs.handling_cost_per_unit == 8_200.0
+    assert market_config.policy.supplier_priority_boost == 50.0
 
 
 def test_weight_groups_sum_to_one(market_config: MarketConfig) -> None:
     attractiveness = market_config.demand_attractiveness_weights
     supplier = market_config.supplier_score_weights
+    assert sum(segment.share for segment in market_config.demand.segments) == pytest.approx(1.0)
+    assert all(
+        segment.weights.price + segment.weights.quality
+        + segment.weights.reputation + segment.weights.availability
+        == pytest.approx(1.0)
+        for segment in market_config.demand.segments
+    )
 
     assert (
         attractiveness.price

@@ -37,6 +37,47 @@ def test_cheaper_higher_quality_retailer_gets_larger_share() -> None:
     assert info["consumer_demand_shares"][retailer_a.id] > info["consumer_demand_shares"][retailer_b.id]
 
 
+def test_segments_reward_bargain_and_premium_positions() -> None:
+    market = _market((10_000, 10_000))
+    cheap, premium = sorted(market.network.firms_in("retailer"), key=lambda firm: firm.id)[:2]
+    for firm in market.network.firms_in("retailer"):
+        if firm.id not in {cheap.id, premium.id}:
+            market.runtimes[firm.id].active = False
+    cheap.sell_price, cheap.quality_level, cheap.reputation = 2.5, 0.25, 0.25
+    premium.sell_price, premium.quality_level, premium.reputation = 11.0, 0.95, 0.95
+    market.runtimes[cheap.id].quality_level = cheap.quality_level
+    market.runtimes[premium.id].quality_level = premium.quality_level
+
+    _, info = market.step(1_000, {})
+
+    segments = info["consumer_segment_shares"]
+    assert segments["bargain"][cheap.id] > segments["bargain"][premium.id]
+    assert segments["premium"][premium.id] > segments["premium"][cheap.id]
+
+
+def test_mid_market_position_does_not_capture_largest_total_share() -> None:
+    market = _market((10_000, 10_000))
+    cheap, premium, middle = sorted(
+        market.network.firms_in("retailer"), key=lambda firm: firm.id
+    )[:3]
+    for firm in market.network.firms_in("retailer"):
+        market.runtimes[firm.id].active = firm.id in {cheap.id, premium.id, middle.id}
+    positions = {
+        cheap.id: (2.5, 0.25, 0.25),
+        premium.id: (11.0, 0.95, 0.95),
+        middle.id: (6.5, 0.55, 0.55),
+    }
+    for firm in (cheap, premium, middle):
+        firm.sell_price, firm.quality_level, firm.reputation = positions[firm.id]
+        market.runtimes[firm.id].quality_level = firm.quality_level
+        market.runtimes[firm.id].inventory = 10_000
+
+    _, info = market.step(3_000, {})
+
+    shares = info["consumer_demand_shares"]
+    assert shares[middle.id] < max(shares[cheap.id], shares[premium.id])
+
+
 @pytest.mark.parametrize(
     ("demand", "inventories"),
     [(0, (0, 0)), (1, (1, 0)), (17, (3, 20)), (100, (20, 30)), (259, (500, 500))],
@@ -82,7 +123,10 @@ def test_scores_are_bounded_and_zero_scores_fall_back_to_equal_split() -> None:
 
     weights = AttractivenessWeights(price=1, quality=0, reputation=0, availability=0)
     market.config = load_market_config().model_copy(
-        update={"demand_attractiveness_weights": weights}
+        update={
+            "demand": load_market_config().demand.model_copy(update={"segments": []}),
+            "demand_attractiveness_weights": weights,
+        }
     )
     retailers = market.network.firms_in("retailer")
     for retailer in retailers:

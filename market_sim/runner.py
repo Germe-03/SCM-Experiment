@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import math
 import random
+from statistics import pstdev
 
 from market_sim.config import MarketConfig
 from market_sim.environment import MarketEnvironment, MarketResult
@@ -29,6 +30,8 @@ class YearSummary:
     quality: float
     capacity_utilization: float
     cash: float
+    market_share: float = 0.0
+    market_share_change: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -145,6 +148,7 @@ class SimulationRunner:
                 for firm in self._firms()
             }
             price_totals = {firm.id: 0.0 for firm in self._firms()}
+            daily_prices = {firm.id: [] for firm in self._firms()}
             retailer_lost = {firm.id: 0 for firm in self._firms()}
             retailer_served = {firm.id: 0 for firm in self._firms()}
             demand_series: list[float] = []
@@ -192,6 +196,7 @@ class SimulationRunner:
                     firm.sell_price = decision.sell_price
                     firm.overtime_level = decision.overtime_level
                     price_totals[firm.id] += firm.sell_price
+                    daily_prices[firm.id].append(firm.sell_price)
                     band = self.strategies[firm.id]
                     self.applied_prices.append((firm.id, firm.sell_price, band.min_price, band.max_price))
                 active_retail_prices = [
@@ -254,14 +259,14 @@ class SimulationRunner:
                             edge[supplier_id] = edge.get(supplier_id, 0) + quantity
             summaries.append(self._summarize_year(
                 starts, history_starts, price_totals, retailer_served, retailer_lost,
-                utilization,
+                utilization, previous,
             ))
             reports, kpis = self._build_reports(
                 year + 1, summaries[-1], price_totals, retailer_served,
                 retailer_lost, stockout_days, utilization, daily_turnover,
                 daily_quality, ordered_edges, shipped_edges, demand_series,
                 factory_order_series,
-                b2b_received, b2b_shipped,
+                b2b_received, b2b_shipped, daily_prices,
             )
             annual_reports.append(reports)
             system_kpis.append(kpis)
@@ -274,7 +279,7 @@ class SimulationRunner:
                     for key in (
                         "revenue", "purchase_cost", "holding_cost",
                         "backlog_cost", "wage_cost", "hiring_cost",
-                        "rnd_cost", "profit",
+                        "rnd_cost", "handling_cost", "profit",
                     )
                 } | {"cash": end["cash"]})
             # P4b fix: exits are deterministic year-end events; cash freezes
@@ -293,6 +298,7 @@ class SimulationRunner:
         turnover, qualities, ordered_edges, shipped_edges, demand_series,
         factory_order_series,
         b2b_received, b2b_shipped,
+        daily_prices,
     ):
         days = self.config.simulation.days_per_year
         total_sales = sum(served.values())
@@ -313,11 +319,11 @@ class SimulationRunner:
                 if firm.stage == "retailer"
                 else service_level(b2b_shipped[firm.id], b2b_received[firm.id])
             )
-            target = max(0.0, min(1.0, 0.5 * fill + 0.5 * average_quality))
-            speed = self.config.reputation.reputation_adjust_speed
-            firm.reputation = max(0.0, min(1.0, firm.reputation + speed * (target - firm.reputation)))
             problems = []
             capacity_utilization = sum(utilization[firm.id]) / len(utilization[firm.id])
+            self._apply_feedback_links(
+                firm, fill, capacity_utilization, daily_prices[firm.id]
+            )
             if stockouts[firm.id] > 0.15 * days:
                 problems.append("Too many stockouts")
             if capacity_utilization > 0.9:
@@ -332,7 +338,10 @@ class SimulationRunner:
             reports[firm.id] = AnnualReport(
                 year=year, firm_id=firm.id, revenue=summary.revenue,
                 profit=summary.profit, market_share=retailer_shares.get(firm.id, 0.0),
-                average_sell_price=prices[firm.id] / days,
+                average_sell_price=(
+                    prices[firm.id] / len(daily_prices[firm.id])
+                    if daily_prices[firm.id] else firm.sell_price
+                ),
                 average_quality=average_quality, stockout_days=stockouts[firm.id],
                 lost_sales=lost[firm.id],
                 employee_turnover=(sum(turnover[firm.id]) / len(turnover[firm.id])) * 365,
@@ -356,6 +365,59 @@ class SimulationRunner:
             service_level=service_level(total_served, total_demand),
         )
         return reports, kpis
+
+    def _apply_feedback_links(
+        self, firm: Firm, fill: float, capacity_utilization: float,
+        daily_prices: list[float],
+    ) -> None:
+        """Apply deterministic year-end feedback links in their required order."""
+        runtime = self.env.runtimes[firm.id]
+
+        # Feedback-link 4: overload reduces current quality before reputation uses it.
+        capacity_cfg = self.config.capacity
+        overload = max(
+            0.0, capacity_utilization - capacity_cfg.overload_utilization_threshold
+        )
+        quality_penalty = capacity_cfg.overload_quality_penalty * overload
+        runtime.quality_level = self._clamp(runtime.quality_level - quality_penalty)
+        firm.quality_level = self._clamp(firm.quality_level - quality_penalty)
+        quality = firm.quality_level
+
+        # Feedback-links 1 and 3: wages build employer brand; volatile prices erode trust.
+        reputation_cfg = self.config.reputation
+        wage_reference = self.config.workforce.wage_reference
+        wage_factor = self._clamp(
+            0.5 + 0.5 * (firm.wage_level - wage_reference) / wage_reference
+        )
+        target = (
+            reputation_cfg.service_weight * fill
+            + reputation_cfg.quality_weight * quality
+            + reputation_cfg.wage_weight * wage_factor
+        )
+        mean_price = sum(daily_prices) / len(daily_prices) if daily_prices else 0.0
+        price_cv = (
+            pstdev(daily_prices) / mean_price
+            if len(daily_prices) >= 2 and mean_price != 0 else 0.0
+        )
+        volatility_factor = self._clamp(
+            1.0 - reputation_cfg.price_volatility_penalty * price_cv,
+            reputation_cfg.price_volatility_floor, 1.0,
+        )
+        target = self._clamp(target * volatility_factor)
+        firm.reputation = self._clamp(
+            firm.reputation
+            + reputation_cfg.reputation_adjust_speed * (target - firm.reputation)
+        )
+
+        # Feedback-link 2: annual realized fill becomes earned reliability.
+        reliability_speed = self.config.reliability.reliability_adjust_speed
+        firm.reliability = self._clamp(
+            firm.reliability + reliability_speed * (fill - firm.reliability)
+        )
+
+    @staticmethod
+    def _clamp(value: float, low: float = 0.0, high: float = 1.0) -> float:
+        return max(low, min(high, value))
 
     def _firms(self) -> list[Firm]:
         return sorted(
@@ -396,15 +458,21 @@ class SimulationRunner:
                 "wage_cost": float(getattr(runtime, "wage_cost", 0.0)),
                 "hiring_cost": float(getattr(runtime, "hiring_cost", 0.0)),
                 "rnd_cost": float(getattr(runtime, "rnd_spend", 0.0)),
+                "handling_cost": float(getattr(runtime, "handling_cost", 0.0)),
                 "profit": float(getattr(runtime, "profit", 0.0)),
                 "cash": float(getattr(runtime, "cash", 0.0)),
             }
             for firm_id, runtime in self.env.runtimes.items()
         }
 
-    def _summarize_year(self, starts, history_starts, prices, served, lost, utilization):
+    def _summarize_year(self, starts, history_starts, prices, served, lost, utilization, previous):
         days = self.config.simulation.days_per_year
         result = {}
+        stage_revenue = {
+            stage: sum(self.env.runtimes[f.id].revenue - starts[f.id][0]
+                       for f in self.network.firms_in(stage))
+            for stage in STAGES
+        }
         for firm in self._firms():
             runtime = self.env.runtimes[firm.id]
             inv_start, back_start = history_starts[firm.id]
@@ -412,8 +480,11 @@ class SimulationRunner:
             back = self.env.backlog_history[firm.id][back_start:]
             revenue_start, profit_start = starts[firm.id]
             denominator = served[firm.id] + lost[firm.id]
+            revenue = runtime.revenue - revenue_start
+            share = revenue / stage_revenue[firm.stage] if stage_revenue[firm.stage] else 0.0
+            old_share = previous[firm.id].market_share if firm.id in previous else share
             result[firm.id] = YearSummary(
-                revenue=runtime.revenue - revenue_start,
+                revenue=revenue,
                 profit=runtime.profit - profit_start,
                 avg_inventory=sum(inv) / len(inv) if inv else 0.0,
                 avg_backlog=sum(back) / len(back) if back else 0.0,
@@ -426,6 +497,7 @@ class SimulationRunner:
                     if utilization[firm.id] else 0.0
                 ),
                 cash=runtime.cash,
+                market_share=share, market_share_change=share - old_share,
             )
         return result
 

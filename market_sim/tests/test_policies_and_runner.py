@@ -53,6 +53,27 @@ def test_base_stock_daily_behavior_and_price_band():
     assert strategy.min_price <= low_decision.sell_price <= strategy.max_price
 
 
+def test_low_cost_retailer_holds_discount_position_under_scarcity():
+    config = load_market_config()
+    firm = load_firms().firm("retailer_02")
+    firm.sell_price = 3.98
+    policy = FirmPolicy()
+    strategy = policy.decide_annual(firm, None, config)
+    decision = policy.decide_daily(
+        firm,
+        FirmObservation(
+            inventory=0, backlog=10, pipeline_units=0, on_order=0,
+            recent_demand=10, recent_sales=10, cash=firm.cash,
+            day_of_year=0, quality_level=firm.quality_level,
+        ),
+        strategy,
+        config,
+    )
+
+    assert decision.sell_price <= 4.0
+    assert decision.sell_price < (config.stage_prices["retailer"].min + config.stage_prices["retailer"].max) / 2
+
+
 def test_runner_runs_two_years_for_all_firms_and_applies_bands():
     config = _short_config()
     network = load_firms()

@@ -112,4 +112,5 @@ def test_enabled_cash_identity_includes_hiring_and_rnd() -> None:
             runtime.initial_cash + runtime.revenue - runtime.purchase_cost
             - runtime.cumulative_holding_cost - runtime.cumulative_backlog_cost
             - runtime.wage_cost - runtime.hiring_cost - runtime.rnd_spend
+            - runtime.handling_cost
         )

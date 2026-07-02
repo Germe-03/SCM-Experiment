@@ -25,6 +25,7 @@ def _supplier_scores(
     candidates: list[Firm],
     weights: SupplierScoreWeights,
     lead_times: dict[str, int] | None,
+    priority_boost: float = 2.0,
 ) -> tuple[list[Firm], dict[str, float]]:
     """Return S4-compatible normalized scores in deterministic id order."""
 
@@ -49,7 +50,7 @@ def _supplier_scores(
     }
     adjusted = {factor: float(getattr(weights, factor)) for factor in _FACTORS}
     if downstream.supplier_priority in adjusted:
-        adjusted[downstream.supplier_priority] *= 2.0
+        adjusted[downstream.supplier_priority] *= priority_boost
     total_weight = sum(adjusted.values())
     adjusted = {key: value / total_weight for key, value in adjusted.items()}
     return ordered, {
@@ -84,6 +85,7 @@ def split_order(
     lead_times: dict[str, int] | None = None,
     concentration: float = 4.0,
     active_firm_ids: set[str] | None = None,
+    priority_boost: float = 2.0,
 ) -> dict[str, int]:
     """P2 fix: split an order by supplier score using largest remainders."""
 
@@ -92,7 +94,9 @@ def split_order(
     # P4b fix: an empty active candidate set is a valid unsourced order.
     if not candidates:
         return {}
-    ordered, scores = _supplier_scores(downstream, candidates, weights, lead_times)
+    ordered, scores = _supplier_scores(
+        downstream, candidates, weights, lead_times, priority_boost
+    )
     quantity = max(0, int(order_qty))
     weighted = {firm.id: scores[firm.id] ** concentration for firm in ordered}
     total_weight = sum(weighted.values())

@@ -60,6 +60,7 @@ class FirmRuntime:
     wage_cost: float = 0.0
     hiring_cost: float = 0.0
     rnd_spend: float = 0.0
+    handling_cost: float = 0.0
     employees: int = 0
     wage_level: float = 0.0
     turnover_rate: float = 0.0
@@ -79,6 +80,7 @@ class FirmRuntime:
             self.purchase_cost + self.cumulative_holding_cost
             + self.cumulative_backlog_cost + self.wage_cost
             + self.hiring_cost + self.rnd_spend
+            + self.handling_cost
         )
 
     def receive_shipment(self) -> int:
@@ -119,6 +121,7 @@ class FirmResult:
     wage_cost: float = 0.0
     hiring_cost: float = 0.0
     rnd_spend: float = 0.0
+    handling_cost: float = 0.0
     holding_cost: float = 0.0
     backlog_cost: float = 0.0
     profit: float = 0.0
@@ -292,6 +295,7 @@ class MarketEnvironment:
             }
             runtime.backlog = sum(runtime.backlog_by_downstream.values())
             runtime.shipment_history.append(shipped)
+            runtime.handling_cost += shipped * self.config.costs.handling_cost_per_unit
             shipped_this_period[supplier_id] = allocations
             for downstream_id, quantity in allocations.items():
                 if downstream_id in self.runtimes:
@@ -330,6 +334,7 @@ class MarketEnvironment:
                     firm, candidates, quantity, self.config.supplier_score_weights,
                     lead_times, self.config.policy.concentration,
                     active_firm_ids=active_ids if market_mode else None,
+                    priority_boost=self.config.policy.supplier_priority_boost,
                 )
                 split_orders[firm.id] = allocations
                 if allocations:
@@ -377,6 +382,7 @@ class MarketEnvironment:
             "selected_suppliers": selected_suppliers,
             "split_orders": split_orders,
             "consumer_demand_shares": demand_shares,
+            "consumer_segment_shares": getattr(self, "_last_segment_shares", {}),
             "consumer_units_sold": consumer_sales,
             "consumer_units_sold_total": sum(consumer_sales.values()),
             "lost_sales": lost_sales,
@@ -403,16 +409,17 @@ class MarketEnvironment:
         return max(0.0, min(1.0, value))
 
     def _consumer_price_score(self, sell_price: float) -> float:
-        price_range = self.config.price.max - self.config.price.min
+        band = self.config.stage_prices["retailer"]
+        price_range = band.max - band.min
         return self._clamp(
-            (self.config.price.max - sell_price) / price_range
+            (band.max - sell_price) / price_range
             if price_range > 0 else 0.0
         )
 
     def _consumer_availability_score(self, inventory: int, reference: float) -> float:
         return self._clamp(inventory / max(1.0, reference))
 
-    def _consumer_attractiveness(self, demand: int) -> dict[str, float]:
+    def _consumer_attractiveness(self, demand: int, weights=None) -> dict[str, float]:
         """Return bounded S5 retailer attractiveness scores."""
 
         # P4b fix: exited retailers receive no consumer allocation.
@@ -423,7 +430,7 @@ class MarketEnvironment:
         if not retailers:
             return {}
         reference = max(1.0, demand / len(retailers))
-        weights = self.config.demand_attractiveness_weights
+        weights = weights or self.config.demand_attractiveness_weights
         scores: dict[str, float] = {}
         for firm in retailers:
             price_score = self._consumer_price_score(firm.sell_price)
@@ -463,8 +470,28 @@ class MarketEnvironment:
         """Split, serve, and spill consumer demand once; return remaining loss."""
 
         demand = max(0, int(total_demand))
-        attractiveness = self._consumer_attractiveness(demand)
-        shares = self._weighted_integer_allocation(demand, attractiveness)
+        segments = self.config.demand.segments
+        if segments:
+            segment_totals = self._weighted_integer_allocation(
+                demand, {segment.name: segment.share for segment in segments}
+            )
+            segment_shares = {
+                segment.name: self._weighted_integer_allocation(
+                    segment_totals[segment.name],
+                    self._consumer_attractiveness(segment_totals[segment.name], segment.weights),
+                )
+                for segment in segments
+            }
+            shares = {
+                firm_id: sum(values.get(firm_id, 0) for values in segment_shares.values())
+                for firm_id in next(iter(segment_shares.values()), {})
+            }
+            attractiveness = self._consumer_attractiveness(demand)
+        else:
+            attractiveness = self._consumer_attractiveness(demand)
+            shares = self._weighted_integer_allocation(demand, attractiveness)
+            segment_shares = {}
+        self._last_segment_shares = segment_shares
         sold = {firm_id: 0 for firm_id in shares}
         capacities = {firm_id: self._effective_capacity(firm_id) for firm_id in shares}
         for firm_id, share in shares.items():
@@ -493,6 +520,7 @@ class MarketEnvironment:
             runtime.revenue += self._trade_value(
                 units, self._market_price(self.network.firm(firm_id).sell_price)
             )
+            runtime.handling_cost += units * self.config.costs.handling_cost_per_unit
         return shares, sold, demand - sum(sold.values())
 
     def _trade_value(self, quantity: int, price_per_bottle: float) -> float:
@@ -514,7 +542,7 @@ class MarketEnvironment:
                 runtime.cumulative_cost,
                 runtime.cumulative_consumer_units_sold,
                 runtime.revenue, runtime.purchase_cost, runtime.wage_cost,
-                runtime.hiring_cost, runtime.rnd_spend,
+                runtime.hiring_cost, runtime.rnd_spend, runtime.handling_cost,
                 runtime.cumulative_holding_cost, runtime.cumulative_backlog_cost,
                 runtime.profit, runtime.cash,
             )
@@ -535,6 +563,7 @@ class MarketEnvironment:
             "wage_cost": runtime.wage_cost,
             "hiring_cost": runtime.hiring_cost,
             "rnd_spend": runtime.rnd_spend,
+            "handling_cost": runtime.handling_cost,
             "holding": runtime.cumulative_holding_cost,
             "backlog": runtime.cumulative_backlog_cost,
             "profit": runtime.profit,
