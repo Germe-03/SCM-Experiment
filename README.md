@@ -87,7 +87,9 @@ python -m pytest market_sim
 ```
 
 `run` schreibt `annual_reports.csv` (pro Firma und Jahr), `firm_ranking.csv`
-und `system_kpis.csv`. Das Dashboard ist eine eigenständige HTML-Datei, in
+(inkl. `exit_year` für Firmen, die Konkurs gegangen sind) und
+`system_kpis.csv`. In der Konsole stehen ausgeschiedene Firmen separat von
+Firmen, die noch aktiv sind, aber negatives Cash haben. Das Dashboard ist eine eigenständige HTML-Datei, in
 der man jede Firma einzeln anschauen kann. Ein 10-Jahres-Lauf dauert rund
 20 Sekunden.
 
@@ -96,7 +98,7 @@ der man jede Firma einzeln anschauen kann. Ein 10-Jahres-Lauf dauert rund
 ## 3. Erste Ergebnisse
 
 Stand: aktueller Code auf `main`, 10 Jahre, Seeds 0, 1 und 2.
-Alle 78 Tests laufen grün.
+Alle 81 Tests laufen grün.
 
 ### Systemkennzahlen (Seed 0)
 
@@ -141,8 +143,12 @@ pro Jahr). Die Rangfolge der Firmen ist in allen drei Seeds praktisch gleich.
 4. **Aggressives Wachstum kann scheitern.** `retailer_10` (growth) rutscht ab
    Jahr 3 in wachsende Verluste und scheidet in allen drei Seeds nach Jahr 6 aus.
    Danach steigt die Konzentration (HHI) von 0.101 auf 0.115.
-5. **Die Lieferfähigkeit ist hoch, der Bullwhip bleibt.** Lost Sales sind
-   im Verhältnis zur Nachfrage sehr klein. Die Bestellschwankung ist aber
+5. **Die Lieferfähigkeit ist hoch, der Bullwhip bleibt.** Das Service-Level
+   liegt bei 100 %, denn die «Lost Sales» sind Kunden, die bei ihrem
+   Wunschhändler nichts bekommen und dann bei einem anderen Händler kaufen
+   (Jahr 1, Seed 0: 65'447 Einheiten Nachfrage, 65'447 verkauft). Für den
+   einzelnen Händler ist das ein verlorener Verkauf, für den Markt nicht.
+   Die Bestellschwankung ist aber
    immer noch 75- bis 130-mal so gross wie die Schwankung der
    Endkundennachfrage. Die Bestellglättung hat die frühere Explosion
    verhindert, gelöst ist das Problem aber nicht.
@@ -150,8 +156,6 @@ pro Jahr). Die Rangfolge der Firmen ist in allen drei Seeds praktisch gleich.
 ### Offene Punkte
 
 - Bullwhip-Ratio weiter senken (Forecast-Weitergabe, stärkere Glättung).
-- `service_level` steht immer bei 1.0, obwohl Lost Sales auftreten; die
-  Kennzahl muss geprüft werden.
 - Die Ergebnisse in `runs/` stammen von älteren Ständen und sollten neu
   gerechnet werden.
 - Die Koeffizienten für Löhne, F&E und Handlingkosten sind Schätzungen und

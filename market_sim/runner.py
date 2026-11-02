@@ -45,6 +45,7 @@ class RunResult:
     daily_series: dict[str, dict[str, list[float]]] = field(default_factory=dict)
     days_total: int = 0
     financial_breakdown: dict[str, list[dict[str, float]]] = field(default_factory=dict)
+    exits: dict[str, int] = field(default_factory=dict)
 
 
 class ConsumerDemandGenerator:
@@ -118,11 +119,13 @@ class SimulationRunner:
         )
         self.strategies: dict[str, AnnualStrategy] = {}
         self.applied_prices: list[tuple[str, float, float, float]] = []
+        self.exits: dict[str, int] = {}
 
     def run(self, years: int) -> RunResult:
         if years < 0:
             raise ValueError("years must be non-negative")
         self.env.reset()
+        self.exits = {}
         summaries: list[dict[str, YearSummary]] = []
         annual_reports: list[dict[str, AnnualReport]] = []
         system_kpis: list[SystemKPIs] = []
@@ -291,6 +294,7 @@ class SimulationRunner:
             system_kpis=system_kpis,
             daily_series=daily_series, days_total=global_day,
             financial_breakdown=financial_breakdown,
+            exits=dict(self.exits),
         )
 
     def _build_reports(
@@ -440,9 +444,10 @@ class SimulationRunner:
         cfg = self.config.bankruptcy
         if not cfg.enabled or completed_years < cfg.min_years_before_exit:
             return
-        for runtime in self.env.runtimes.values():
+        for firm_id, runtime in self.env.runtimes.items():
             if runtime.active and runtime.cash < cfg.cash_threshold:
                 runtime.active = False
+                self.exits[firm_id] = completed_years
 
     def _financial_starts(self) -> dict[str, tuple[float, float]]:
         return {key: (runtime.revenue, runtime.profit) for key, runtime in self.env.runtimes.items()}

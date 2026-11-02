@@ -58,6 +58,7 @@ def _ranking_rows(result: RunResult) -> list[dict[str, object]]:
                 "archetype": firm.archetype,
                 "cumulative_profit": cumulative[firm.id],
                 "final_cash": result.final_result.firm_results[firm.id].cash,
+                "exit_year": result.exits.get(firm.id, ""),
                 "final_reputation": report.reputation if report else firm.reputation,
                 "final_market_share": report.market_share if report and stage == "retailer" else "",
             })
@@ -96,7 +97,7 @@ def write_outputs(result: RunResult, out_dir: str | Path) -> list[Path]:
     ranking_rows = _ranking_rows(result)
     with ranking_path.open("w", newline="", encoding="utf-8") as output:
         writer = csv.DictWriter(output, fieldnames=list(ranking_rows[0]) if ranking_rows else [
-            "firm", "stage", "archetype", "cumulative_profit", "final_cash",
+            "firm", "stage", "archetype", "cumulative_profit", "final_cash", "exit_year",
             "final_reputation", "final_market_share",
         ])
         writer.writeheader()
@@ -119,9 +120,18 @@ def print_summary(result: RunResult) -> None:
         )
     if rows:
         print(f"Market leader: {rows[0]['firm']} (cumulative profit {float(rows[0]['cumulative_profit']):,.2f})")
-    insolvent = [str(row["firm"]) for row in rows if float(row["final_cash"]) < 0]
+    exited = [
+        f"{row['firm']} (after year {row['exit_year']})"
+        for row in rows if row["exit_year"] != ""
+    ]
+    if exited:
+        print("Exited (bankrupt): " + ", ".join(exited))
+    insolvent = [
+        str(row["firm"]) for row in rows
+        if row["exit_year"] == "" and float(row["final_cash"]) < 0
+    ]
     if insolvent:
-        print("WARNING: negative final cash (MVP has no bankruptcy/exit): " + ", ".join(insolvent))
+        print("WARNING: negative final cash but still active: " + ", ".join(insolvent))
 
     print("\nYear-by-year system KPIs")
     print(f"{'year':>4} {'total profit':>14} {'bullwhip':>12} {'concentration':>14} {'lost sales':>12}")
