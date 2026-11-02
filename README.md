@@ -89,7 +89,40 @@ python -m pytest market_sim
 `run` schreibt `annual_reports.csv` (pro Firma und Jahr), `firm_ranking.csv`
 (inkl. `exit_year` für Firmen, die Konkurs gegangen sind) und
 `system_kpis.csv`. In der Konsole stehen ausgeschiedene Firmen separat von
-Firmen, die noch aktiv sind, aber negatives Cash haben. Das Dashboard ist eine eigenständige HTML-Datei, in
+Firmen, die noch aktiv sind, aber negatives Cash haben.
+
+### Speicherstände und Szenarien
+
+Mit `--checkpoints` speichert die Simulation nach jedem Jahr den ganzen Zustand
+(alle Firmen, Lager, Kasse, Zufallsgeneratoren) als
+`<out>/checkpoints/year_XX.pkl`. Ein Lauf lässt sich damit fortsetzen, und
+das Ergebnis ist exakt dasselbe wie bei einem Lauf ohne Unterbruch.
+
+```bash
+python -m market_sim.run --seed 0 --out runs/base --checkpoints
+```
+
+```bash
+python -m market_sim.run --resume runs/base/checkpoints/year_05.pkl --out runs/resumed
+```
+
+Von jedem Speicherstand aus kann man ein Was-wäre-wenn-Szenario abzweigen. Die
+Jahre davor bleiben identisch, ab dem Abzweig gilt die Änderung bis zum Ende.
+Mit `--baseline` entstehen zusätzlich `comparison.csv` (pro Jahr) und
+`firm_comparison.csv` (pro Firma).
+
+```bash
+python -m market_sim.scenario --from runs/base/checkpoints/year_05.pkl --scenario nachfrage_einbruch --out runs/fork_nachfrage --baseline runs/base
+```
+
+Die Szenarien stehen in `market_sim/config/scenarios.yaml`:
+
+- `nachfrage_einbruch`: Die Konsumnachfrage sinkt dauerhaft um 20 %.
+- `brauerei_engpass`: Beide Brauereien verlieren 30 % Produktionskapazität.
+- `preiserhoehung_brauerei`: Beide Brauereien erhöhen ihre Preise um 20 %.
+
+Speicherstände sind Pickle-Dateien. Lade nur Dateien, die du selbst erzeugt
+hast. Das Dashboard ist eine eigenständige HTML-Datei, in
 der man jede Firma einzeln anschauen kann. Ein 10-Jahres-Lauf dauert rund
 20 Sekunden.
 
@@ -98,7 +131,7 @@ der man jede Firma einzeln anschauen kann. Ein 10-Jahres-Lauf dauert rund
 ## 3. Erste Ergebnisse
 
 Stand: aktueller Code auf `main`, 10 Jahre, Seeds 0, 1 und 2.
-Alle 81 Tests laufen grün.
+Alle 92 Tests laufen grün.
 
 ### Systemkennzahlen (Seed 0)
 
@@ -152,6 +185,33 @@ pro Jahr). Die Rangfolge der Firmen ist in allen drei Seeds praktisch gleich.
    immer noch 75- bis 130-mal so gross wie die Schwankung der
    Endkundennachfrage. Die Bestellglättung hat die frühere Explosion
    verhindert, gelöst ist das Problem aber nicht.
+
+### Szenarien ab Jahr 5 (Seed 0)
+
+Alle drei Szenarien zweigen vom gleichen Speicherstand nach Jahr 5 ab und
+laufen bis Jahr 10. Die Werte sind Unterschiede zum normalen Lauf über die
+Jahre 6 bis 10.
+
+| Szenario | Gewinn gesamt | Brauereien | Distributoren | Wholesaler | Retailer | Neue Konkurse |
+|---|---:|---:|---:|---:|---:|---|
+| Nachfrage −20 % | −1'761 Mio. | −626 Mio. | −504 Mio. | −357 Mio. | −275 Mio. | keine |
+| Brauerei-Kapazität −30 % | +1 Mio. | +3 Mio. | −2 Mio. | 0 | 0 | keine |
+| Brauerei-Preise +20 % | +183 Mio. | +2'593 Mio. | −1'528 Mio. | −349 Mio. | −533 Mio. | 4 Firmen |
+
+1. **Ein Nachfrageeinbruch trifft alle, oben am stärksten.** Der Gewinn sinkt
+   jedes Jahr um rund 350 Mio. CHF, also etwa 20 %. Die Brauereien verlieren
+   am meisten, aber keine Firma geht deswegen Konkurs.
+2. **Die Brauereien haben viel Reserve.** 30 % weniger Kapazität ändern fast
+   nichts. Die Brauereien laufen also weit unter ihrer Grenze. Für einen
+   echten Engpass müsste die Kürzung viel grösser sein, oder das Modell hat
+   zu viel Kapazität angesetzt. Das ist ein Punkt für die Kalibrierung.
+3. **Preismacht verschiebt Gewinn und erzeugt Konkurse.** Höhere
+   Brauereipreise verschieben rund 2.6 Mrd. CHF Gewinn zu den Brauereien.
+   Die Firmen weiter unten in der Kette verlieren, und vier
+   `low_cost`-Firmen gehen Konkurs: `distributor_02` (nach Jahr 7),
+   `wholesaler_02` (nach Jahr 8), `retailer_02` und `retailer_06` (beide
+   nach Jahr 9). Billiganbieter haben zu wenig Marge, um höhere
+   Einkaufspreise aufzufangen.
 
 ### Offene Punkte
 

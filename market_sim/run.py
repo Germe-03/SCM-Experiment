@@ -6,6 +6,7 @@ import argparse
 import csv
 from pathlib import Path
 
+from market_sim.checkpoint import load_checkpoint, year_end_saver
 from market_sim.config import MarketConfig, load_market_config
 from market_sim.kpi import AnnualReport, SystemKPIs
 from market_sim.models import STAGES, SupplyNetwork, load_firms
@@ -19,8 +20,23 @@ def run_simulation(
     days_per_year: int | None = None,
     config: MarketConfig | None = None,
     network: SupplyNetwork | None = None,
+    checkpoint_dir: str | Path | None = None,
 ) -> RunResult:
     """Load defaults and execute the complete rule-based market simulation."""
+
+    runner, run_years = build_runner(years, seed, days_per_year, config, network)
+    saver = year_end_saver(checkpoint_dir) if checkpoint_dir is not None else None
+    return runner.continue_run(runner.start(), run_years, on_year_end=saver)
+
+
+def build_runner(
+    years: int | None = None,
+    seed: int = 0,
+    days_per_year: int | None = None,
+    config: MarketConfig | None = None,
+    network: SupplyNetwork | None = None,
+) -> tuple[SimulationRunner, int]:
+    """Create a runner with the default rule-based policies and its run length."""
 
     config = config or load_market_config()
     network = network or load_firms()
@@ -39,7 +55,15 @@ def run_simulation(
     runner = SimulationRunner(
         network, config, policies_for_network(firms), seed=seed,
     )
-    return runner.run(run_years)
+    return runner, run_years
+
+
+def resume_simulation(checkpoint: str | Path, checkpoint_dir: str | Path | None = None) -> RunResult:
+    """Continue a saved run up to its configured end year."""
+
+    runner, state = load_checkpoint(checkpoint)
+    saver = year_end_saver(checkpoint_dir) if checkpoint_dir is not None else None
+    return runner.continue_run(state, runner.config.simulation.years, on_year_end=saver)
 
 
 def _ranking_rows(result: RunResult) -> list[dict[str, object]]:
@@ -148,8 +172,22 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--days-per-year", type=int, default=None)
     parser.add_argument("--out", default="runs")
+    parser.add_argument(
+        "--checkpoints", action="store_true",
+        help="save <out>/checkpoints/year_XX.pkl after every simulated year",
+    )
+    parser.add_argument(
+        "--resume", metavar="CHECKPOINT",
+        help="continue a self-generated checkpoint to the configured end year",
+    )
     args = parser.parse_args(argv)
-    result = run_simulation(args.years, args.seed, args.days_per_year)
+    checkpoint_dir = Path(args.out) / "checkpoints" if args.checkpoints else None
+    if args.resume:
+        result = resume_simulation(args.resume, checkpoint_dir)
+    else:
+        result = run_simulation(
+            args.years, args.seed, args.days_per_year, checkpoint_dir=checkpoint_dir,
+        )
     write_outputs(result, args.out)
     print_summary(result)
 
