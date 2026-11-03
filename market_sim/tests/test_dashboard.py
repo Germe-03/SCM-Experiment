@@ -26,8 +26,8 @@ def test_dashboard_data_is_complete_and_json_serializable():
     assert len(data["ranking"]) == len(data["firms"])
     for firm in data["firms"].values():
         assert len(firm["yearly"]) == 2
-        assert firm["daily"]
-        assert all(firm["daily"][key] for key in ("inventory", "backlog", "cash"))
+        # Weekly means keep 50-year runs small enough for one HTML file.
+        assert all(firm["weekly"][key] for key in ("inventory", "backlog", "cash"))
 
 
 def test_write_dashboard_html(tmp_path):
@@ -38,4 +38,5 @@ def test_write_dashboard_html(tmp_path):
     assert "Aare Markt AG" in content
     assert CHART_JS_URL in content
     assert 'id="actor-selector"' in content
-    assert "Alle" in content and "Keine" in content
+    for tab in ("overview", "market", "firms", "compare", "chain", "finance", "state", "rnd", "events"):
+        assert f'data-tab="{tab}"' in content
