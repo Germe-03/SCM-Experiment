@@ -368,6 +368,61 @@ class StrategyChangeConfig(ConfigModel):
     stages: list[str] = Field(default_factory=lambda: ["retailer", "wholesaler", "distributor", "factory"])
 
 
+class ConsumerWeights(ConfigModel):
+    price: float = Field(ge=0, le=1)
+    quality: float = Field(ge=0, le=1)
+    brand_reputation: float = Field(ge=0, le=1)
+    store_reputation: float = Field(ge=0, le=1)
+    availability: float = Field(ge=0, le=1)
+
+    @model_validator(mode="after")
+    def _normalized(self) -> Self:
+        if not isclose(sum(self.model_dump().values()), 1.0, abs_tol=1e-3):
+            raise ValueError("consumer weights must sum to 1")
+        return self
+
+
+class ConsumerClass(ConfigModel):
+    name: str
+    persons: int = Field(gt=0)
+    units_per_person_per_year: float = Field(gt=0)
+    max_price: float = Field(gt=0)
+    weights: ConsumerWeights
+
+
+class ConsumersConfig(ConfigModel):
+    """Phase 2: consumer classes with a willingness to pay (consumers.yaml)."""
+
+    wtp_slope: float = Field(default=0.6, ge=0, le=2)
+    classes: list[ConsumerClass]
+
+    @model_validator(mode="after")
+    def _unique_names(self) -> Self:
+        if len({c.name for c in self.classes}) != len(self.classes):
+            raise ValueError("consumer class names must be unique")
+        return self
+
+
+class BrandDefinition(ConfigModel):
+    id: str
+    name: str
+    owner: str
+    positioning: Literal["premium", "standard", "cheap"]
+    traits: list[str] = Field(default_factory=list)
+
+
+class BrandsConfig(ConfigModel):
+    """Phase 2: brands that carry product reputation (brands.yaml)."""
+
+    reputation_speed: float = Field(default=0.3, ge=0, le=1)
+    quality_weight: float = Field(default=0.6, ge=0, le=1)
+    production_share_floor: float = Field(default=0.1, ge=0, le=1)
+    quality_offsets: dict[str, float]
+    price_factors: dict[str, float]
+    entrant_positioning: dict[str, str]
+    brands: list[BrandDefinition]
+
+
 class MarketConfig(ConfigModel):
     unit_scale: UnitScaleConfig
     demand: DemandConfig
@@ -394,6 +449,10 @@ class MarketConfig(ConfigModel):
     market_entry: MarketEntryConfig = Field(default_factory=MarketEntryConfig)
     bank: BankConfig = Field(default_factory=BankConfig)
     strategy_change: StrategyChangeConfig = Field(default_factory=StrategyChangeConfig)
+    # Phase 2: "classes" uses consumers.yaml and brands.yaml, "segments" the old model.
+    consumer_model: Literal["classes", "segments"] = "segments"
+    consumers: ConsumersConfig | None = None
+    brands: BrandsConfig | None = None
 
     @model_validator(mode="after")
     def _validate_stage_prices(self) -> Self:
@@ -433,4 +492,10 @@ def load_market_config(path: str | Path | None = None) -> MarketConfig:
 
     if not isinstance(data, dict):
         raise ValueError(f"market config must contain a YAML mapping: {config_path}")
+    # Phase 2: consumer classes and brands live in their own files next to market.yaml.
+    for key in ("consumers", "brands"):
+        side_file = config_path.parent / f"{key}.yaml"
+        if key not in data and side_file.exists():
+            with side_file.open(encoding="utf-8") as handle:
+                data[key] = yaml.safe_load(handle)
     return MarketConfig.model_validate(data)

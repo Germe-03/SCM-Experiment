@@ -169,6 +169,15 @@ Kundenklassen kaufen Marken in Läden.
   über die Jahre gezeigt. Das beantwortet die Frage «welche Gesamtreputation
   hat ein Bier am Ende».
 
+> **Umgesetzt mit Vereinfachung (2026-11-03):** Bestellungen bleiben
+> Gesamtmengen. Jede Lieferung trägt die Marken-Mischung des Lieferanten mit
+> (`FirmRuntime.stock`, `incoming_brands`), Brauereien produzieren ihre Marken
+> im Verhältnis der Vorjahresverkäufe. Händler wählen ihr Sortiment also nicht
+> direkt; es ergibt sich aus der Wahl ihrer Lieferanten. Bestellungen pro Marke
+> sind ein möglicher späterer Ausbau. Marken- und Klassenwerte stehen in
+> `brand_report.csv` und `class_report.csv` statt in `system_kpis.csv`, weil
+> die Zahl der Marken während des Laufs wächst.
+
 ### Kaufentscheid pro Tag (ersetzt `_fulfill_consumer_demand`)
 
 1. Jede Klasse hat ihren Tagesbedarf.
@@ -477,3 +486,24 @@ Seed, was angepasst wurde.
   Seed über 30 Jahre bei 10 parallelen Läufen. 127 Tests bestanden. Neue
   Stellschrauben im Strategiewechsel (`count_bottom_third`,
   `min_return_gap`, `stages`) sind vorhanden, aber auf den Standardwerten.
+- **2026-11-03, Phase 2:** 30 Kundenklassen mit Höchstpreis und 4 Marken
+  (2 pro Brauerei, neue Brauereien bekommen eine eigene Marke). Messung wie
+  Phase 1 (10 Seeds, 30 Jahre, alle Funktionen an). Drei Fehler beim Aufbau
+  gefunden und behoben: (1) Händler mit leerem Lager bekamen keine Nachfrage
+  und bestellten deshalb nie nach; (2) kleine Klassen rundeten ihre wenigen
+  Flaschen pro Tag immer auf dieselbe bestbewertete Kombination aus Laden und
+  Marke, die Händler gingen reihenweise Konkurs (Gewinn 2.4 %, am Ende nur
+  2–5 Händler); jetzt werden die Wünsche aller Klassen zuerst mit Bruchteilen
+  summiert und erst dann gerundet; (3) Höchstpreise der unteren Einkommen und
+  die Preisfaktoren der Marken waren zu streng. Angepasst: Höchstpreise
+  4.8 / 5.4 / 6.0 / 6.8 / 8.0 CHF je Einkommensstufe, Preisfaktoren Premium
+  1.10, Standard 1.00, Günstig 0.95. Ergebnis: Gewinn 14.3 % des
+  Endkundenumsatzes (8.7–17.0 %), Service Level 98.9 % (tiefstes Jahr 61 %),
+  14.4 Neueintritte und 15.2 Konkurse pro Lauf, 0.49 Strategiewechsel pro
+  Firma und 10 Jahre, am Ende 4–11 Händler. Preistest nach 10 Jahren (Seed 0,
+  volle Lager): Bei 20 % höheren Ladenpreisen kauft die tiefste
+  Einkommensstufe nichts mehr (Anteil ohne Kauf von 0 % auf 100 %), die
+  Stufen 2 bis 5 kaufen weiter (unter 2 % ohne Kauf). Laufzeit rund 250 s pro
+  Seed über 30 Jahre bei 10 parallelen Läufen, gut doppelt so lang wie in
+  Phase 1; noch nicht optimiert. Das alte Modell bleibt mit
+  `consumer_model: segments` wählbar.

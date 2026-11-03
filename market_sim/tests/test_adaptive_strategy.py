@@ -70,6 +70,8 @@ def ten_year_results():
     config = load_market_config()
     for feature in (config.market_entry, config.bank, config.strategy_change):
         feature.enabled = False
+    config.consumer_model = "segments"
+    config.policy.max_backlog_days = None
     return (run_simulation(years=10, seed=0, config=config.model_copy(deep=True)),
             run_simulation(years=10, seed=0, config=config.model_copy(deep=True)))
 

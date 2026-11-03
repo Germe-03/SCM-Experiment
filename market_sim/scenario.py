@@ -141,7 +141,8 @@ def write_comparison(baseline_dir: str | Path, fork_dir: str | Path, out_dir: st
     base_firms = {row["firm"]: row for row in _read_csv(baseline_dir / "firm_ranking.csv")}
     firm_rows = []
     for fork_row in _read_csv(fork_dir / "firm_ranking.csv"):
-        base_row = base_firms[fork_row["firm"]]
+        # Market entries can differ between runs; a firm missing in one run counts as zero.
+        base_row = base_firms.get(fork_row["firm"], {"cumulative_profit": 0.0, "exit_year": "absent"})
         base, fork = float(base_row["cumulative_profit"]), float(fork_row["cumulative_profit"])
         firm_rows.append({
             "firm": fork_row["firm"], "stage": fork_row["stage"], "archetype": fork_row["archetype"],

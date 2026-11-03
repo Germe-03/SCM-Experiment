@@ -134,7 +134,17 @@ def write_outputs(result: RunResult, out_dir: str | Path) -> list[Path]:
         writer = csv.DictWriter(output, fieldnames=EVENT_FIELDS)
         writer.writeheader()
         writer.writerows(sorted(result.events, key=lambda event: (event["year"], event["day"])))
-    return [annual_path, system_path, ranking_path, events_path]
+    paths = [annual_path, system_path, ranking_path, events_path]
+    # Phase 2: brand and consumer-class reports exist only in the classes model.
+    for name, rows in (("brand_report.csv", result.brand_reports), ("class_report.csv", result.class_reports)):
+        if rows:
+            path = directory / name
+            with path.open("w", newline="", encoding="utf-8") as output:
+                writer = csv.DictWriter(output, fieldnames=list(rows[0]))
+                writer.writeheader()
+                writer.writerows(rows)
+            paths.append(path)
+    return paths
 
 
 def print_summary(result: RunResult) -> None:

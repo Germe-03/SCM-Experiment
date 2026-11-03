@@ -9,6 +9,7 @@ import random
 from market_sim.config import MarketConfig, load_market_config
 from market_sim.models import STAGES, Firm, SupplyNetwork
 from market_sim.selection import split_order, supplier_candidates
+from market_sim.brands import BrandBook, add_to_stock, take_from_stock
 
 
 CONSUMER_ID = "__consumer__"
@@ -45,6 +46,9 @@ class FirmRuntime:
     # P1 fix: ordered units not yet received, including goods in transit.
     on_order: int = 0
     backlog_by_downstream: dict[str, int] = field(default_factory=dict)
+    # Phase 2: units per brand on hand and per brand in transit (parallel to incoming_shipments).
+    stock: dict[str, int] = field(default_factory=dict)
+    incoming_brands: list[dict[str, int]] = field(default_factory=list)
     order_history: list[int] = field(default_factory=list)
     shipment_history: list[int] = field(default_factory=list)
     orders_received_history: list[int] = field(default_factory=list)
@@ -95,6 +99,8 @@ class FirmRuntime:
     def receive_shipment(self) -> int:
         received = self.incoming_shipments.pop(0)
         self.inventory += received
+        if self.incoming_brands:
+            add_to_stock(self.stock, self.incoming_brands.pop(0))
         # P1 fix: receiving changes bookkeeping only; never allow drift below zero.
         self.on_order = max(0, self.on_order - received)
         return received
@@ -214,6 +220,8 @@ class MarketEnvironment:
         """Register one firm and create all mutable runtime state."""
 
         self.network.add_firm(firm)
+        if self.brand_book is not None and firm.stage == "factory" and not self.brand_book.brands_of(firm.id):
+            self.brand_book.add_brand_for(firm)
         runtime = self._new_runtime(firm)
         self.runtimes[firm.id] = runtime
         self.inventory_history[firm.id] = []
@@ -249,6 +257,11 @@ class MarketEnvironment:
         self._commodity_rng = random.Random(f"commodities-{self.seed}")
         self.commodity_log_index = {name: 0.0 for name in self.config.commodities.components}
         self.material_cost_multiplier = 1.0
+        self.brand_book = (
+            BrandBook(self.config, [f for stage in STAGES for f in self.network.firms_in(stage)])
+            if self.config.consumer_model == "classes" and self.consumer_demand_mode == "attractiveness_lost"
+            else None
+        )
         for stage in STAGES:
             for firm in self.network.firms_in(stage):
                 inventory = firm.inventory if self.initial_inventory is None else self.initial_inventory
@@ -278,7 +291,7 @@ class MarketEnvironment:
         initial_backlog = firm.backlog
         backlog_map = backlog_map or ({seeded_customer: initial_backlog} if initial_backlog else {})
         scaled_cash = firm.cash * self.config.costs.initial_cash_scale
-        return FirmRuntime(
+        runtime = FirmRuntime(
             inventory=firm.inventory if inventory is None else inventory,
             backlog=initial_backlog,
             incoming_shipments=list(self.initial_pipeline),
@@ -294,6 +307,12 @@ class MarketEnvironment:
             employees=firm.employees, wage_level=firm.wage_level,
             quality_level=firm.quality_level,
         )
+        if getattr(self, "brand_book", None) is not None:
+            runtime.stock = self.brand_book.initial_stock(firm, runtime.inventory)
+            runtime.incoming_brands = [
+                self.brand_book.initial_stock(firm, qty) for qty in runtime.incoming_shipments
+            ]
+        return runtime
 
     def step(self, total_consumer_demand: int, orders: dict[str, int]) -> tuple[bool, dict]:
         if not self.runtimes:
@@ -316,6 +335,8 @@ class MarketEnvironment:
                 continue
             runtime.receive_shipment()
             runtime.incoming_shipments.append(0)
+            if self.brand_book is not None:
+                runtime.incoming_brands.append({})
 
         # 2. S5 decision: in attractiveness_lost mode consumers buy immediately
         # after inbound shipments.  This makes the reduced retailer inventory
@@ -324,7 +345,16 @@ class MarketEnvironment:
         consumer_sales = {firm.id: 0 for firm in self.network.firms_in("retailer")}
         lost_sales = 0
         demand_shares: dict[str, int] = {}
-        if self.consumer_demand_mode == "attractiveness_lost":
+        if self.consumer_demand_mode == "attractiveness_lost" and self.brand_book is not None:
+            demand_shares, consumer_sales, lost_sales = self.brand_book.fulfill(self, total_consumer_demand)
+            self._last_segment_shares = {}
+            for firm_id, units in consumer_sales.items():
+                runtime = self.runtimes[firm_id]
+                runtime.consumer_units_sold = units
+                runtime.cumulative_consumer_units_sold += units
+            consumer_sales = {firm.id: consumer_sales.get(firm.id, 0) for firm in self.network.firms_in("retailer")}
+            self.cumulative_lost_sales += lost_sales
+        elif self.consumer_demand_mode == "attractiveness_lost":
             demand_shares, consumer_sales, lost_sales = self._fulfill_consumer_demand(
                 total_consumer_demand
             )
@@ -385,6 +415,11 @@ class MarketEnvironment:
             shipped_this_period[supplier_id] = allocations
             for downstream_id, quantity in allocations.items():
                 if downstream_id in self.runtimes:
+                    if self.brand_book is not None and quantity:
+                        add_to_stock(
+                            self.runtimes[downstream_id].incoming_brands[-1],
+                            take_from_stock(runtime.stock, quantity),
+                        )
                     price = self.network.firm(supplier_id).sell_price
                     trade_value = self._trade_value(quantity, price)
                     runtime.revenue += trade_value
@@ -414,6 +449,11 @@ class MarketEnvironment:
                     # P1 fix: a factory production start is its replenishment order.
                     self.runtimes[firm.id].on_order += quantity
                     self.runtimes[firm.id].incoming_shipments[-1] += quantity
+                    if self.brand_book is not None and quantity:
+                        add_to_stock(
+                            self.runtimes[firm.id].incoming_brands[-1],
+                            self.brand_book.production_mix(firm.id, quantity),
+                        )
                     continue
                 candidates = self.supplier_candidates(firm.id)
                 lead_times = {candidate.id: self.config.logistics.default_lead_time_days for candidate in candidates}

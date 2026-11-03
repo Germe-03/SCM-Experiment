@@ -1,0 +1,13 @@
+# Brands carry product reputation through the chain. Quality follows the owner
+# brewery plus a positioning offset; the retail price is the store price times the factor.
+reputation_speed: 0.3
+quality_weight: 0.6
+production_share_floor: 0.1
+quality_offsets: {premium: 0.08, standard: 0.0, cheap: -0.08}
+price_factors: {premium: 1.10, standard: 1.0, cheap: 0.95}
+entrant_positioning: {premium: premium, reliable: standard, standard: standard, growth: cheap, low_cost: cheap}
+brands:
+  - {id: alpen_gold, name: Alpen Gold, owner: factory_01, positioning: premium, traits: [lager]}
+  - {id: alpen_lager, name: Alpen Lager, owner: factory_01, positioning: standard, traits: [lager]}
+  - {id: see_reserve, name: See Reserve, owner: factory_02, positioning: standard, traits: [lager]}
+  - {id: see_hell, name: See Hell, owner: factory_02, positioning: cheap, traits: [lager]}

@@ -38,6 +38,10 @@ strategy_change:
 unit_scale:
   real_units_per_sim_unit: 10000
 
+# Phase 2: classes = 30 consumer classes and brands (consumers.yaml, brands.yaml);
+# segments = the earlier three-segment model with price elasticity.
+consumer_model: classes
+
 demand:
   annual_demand_units: 94400
   daily_demand_units: 259

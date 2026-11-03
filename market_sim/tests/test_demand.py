@@ -11,8 +11,10 @@ from market_sim.models import load_firms
 
 def _market(inventories: tuple[int, int] = (100, 100)) -> MarketEnvironment:
     network = load_firms()
+    # These tests cover the earlier segment model; Phase 2 classes have their own tests.
+    config = load_market_config().model_copy(update={"consumer_model": "segments"})
     market = MarketEnvironment(
-        network, consumer_demand_mode="attractiveness_lost", horizon=1
+        network, config=config, consumer_demand_mode="attractiveness_lost", horizon=1
     )
     market.reset()
     retailers = sorted(network.firms_in("retailer"), key=lambda item: item.id)
@@ -124,6 +126,7 @@ def test_scores_are_bounded_and_zero_scores_fall_back_to_equal_split() -> None:
     weights = AttractivenessWeights(price=1, quality=0, reputation=0, availability=0)
     market.config = load_market_config().model_copy(
         update={
+            "consumer_model": "segments",
             "demand": load_market_config().demand.model_copy(update={"segments": []}),
             "demand_attractiveness_weights": weights,
         }

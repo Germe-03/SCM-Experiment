@@ -2,6 +2,7 @@
 
 import pytest
 
+from market_sim.config import load_market_config
 from market_sim.environment import MarketEnvironment
 from market_sim.models import load_firms
 
@@ -30,8 +31,9 @@ def test_b2b_shipment_books_scaled_symmetric_trade_value() -> None:
 
 def test_consumer_sale_books_scaled_retail_revenue() -> None:
     network = load_firms()
+    config = load_market_config().model_copy(update={"consumer_model": "segments"})
     market = MarketEnvironment(
-        network, horizon=1, consumer_demand_mode="attractiveness_lost"
+        network, config=config, horizon=1, consumer_demand_mode="attractiveness_lost"
     )
     market.reset()
     retailer = network.firm("retailer_01")

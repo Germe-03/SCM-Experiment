@@ -9,6 +9,7 @@ def test_seed_zero_ten_year_reference_is_exact() -> None:
     for feature in (config.market_entry, config.bank, config.strategy_change):
         feature.enabled = False
     config.policy.max_backlog_days = None
+    config.consumer_model = "segments"
     result = run_simulation(years=10, seed=0, config=config)
     market_events = [
         (event["year"], event["day"], event["firm"], event["event"])

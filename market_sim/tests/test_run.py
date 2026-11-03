@@ -27,6 +27,8 @@ def test_write_outputs(tmp_path):
         "system_kpis.csv": 2,
         "firm_ranking.csv": firm_count,
         "events.csv": len(result.events),
+        "brand_report.csv": len(result.brand_reports),
+        "class_report.csv": len(result.class_reports),
     }
     assert {path.name for path in paths} == set(expected_rows)
     for path in paths:
@@ -79,6 +81,7 @@ def test_main_writes_to_requested_directory(tmp_path):
     main(["--years", "1", "--days-per-year", "10", "--out", str(tmp_path)])
     assert {path.name for path in tmp_path.iterdir()} == {
         "annual_reports.csv", "system_kpis.csv", "firm_ranking.csv", "events.csv",
+        "brand_report.csv", "class_report.csv",
     }
 
 

@@ -1,0 +1,306 @@
+# 30 consumer classes: 5 income levels x 3 age groups x 2 drinking habits.
+# Model assumptions, not survey data. persons = adults, units in bottles per person and year;
+# all classes together drink the configured annual demand (94'400 sim units).
+# max_price: highest retail price per bottle a class pays for a brand of average reputation.
+wtp_slope: 0.6
+classes:
+- name: income_1_18-34_light
+  persons: 273000
+  units_per_person_per_year: 73.169
+  max_price: 4.8
+  weights:
+    price: 0.7
+    quality: 0.105
+    brand_reputation: 0.09
+    store_reputation: 0.045
+    availability: 0.06
+- name: income_1_18-34_regular
+  persons: 147000
+  units_per_person_per_year: 292.676
+  max_price: 4.8
+  weights:
+    price: 0.7
+    quality: 0.105
+    brand_reputation: 0.09
+    store_reputation: 0.045
+    availability: 0.06
+- name: income_1_35-64_light
+  persons: 487500
+  units_per_person_per_year: 63.625
+  max_price: 4.8
+  weights:
+    price: 0.7
+    quality: 0.105
+    brand_reputation: 0.09
+    store_reputation: 0.045
+    availability: 0.06
+- name: income_1_35-64_regular
+  persons: 262500
+  units_per_person_per_year: 254.501
+  max_price: 4.8
+  weights:
+    price: 0.7
+    quality: 0.105
+    brand_reputation: 0.09
+    store_reputation: 0.045
+    availability: 0.06
+- name: income_1_65+_light
+  persons: 214500
+  units_per_person_per_year: 41.356
+  max_price: 4.8
+  weights:
+    price: 0.7
+    quality: 0.105
+    brand_reputation: 0.09
+    store_reputation: 0.045
+    availability: 0.06
+- name: income_1_65+_regular
+  persons: 115500
+  units_per_person_per_year: 165.426
+  max_price: 4.8
+  weights:
+    price: 0.7
+    quality: 0.105
+    brand_reputation: 0.09
+    store_reputation: 0.045
+    availability: 0.06
+- name: income_2_18-34_light
+  persons: 273000
+  units_per_person_per_year: 73.169
+  max_price: 5.4
+  weights:
+    price: 0.55
+    quality: 0.1575
+    brand_reputation: 0.135
+    store_reputation: 0.0675
+    availability: 0.09
+- name: income_2_18-34_regular
+  persons: 147000
+  units_per_person_per_year: 292.676
+  max_price: 5.4
+  weights:
+    price: 0.55
+    quality: 0.1575
+    brand_reputation: 0.135
+    store_reputation: 0.0675
+    availability: 0.09
+- name: income_2_35-64_light
+  persons: 487500
+  units_per_person_per_year: 63.625
+  max_price: 5.4
+  weights:
+    price: 0.55
+    quality: 0.1575
+    brand_reputation: 0.135
+    store_reputation: 0.0675
+    availability: 0.09
+- name: income_2_35-64_regular
+  persons: 262500
+  units_per_person_per_year: 254.501
+  max_price: 5.4
+  weights:
+    price: 0.55
+    quality: 0.1575
+    brand_reputation: 0.135
+    store_reputation: 0.0675
+    availability: 0.09
+- name: income_2_65+_light
+  persons: 214500
+  units_per_person_per_year: 41.356
+  max_price: 5.4
+  weights:
+    price: 0.55
+    quality: 0.1575
+    brand_reputation: 0.135
+    store_reputation: 0.0675
+    availability: 0.09
+- name: income_2_65+_regular
+  persons: 115500
+  units_per_person_per_year: 165.426
+  max_price: 5.4
+  weights:
+    price: 0.55
+    quality: 0.1575
+    brand_reputation: 0.135
+    store_reputation: 0.0675
+    availability: 0.09
+- name: income_3_18-34_light
+  persons: 273000
+  units_per_person_per_year: 73.169
+  max_price: 6.0
+  weights:
+    price: 0.4
+    quality: 0.21
+    brand_reputation: 0.18
+    store_reputation: 0.09
+    availability: 0.12
+- name: income_3_18-34_regular
+  persons: 147000
+  units_per_person_per_year: 292.676
+  max_price: 6.0
+  weights:
+    price: 0.4
+    quality: 0.21
+    brand_reputation: 0.18
+    store_reputation: 0.09
+    availability: 0.12
+- name: income_3_35-64_light
+  persons: 487500
+  units_per_person_per_year: 63.625
+  max_price: 6.0
+  weights:
+    price: 0.4
+    quality: 0.21
+    brand_reputation: 0.18
+    store_reputation: 0.09
+    availability: 0.12
+- name: income_3_35-64_regular
+  persons: 262500
+  units_per_person_per_year: 254.501
+  max_price: 6.0
+  weights:
+    price: 0.4
+    quality: 0.21
+    brand_reputation: 0.18
+    store_reputation: 0.09
+    availability: 0.12
+- name: income_3_65+_light
+  persons: 214500
+  units_per_person_per_year: 41.356
+  max_price: 6.0
+  weights:
+    price: 0.4
+    quality: 0.21
+    brand_reputation: 0.18
+    store_reputation: 0.09
+    availability: 0.12
+- name: income_3_65+_regular
+  persons: 115500
+  units_per_person_per_year: 165.426
+  max_price: 6.0
+  weights:
+    price: 0.4
+    quality: 0.21
+    brand_reputation: 0.18
+    store_reputation: 0.09
+    availability: 0.12
+- name: income_4_18-34_light
+  persons: 273000
+  units_per_person_per_year: 73.169
+  max_price: 6.8
+  weights:
+    price: 0.25
+    quality: 0.2625
+    brand_reputation: 0.225
+    store_reputation: 0.1125
+    availability: 0.15
+- name: income_4_18-34_regular
+  persons: 147000
+  units_per_person_per_year: 292.676
+  max_price: 6.8
+  weights:
+    price: 0.25
+    quality: 0.2625
+    brand_reputation: 0.225
+    store_reputation: 0.1125
+    availability: 0.15
+- name: income_4_35-64_light
+  persons: 487500
+  units_per_person_per_year: 63.625
+  max_price: 6.8
+  weights:
+    price: 0.25
+    quality: 0.2625
+    brand_reputation: 0.225
+    store_reputation: 0.1125
+    availability: 0.15
+- name: income_4_35-64_regular
+  persons: 262500
+  units_per_person_per_year: 254.501
+  max_price: 6.8
+  weights:
+    price: 0.25
+    quality: 0.2625
+    brand_reputation: 0.225
+    store_reputation: 0.1125
+    availability: 0.15
+- name: income_4_65+_light
+  persons: 214500
+  units_per_person_per_year: 41.356
+  max_price: 6.8
+  weights:
+    price: 0.25
+    quality: 0.2625
+    brand_reputation: 0.225
+    store_reputation: 0.1125
+    availability: 0.15
+- name: income_4_65+_regular
+  persons: 115500
+  units_per_person_per_year: 165.426
+  max_price: 6.8
+  weights:
+    price: 0.25
+    quality: 0.2625
+    brand_reputation: 0.225
+    store_reputation: 0.1125
+    availability: 0.15
+- name: income_5_18-34_light
+  persons: 273000
+  units_per_person_per_year: 73.169
+  max_price: 8.0
+  weights:
+    price: 0.12
+    quality: 0.308
+    brand_reputation: 0.264
+    store_reputation: 0.132
+    availability: 0.176
+- name: income_5_18-34_regular
+  persons: 147000
+  units_per_person_per_year: 292.676
+  max_price: 8.0
+  weights:
+    price: 0.12
+    quality: 0.308
+    brand_reputation: 0.264
+    store_reputation: 0.132
+    availability: 0.176
+- name: income_5_35-64_light
+  persons: 487500
+  units_per_person_per_year: 63.625
+  max_price: 8.0
+  weights:
+    price: 0.12
+    quality: 0.308
+    brand_reputation: 0.264
+    store_reputation: 0.132
+    availability: 0.176
+- name: income_5_35-64_regular
+  persons: 262500
+  units_per_person_per_year: 254.501
+  max_price: 8.0
+  weights:
+    price: 0.12
+    quality: 0.308
+    brand_reputation: 0.264
+    store_reputation: 0.132
+    availability: 0.176
+- name: income_5_65+_light
+  persons: 214500
+  units_per_person_per_year: 41.356
+  max_price: 8.0
+  weights:
+    price: 0.12
+    quality: 0.308
+    brand_reputation: 0.264
+    store_reputation: 0.132
+    availability: 0.176
+- name: income_5_65+_regular
+  persons: 115500
+  units_per_person_per_year: 165.426
+  max_price: 8.0
+  weights:
+    price: 0.12
+    quality: 0.308
+    brand_reputation: 0.264
+    store_reputation: 0.132
+    availability: 0.176

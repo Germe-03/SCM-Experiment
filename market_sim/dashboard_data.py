@@ -74,4 +74,6 @@ def build_dashboard_data(
         "system": [item.model_dump(mode="json") for item in result.system_kpis],
         "events": list(result.events),
         "ranking": ranking,
+        "brands": list(result.brand_reports),
+        "classes": list(result.class_reports),
     }

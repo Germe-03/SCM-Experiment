@@ -48,6 +48,8 @@ class RunResult:
     financial_breakdown: dict[str, list[dict[str, float]]] = field(default_factory=dict)
     exits: dict[str, int] = field(default_factory=dict)
     events: list[dict[str, object]] = field(default_factory=list)
+    brand_reports: list[dict[str, object]] = field(default_factory=list)
+    class_reports: list[dict[str, object]] = field(default_factory=list)
 
 
 @dataclass
@@ -66,6 +68,8 @@ class RunState:
     events: list[dict[str, object]] = field(default_factory=list)
     main_supplier: dict[str, str] = field(default_factory=dict)
     market_entries: dict[int, int] = field(default_factory=dict)
+    brand_reports: list[dict[str, object]] = field(default_factory=list)
+    class_reports: list[dict[str, object]] = field(default_factory=list)
 
 
 class ConsumerDemandGenerator:
@@ -205,6 +209,7 @@ class SimulationRunner:
             daily_series=state.daily_series, days_total=state.global_day,
             financial_breakdown=state.financial_breakdown,
             exits=dict(self.exits), events=list(state.events),
+            brand_reports=list(state.brand_reports), class_reports=list(state.class_reports),
         )
 
     def _apply_start_variation(self, rng: random.Random) -> None:
@@ -284,6 +289,8 @@ class SimulationRunner:
         firm.quality_level = self._clamp(firm.quality_level - event.strength)
         firm.reputation = self._clamp(firm.reputation - event.reputation_strength)
         runtime.fixed_cost += event.cost
+        if self.env.brand_book is not None and firm.stage == "factory":
+            self.env.brand_book.recall(firm_id, event.reputation_strength)
         state.events.append({
             "year": year, "day": 1, "firm": firm_id, "event": event.type,
             "details": f"quality -{event.strength:g}, reputation -{event.reputation_strength:g}",
@@ -416,6 +423,9 @@ class SimulationRunner:
                 sum(active_retail_prices) / len(active_retail_prices)
                 if active_retail_prices else None
             )
+            # Phase 2: consumer classes replace price elasticity by their maximum prices.
+            if self.env.brand_book is not None:
+                average_price = None
             total_demand = self.demand(global_day, average_price)
             _, info = self.env.step(total_demand, {key: value.order_qty for key, value in decisions.items()})
             demand_series.append(total_demand)
@@ -516,6 +526,10 @@ class SimulationRunner:
             reports[firm.id] = reports[firm.id].model_copy(update={
                 "interest_cost": financial_breakdown[firm.id][-1]["interest_cost"],
             })
+        if self.env.brand_book is not None:
+            brand_rows, class_rows = self.env.brand_book.year_end(self.env, self.network, year + 1)
+            state.brand_reports.extend(brand_rows)
+            state.class_reports.extend(class_rows)
         self._apply_bankruptcy(year + 1, state.events)
         system_kpis[-1] = system_kpis[-1].model_copy(update={
             "bankruptcies": len(self.exits) - exits_before,
