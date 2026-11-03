@@ -8,6 +8,7 @@ import random
 from statistics import pstdev
 from typing import Callable
 
+from market_sim.longrun import LongRun
 from market_sim.config import MarketConfig, MarketEventTypeConfig
 from market_sim.environment import MarketEnvironment, MarketResult
 from market_sim.kpi import (
@@ -153,6 +154,7 @@ class SimulationRunner:
             seed=seed,
         )
         self._event_rng = random.Random(f"events-{seed}")
+        self.long_run = LongRun(self, seed)
         self._phase1_rng = random.Random(f"phase1-{seed}")
         self._entry_counters = {stage: 0 for stage in STAGES}
         self._entry_cash = {
@@ -234,11 +236,14 @@ class SimulationRunner:
         # Keep auxiliary draws fixed and unconditional for seed compatibility.
         start_roll, target_roll = rng.random(), rng.random()
         self.env.material_cost_multiplier = 1.0
+        self.env.capacity_windows = [w for w in self.env.capacity_windows if w[2] >= state.global_day]
         self.demand.event_windows = [w for w in self.demand.event_windows if w[1] >= state.global_day]
         handlers = {
             "demand_multiplier": self._event_demand_multiplier,
             "material_cost_multiplier": self._event_material_cost_multiplier,
             "firm_recall": self._event_firm_recall,
+            "stage_capacity_multiplier": self._event_stage_capacity,
+            "wage_push": self._event_wage_push,
         }
         if not cfg.enabled:
             return
@@ -267,10 +272,36 @@ class SimulationRunner:
         self, event: MarketEventTypeConfig, state: RunState, year: int,
         days: int, start_roll: float, target_roll: float,
     ) -> None:
-        self.env.material_cost_multiplier = event.strength
+        self.env.material_cost_multiplier *= event.strength
         state.events.append({
             "year": year, "day": 1, "firm": "", "event": event.type,
             "details": f"raw materials x{event.strength:g} all year",
+        })
+
+    def _event_stage_capacity(
+        self, event: MarketEventTypeConfig, state: RunState, year: int,
+        days: int, start_roll: float, target_roll: float,
+    ) -> None:
+        first = round(start_roll * max(1, days - event.duration_days))
+        stage = event.stage or "factory"
+        self.env.capacity_windows.append((
+            stage, state.global_day + first, state.global_day + first + event.duration_days - 1, event.strength,
+        ))
+        state.events.append({
+            "year": year, "day": first + 1, "firm": "", "event": event.type,
+            "details": f"{stage} capacity x{event.strength:g} for {event.duration_days} days",
+        })
+
+    def _event_wage_push(
+        self, event: MarketEventTypeConfig, state: RunState, year: int,
+        days: int, start_roll: float, target_roll: float,
+    ) -> None:
+        for firm in self._firms():
+            firm.initial_wage_level *= event.strength
+            firm.wage_level *= event.strength
+        state.events.append({
+            "year": year, "day": 1, "firm": "", "event": event.type,
+            "details": f"all wages x{event.strength:g}",
         })
 
     def _event_firm_recall(
@@ -538,7 +569,10 @@ class SimulationRunner:
         state.year = year + 1
         self._enter_market(state)
         changes = self._change_strategies(state)
+        self.long_run.year_end(self, state)
         update = {"market_entries": state.market_entries.get(state.year, 0), "strategy_changes": changes,
+                  "price_index": self.long_run.price_index, "population_index": self.long_run.population_index,
+                  "trend": self.long_run.trend,
                   "total_profit": sum(s.profit for s in summaries[-1].values())}
         for stage in STAGES:
             firms = self.network.firms_in(stage)
@@ -829,6 +863,20 @@ class SimulationRunner:
             stage = self.network.firm(firm_id).stage
             active = sum(self.env.runtimes[f.id].active for f in self.network.firms_in(stage))
             if active <= cfg.min_firms_per_stage:
+                bank = self.config.bank
+                runtime = self.env.runtimes[firm_id]
+                if bank.enabled and bank.restructuring and runtime.cash < 0:
+                    written_off = -runtime.cash
+                    runtime.cash = 0.0
+                    runtime.consecutive_loss_years = 0
+                    firm = self.network.firm(firm_id)
+                    firm.reputation = self._clamp(firm.reputation - bank.restructuring_reputation_hit)
+                    if events is not None:
+                        events.append({
+                            "year": completed_years, "day": self.config.simulation.days_per_year,
+                            "firm": firm_id, "event": "restructuring",
+                            "details": f"bank wrote off {written_off:,.0f}",
+                        })
                 continue
             if cfg.max_exits_per_stage_per_year and exits_per_stage.get(stage, 0) >= cfg.max_exits_per_stage_per_year:
                 continue

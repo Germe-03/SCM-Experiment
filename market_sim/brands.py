@@ -89,6 +89,9 @@ class BrandBook:
             c.name: c.persons * c.units_per_person_per_year / units for c in config.consumers.classes
         }
         self.classes = {c.name: c for c in config.consumers.classes}
+        # Phase 3: active trends as (trait, score boost, age groups; empty = all).
+        self.trend_boosts: list[tuple[str, float, set[str]]] = []
+        self.entrant_trait: str | None = None
         self.reset_year()
 
     # -- brand registry -------------------------------------------------
@@ -99,7 +102,11 @@ class BrandBook:
         """Give a new brewery its own brand, positioned by its archetype."""
         brand_id = f"{firm.id}_brand"
         positioning = self.cfg.entrant_positioning.get(firm.archetype, "standard")
-        self.brands[brand_id] = Brand(brand_id, firm.name, firm.id, positioning, firm.reputation, ["lager"])
+        traits = list(self.cfg.entrant_traits.get(firm.archetype, ["lager"]))
+        trend_trait = getattr(self, "entrant_trait", None)
+        if trend_trait and trend_trait not in traits:
+            traits.append(trend_trait)
+        self.brands[brand_id] = Brand(brand_id, firm.name, firm.id, positioning, firm.reputation, traits)
         if hasattr(self, "production_share"):
             self.production_share[brand_id] = 1.0
         return brand_id
@@ -129,6 +136,8 @@ class BrandBook:
     def reset_year(self) -> None:
         self.brand_units: dict[str, int] = {b: 0 for b in self.brands}
         self.brand_revenue: dict[str, float] = {b: 0.0 for b in self.brands}
+        # Units consumers asked for in the first round, also for empty shelves.
+        self.brand_wanted: dict[str, int] = {b: 0 for b in self.brands}
         self.class_stats: dict[str, ClassStats] = {name: ClassStats() for name in self.class_names}
 
     def year_end(self, env: MarketEnvironment, network, year: int) -> tuple[list[dict], list[dict]]:
@@ -152,11 +161,12 @@ class BrandBook:
             })
         floor_share = self.cfg.production_share_floor
         owners = {b.owner for b in self.brands.values()}
+        # Breweries brew what consumers asked for, so trends reach production.
         for owner in owners:
             own = self.brands_of(owner)
-            sold = sum(self.brand_units.get(b, 0) for b in own)
+            wanted = sum(self.brand_wanted.get(b, 0) for b in own)
             for b in own:
-                share = self.brand_units.get(b, 0) / sold if sold else 1 / len(own)
+                share = self.brand_wanted.get(b, 0) / wanted if wanted else 1 / len(own)
                 self.production_share[b] = max(floor_share, share)
         class_rows = [{
             "year": year, "consumer_class": name, "demand": stats.demand, "bought": stats.bought,
@@ -206,6 +216,15 @@ class BrandBook:
                     price, env._consumer_price_score(price), quality[brand_id],
                     brand.reputation, firm.reputation, availability,
                 )
+        # Trend multipliers per age group and brand, fixed for the day.
+        trend_mult: dict[str | None, dict[str, float]] = {}
+        if self.trend_boosts:
+            for age in {self.classes[n].age_group for n in self.class_names}:
+                trend_mult[age] = {
+                    b: 1 + sum(boost for trait, boost, ages in self.trend_boosts
+                               if trait in brand.traits and (not ages or age in ages))
+                    for b, brand in self.brands.items()
+                }
         unmet = dict(demand_by_class)
         for round_index in range(4):
             # Fractional wants per class; small classes would otherwise always round
@@ -217,12 +236,14 @@ class BrandBook:
                     continue
                 cls = self.classes[name]
                 w = cls.weights
+                mult = trend_mult.get(cls.age_group)
                 scores = {}
                 for key, (price, p_score, q, brand_rep, store_rep, avail) in pairs.items():
                     if price > cls.max_price * (1 + slope * (brand_rep - 0.5)):
                         continue
-                    scores[key] = (w.price * p_score + w.quality * q + w.brand_reputation * brand_rep
-                                   + w.store_reputation * store_rep + w.availability * avail)
+                    score = (w.price * p_score + w.quality * q + w.brand_reputation * brand_rep
+                             + w.store_reputation * store_rep + w.availability * avail)
+                    scores[key] = score * mult[key[1]] if mult else score
                 total_score = sum(scores.values())
                 if total_score > 0:
                     wants[name] = {key: units * value / total_score for key, value in scores.items()}
@@ -232,8 +253,9 @@ class BrandBook:
                     pair_float[key] = pair_float.get(key, 0.0) + units
             per_pair = largest_remainder(round(sum(pair_float.values())), pair_float)
             if round_index == 0:
-                for (firm_id, _), units in per_pair.items():
+                for (firm_id, brand_id), units in per_pair.items():
                     requested[firm_id] += units
+                    self.brand_wanted[brand_id] = self.brand_wanted.get(brand_id, 0) + units
             served = self._serve(env, per_pair, capacity, sold)
             for key, units in served.items():
                 if not units:

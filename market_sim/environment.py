@@ -253,6 +253,8 @@ class MarketEnvironment:
         self.period = 0
         self.cumulative_lost_sales = 0
         self.cancelled_units = 0
+        # Phase 3: temporary capacity cuts per stage as (stage, first day, last day, factor).
+        self.capacity_windows: list[tuple[str, int, int, float]] = []
         self.runtimes = {}
         self._commodity_rng = random.Random(f"commodities-{self.seed}")
         self.commodity_log_index = {name: 0.0 for name in self.config.commodities.components}
@@ -750,7 +752,11 @@ class MarketEnvironment:
             1 - self.config.workforce.productivity_churn_penalty
             * self.runtimes[firm_id].turnover_rate,
         )
-        return max(0, round(base * overtime * churn))
+        factor = 1.0
+        for stage, start, end, strength in self.capacity_windows:
+            if stage == firm.stage and start <= self.period <= end:
+                factor *= strength
+        return max(0, round(base * overtime * churn * factor))
 
     def _update_turnover_rate(self, firm_id: str) -> None:
         firm = self.network.firm(firm_id)

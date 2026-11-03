@@ -71,6 +71,9 @@ class SystemKPIs(BaseModel):
     bankruptcies: int = 0
     market_entries: int = 0
     strategy_changes: int = 0
+    price_index: float = 1.0
+    population_index: float = 1.0
+    trend: str = ""
     interest_cost_retailer: float = 0.0
     interest_cost_wholesaler: float = 0.0
     interest_cost_distributor: float = 0.0

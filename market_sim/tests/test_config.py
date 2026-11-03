@@ -19,7 +19,7 @@ def test_default_config_contains_swiss_market_values(
     assert market_config.demand.annual_demand_units == 94_400
     assert market_config.demand.daily_demand_units == 259
     assert market_config.price.base == 4.99
-    assert market_config.total_simulation_days == 3_650
+    assert market_config.total_simulation_days == 18_250
     assert market_config.logistics.default_lead_time_days == 2
     assert market_config.costs.holding_cost_per_unit == 27.0
     assert market_config.costs.backlog_cost_per_unit == 250.0

@@ -105,8 +105,11 @@ class MarketEventTypeConfig(ConfigModel):
     duration_days: int = Field(gt=0)
     strength: float = Field(gt=0)
     effect_handler: Literal[
-        "demand_multiplier", "material_cost_multiplier", "firm_recall"
+        "demand_multiplier", "material_cost_multiplier", "firm_recall",
+        "stage_capacity_multiplier", "wage_push",
     ]
+    # Phase 3: stage hit by a capacity event.
+    stage: str | None = None
     reputation_strength: float = Field(default=0.0, ge=0, le=1)
     cost: float = Field(default=0.0, ge=0)
 
@@ -351,6 +354,10 @@ class BankConfig(ConfigModel):
     credit_limit_revenue_fraction: float = Field(default=0.25, ge=0)
     credit_limit_initial_cash_fraction: float = Field(default=1.0, ge=0)
     credit_limit_min: float = Field(default=0.0, ge=0)
+    # Phase 3: an insolvent firm protected by min_firms_per_stage is restructured:
+    # the bank writes its debt off and its reputation suffers.
+    restructuring: bool = False
+    restructuring_reputation_hit: float = Field(default=0.10, ge=0, le=1)
 
 
 class StrategyChangeConfig(ConfigModel):
@@ -387,6 +394,7 @@ class ConsumerClass(ConfigModel):
     persons: int = Field(gt=0)
     units_per_person_per_year: float = Field(gt=0)
     max_price: float = Field(gt=0)
+    age_group: str | None = None
     weights: ConsumerWeights
 
 
@@ -420,7 +428,32 @@ class BrandsConfig(ConfigModel):
     quality_offsets: dict[str, float]
     price_factors: dict[str, float]
     entrant_positioning: dict[str, str]
+    # Phase 3: trait of a new brewery's brand by archetype (it also adopts the current trend).
+    entrant_traits: dict[str, list[str]] = Field(default_factory=dict)
     brands: list[BrandDefinition]
+
+
+class TrendConfig(ConfigModel):
+    name: str
+    trait: str
+    strength: float = Field(ge=0)
+    age_groups: list[str] = Field(default_factory=list)
+
+
+class LongRunConfig(ConfigModel):
+    """Phase 3: inflation, real wage and productivity growth, population and trends."""
+
+    enabled: bool = False
+    inflation_mean: float = 0.01
+    inflation_sd: float = 0.008
+    inflation_min: float = -0.01
+    inflation_max: float = 0.04
+    real_wage_growth: float = 0.005
+    productivity_growth: float = 0.005
+    population_growth: dict[str, float] = Field(default_factory=dict)
+    trend_years: tuple[int, int] = (3, 8)
+    trend_transition_years: int = Field(default=2, ge=1)
+    trends: list[TrendConfig] = Field(default_factory=list)
 
 
 class MarketConfig(ConfigModel):
@@ -453,6 +486,7 @@ class MarketConfig(ConfigModel):
     consumer_model: Literal["classes", "segments"] = "segments"
     consumers: ConsumersConfig | None = None
     brands: BrandsConfig | None = None
+    long_run: LongRunConfig = Field(default_factory=LongRunConfig)
 
     @model_validator(mode="after")
     def _validate_stage_prices(self) -> Self:

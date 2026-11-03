@@ -5,6 +5,7 @@
 wtp_slope: 0.6
 classes:
 - name: income_1_18-34_light
+  age_group: '18-34'
   persons: 273000
   units_per_person_per_year: 73.169
   max_price: 4.8
@@ -15,6 +16,7 @@ classes:
     store_reputation: 0.045
     availability: 0.06
 - name: income_1_18-34_regular
+  age_group: '18-34'
   persons: 147000
   units_per_person_per_year: 292.676
   max_price: 4.8
@@ -25,6 +27,7 @@ classes:
     store_reputation: 0.045
     availability: 0.06
 - name: income_1_35-64_light
+  age_group: '35-64'
   persons: 487500
   units_per_person_per_year: 63.625
   max_price: 4.8
@@ -35,6 +38,7 @@ classes:
     store_reputation: 0.045
     availability: 0.06
 - name: income_1_35-64_regular
+  age_group: '35-64'
   persons: 262500
   units_per_person_per_year: 254.501
   max_price: 4.8
@@ -45,6 +49,7 @@ classes:
     store_reputation: 0.045
     availability: 0.06
 - name: income_1_65+_light
+  age_group: '65+'
   persons: 214500
   units_per_person_per_year: 41.356
   max_price: 4.8
@@ -55,6 +60,7 @@ classes:
     store_reputation: 0.045
     availability: 0.06
 - name: income_1_65+_regular
+  age_group: '65+'
   persons: 115500
   units_per_person_per_year: 165.426
   max_price: 4.8
@@ -65,6 +71,7 @@ classes:
     store_reputation: 0.045
     availability: 0.06
 - name: income_2_18-34_light
+  age_group: '18-34'
   persons: 273000
   units_per_person_per_year: 73.169
   max_price: 5.4
@@ -75,6 +82,7 @@ classes:
     store_reputation: 0.0675
     availability: 0.09
 - name: income_2_18-34_regular
+  age_group: '18-34'
   persons: 147000
   units_per_person_per_year: 292.676
   max_price: 5.4
@@ -85,6 +93,7 @@ classes:
     store_reputation: 0.0675
     availability: 0.09
 - name: income_2_35-64_light
+  age_group: '35-64'
   persons: 487500
   units_per_person_per_year: 63.625
   max_price: 5.4
@@ -95,6 +104,7 @@ classes:
     store_reputation: 0.0675
     availability: 0.09
 - name: income_2_35-64_regular
+  age_group: '35-64'
   persons: 262500
   units_per_person_per_year: 254.501
   max_price: 5.4
@@ -105,6 +115,7 @@ classes:
     store_reputation: 0.0675
     availability: 0.09
 - name: income_2_65+_light
+  age_group: '65+'
   persons: 214500
   units_per_person_per_year: 41.356
   max_price: 5.4
@@ -115,6 +126,7 @@ classes:
     store_reputation: 0.0675
     availability: 0.09
 - name: income_2_65+_regular
+  age_group: '65+'
   persons: 115500
   units_per_person_per_year: 165.426
   max_price: 5.4
@@ -125,6 +137,7 @@ classes:
     store_reputation: 0.0675
     availability: 0.09
 - name: income_3_18-34_light
+  age_group: '18-34'
   persons: 273000
   units_per_person_per_year: 73.169
   max_price: 6.0
@@ -135,6 +148,7 @@ classes:
     store_reputation: 0.09
     availability: 0.12
 - name: income_3_18-34_regular
+  age_group: '18-34'
   persons: 147000
   units_per_person_per_year: 292.676
   max_price: 6.0
@@ -145,6 +159,7 @@ classes:
     store_reputation: 0.09
     availability: 0.12
 - name: income_3_35-64_light
+  age_group: '35-64'
   persons: 487500
   units_per_person_per_year: 63.625
   max_price: 6.0
@@ -155,6 +170,7 @@ classes:
     store_reputation: 0.09
     availability: 0.12
 - name: income_3_35-64_regular
+  age_group: '35-64'
   persons: 262500
   units_per_person_per_year: 254.501
   max_price: 6.0
@@ -165,6 +181,7 @@ classes:
     store_reputation: 0.09
     availability: 0.12
 - name: income_3_65+_light
+  age_group: '65+'
   persons: 214500
   units_per_person_per_year: 41.356
   max_price: 6.0
@@ -175,6 +192,7 @@ classes:
     store_reputation: 0.09
     availability: 0.12
 - name: income_3_65+_regular
+  age_group: '65+'
   persons: 115500
   units_per_person_per_year: 165.426
   max_price: 6.0
@@ -185,6 +203,7 @@ classes:
     store_reputation: 0.09
     availability: 0.12
 - name: income_4_18-34_light
+  age_group: '18-34'
   persons: 273000
   units_per_person_per_year: 73.169
   max_price: 6.8
@@ -195,6 +214,7 @@ classes:
     store_reputation: 0.1125
     availability: 0.15
 - name: income_4_18-34_regular
+  age_group: '18-34'
   persons: 147000
   units_per_person_per_year: 292.676
   max_price: 6.8
@@ -205,6 +225,7 @@ classes:
     store_reputation: 0.1125
     availability: 0.15
 - name: income_4_35-64_light
+  age_group: '35-64'
   persons: 487500
   units_per_person_per_year: 63.625
   max_price: 6.8
@@ -215,6 +236,7 @@ classes:
     store_reputation: 0.1125
     availability: 0.15
 - name: income_4_35-64_regular
+  age_group: '35-64'
   persons: 262500
   units_per_person_per_year: 254.501
   max_price: 6.8
@@ -225,6 +247,7 @@ classes:
     store_reputation: 0.1125
     availability: 0.15
 - name: income_4_65+_light
+  age_group: '65+'
   persons: 214500
   units_per_person_per_year: 41.356
   max_price: 6.8
@@ -235,6 +258,7 @@ classes:
     store_reputation: 0.1125
     availability: 0.15
 - name: income_4_65+_regular
+  age_group: '65+'
   persons: 115500
   units_per_person_per_year: 165.426
   max_price: 6.8
@@ -245,6 +269,7 @@ classes:
     store_reputation: 0.1125
     availability: 0.15
 - name: income_5_18-34_light
+  age_group: '18-34'
   persons: 273000
   units_per_person_per_year: 73.169
   max_price: 8.0
@@ -255,6 +280,7 @@ classes:
     store_reputation: 0.132
     availability: 0.176
 - name: income_5_18-34_regular
+  age_group: '18-34'
   persons: 147000
   units_per_person_per_year: 292.676
   max_price: 8.0
@@ -265,6 +291,7 @@ classes:
     store_reputation: 0.132
     availability: 0.176
 - name: income_5_35-64_light
+  age_group: '35-64'
   persons: 487500
   units_per_person_per_year: 63.625
   max_price: 8.0
@@ -275,6 +302,7 @@ classes:
     store_reputation: 0.132
     availability: 0.176
 - name: income_5_35-64_regular
+  age_group: '35-64'
   persons: 262500
   units_per_person_per_year: 254.501
   max_price: 8.0
@@ -285,6 +313,7 @@ classes:
     store_reputation: 0.132
     availability: 0.176
 - name: income_5_65+_light
+  age_group: '65+'
   persons: 214500
   units_per_person_per_year: 41.356
   max_price: 8.0
@@ -295,6 +324,7 @@ classes:
     store_reputation: 0.132
     availability: 0.176
 - name: income_5_65+_regular
+  age_group: '65+'
   persons: 115500
   units_per_person_per_year: 165.426
   max_price: 8.0

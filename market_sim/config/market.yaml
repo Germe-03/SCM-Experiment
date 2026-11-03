@@ -25,6 +25,8 @@ bank:
   credit_limit_revenue_fraction: 0.25
   credit_limit_initial_cash_fraction: 1.0
   credit_limit_min: 0.0
+  restructuring: true
+  restructuring_reputation_hit: 0.10
 
 strategy_change:
   enabled: true
@@ -106,6 +108,32 @@ events:
       effect_handler: firm_recall
       reputation_strength: 0.15
       cost: 8000000.0
+    # Phase 3: the former what-if scenarios now happen by chance inside the run.
+    - type: recession
+      enabled: true
+      probability_per_year: 0.10
+      duration_days: 540
+      strength: 0.85
+      effect_handler: demand_multiplier
+    - type: raw_material_shortage
+      enabled: true
+      probability_per_year: 0.08
+      duration_days: 180
+      strength: 0.75
+      effect_handler: stage_capacity_multiplier
+      stage: factory
+    - type: cost_shock
+      enabled: true
+      probability_per_year: 0.08
+      duration_days: 365
+      strength: 1.25
+      effect_handler: material_cost_multiplier
+    - type: wage_push
+      enabled: true
+      probability_per_year: 0.06
+      duration_days: 1
+      strength: 1.03
+      effect_handler: wage_push
 
 # Empty supplier lists discover every active firm one stage upstream.
 supplier_discovery:
@@ -124,7 +152,7 @@ stage_prices:
   retailer: {base: 5.20, min: 2.50, max: 12.00}
 
 simulation:
-  years: 10
+  years: 50
   days_per_year: 365
 
 logistics:
@@ -228,3 +256,22 @@ supplier_score_weights:
   reputation: 0.15
   lead_time: 0.05
   capacity: 0.10
+
+# Phase 3: long runs. Money values drift with inflation, wages grow a little faster
+# than prices, productivity offsets that, the population ages, trends come and go.
+long_run:
+  enabled: true
+  inflation_mean: 0.01
+  inflation_sd: 0.008
+  inflation_min: -0.01
+  inflation_max: 0.04
+  real_wage_growth: 0.005
+  productivity_growth: 0.005
+  population_growth: {"18-34": 0.001, "35-64": 0.003, "65+": 0.012}
+  trend_years: [3, 8]
+  trend_transition_years: 2
+  trends:
+    - {name: craft_welle, trait: craft, strength: 0.30, age_groups: ["18-34", "35-64"]}
+    - {name: alkoholfrei, trait: alkoholfrei, strength: 0.40}
+    - {name: sparwelle, trait: discount, strength: 0.25}
+    - {name: tradition, trait: lager, strength: 0.15, age_groups: ["35-64", "65+"]}

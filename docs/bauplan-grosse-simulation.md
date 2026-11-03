@@ -507,3 +507,28 @@ Seed, was angepasst wurde.
   Seed über 30 Jahre bei 10 parallelen Läufen, gut doppelt so lang wie in
   Phase 1; noch nicht optimiert. Das alte Modell bleibt mit
   `consumer_model: segments` wählbar.
+- **2026-11-03, Phase 3:** Standard jetzt 50 Jahre. Neu: Teuerung (Mittel
+  1 % pro Jahr, Preise, Kosten, Höchstpreise und Löhne ziehen mit), Löhne
+  0.5 % pro Jahr über der Teuerung, Produktivität 0.5 % pro Jahr, Bevölkerung
+  wächst nach Alter verschieden (65+ am stärksten), vier Trends
+  (Craft-Welle, alkoholfrei, Sparwelle, Tradition) wechseln alle 3–8 Jahre
+  mit 2 Jahren Übergang. Die drei Szenarien sind jetzt Zufallsereignisse im
+  Lauf (Rezession, Rohstoffknappheit bei den Brauereien, Kostenschock), dazu
+  ein Lohnschub. Erste Messung (10 Seeds, 50 Jahre): Gewinn 5.2 %,
+  Service Level 98.7 %, aber Brauereien mit stark negativer Marge. Ursache:
+  Firmen, die nur wegen der Mindestzahl pro Stufe weiterleben, häuften
+  Schulden mit Zinseszins an (Zinskosten bis 137-mal der Umsatz), was auch
+  die Läufe verlangsamte. Neu deshalb `bank.restructuring`: Die Bank schreibt
+  die Schulden einer solchen Firma ab, die Reputation sinkt um 0.10.
+  Ausserdem brauen Brauereien ihre Marken jetzt im Verhältnis der Nachfrage
+  (nicht der Verkäufe), damit Trends die Produktion erreichen. Ergebnis
+  (10 Seeds, 50 Jahre): Gewinn 8.6 % des Endkundenumsatzes (3.3–12.7 %),
+  Service Level 99.1 % (tiefstes Jahr 46 %), 21.1 Neueintritte und
+  24.1 Konkurse pro Lauf, 0.39 Strategiewechsel pro Firma und 10 Jahre, am
+  Ende 6–11 Händler, 4–7 Wholesaler, 2–5 Distributoren, 2–4 Brauereien.
+  Seed 0: In der Sparwelle (Jahr 22) hat die Discountmarke 39 % Anteil
+  gegenüber 31 % für die Standardmarke derselben Brauerei; in der Craft-Welle
+  legt die Craft-Marke eines Neueinsteigers auf 16 % zu. Laufzeit rund 140 s
+  pro Seed über 50 Jahre bei 10 parallelen Läufen. Offen: Die Brauereistufe
+  hat im Mittel über die Jahre eine leicht negative Marge (−12 % bis +3 %),
+  weil Rohstoffschocks und Engpässe sie am stärksten treffen.

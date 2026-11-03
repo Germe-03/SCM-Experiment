@@ -10,6 +10,8 @@ def test_seed_zero_ten_year_reference_is_exact() -> None:
         feature.enabled = False
     config.policy.max_backlog_days = None
     config.consumer_model = "segments"
+    config.long_run.enabled = False
+    config.events.types = [t for t in config.events.types if t.type in {"heat_summer", "harvest_failure", "recall"}]
     result = run_simulation(years=10, seed=0, config=config)
     market_events = [
         (event["year"], event["day"], event["firm"], event["event"])
