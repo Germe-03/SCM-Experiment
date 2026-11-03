@@ -41,7 +41,7 @@ class Firm(NetworkModel):
     r_and_d_budget: float
     initial_r_and_d_budget: float | None = Field(default=None, ge=0, exclude=True)
     supplier_priority: str
-    suppliers: list[str]
+    suppliers: list[str] = Field(default_factory=list)
     overtime_level: float = 0.0
     machine_capacity: int = Field(default=0, ge=0)
     turnover_rate: float = 0.0
@@ -128,10 +128,6 @@ class SupplyNetwork(NetworkModel):
                             f"factory {firm.id!r} must not have suppliers"
                         )
                     continue
-                if not firm.suppliers:
-                    raise ValueError(
-                        f"non-factory firm {firm.id!r} must have suppliers"
-                    )
                 expected_stage = self.upstream_stage(firm.stage)
                 for supplier_id in firm.suppliers:
                     supplier = firms_by_id.get(supplier_id)
@@ -167,9 +163,31 @@ class SupplyNetwork(NetworkModel):
         raise ValueError(f"unknown firm id {firm_id!r}")
 
     def suppliers_of(self, firm_id: str) -> list[Firm]:
-        """Resolve a firm's allowed supplier ids to firm objects."""
+        """Resolve upstream candidates, optionally restricted by configured ids."""
 
-        return [self.firm(supplier_id) for supplier_id in self.firm(firm_id).suppliers]
+        firm = self.firm(firm_id)
+        upstream = self.upstream_stage(firm.stage)
+        if upstream is None:
+            return []
+        allowed = set(firm.suppliers)
+        return [
+            supplier for supplier in self.firms_in(upstream)
+            if not allowed or supplier.id in allowed
+        ]
+
+    def add_firm(self, firm: Firm) -> None:
+        """Register a validated firm while preserving stage and id invariants."""
+
+        if any(existing.id == firm.id for stage in self.stages for existing in stage.firms):
+            raise ValueError(f"firm id {firm.id!r} already exists")
+        candidate = SupplyNetwork(stages=[
+            Stage(
+                name=stage.name,
+                firms=[*stage.firms, firm] if stage.name == firm.stage else list(stage.firms),
+            )
+            for stage in self.stages
+        ])
+        self.stages = candidate.stages
 
     @staticmethod
     def upstream_stage(stage: str) -> str | None:

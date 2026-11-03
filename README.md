@@ -158,8 +158,8 @@ Ein normaler Lauf (`python -m market_sim.run`) schreibt zusätzlich
 - `utilization_<stufe>`: mittlere Kapazitätsauslastung der aktiven Firmen.
 - `market_share_movement`: Summe der absoluten Änderungen der Retailer-Marktanteile
   gegenüber dem Vorjahr (0.10 heisst 10 Prozentpunkte).
-- `firms_with_loss`, `bankruptcies`, `market_entries` (Markteintritte sind noch
-  nicht umgesetzt und bleiben 0) und `retailer_price_spread` (Standardabweichung
+- `firms_with_loss`, `bankruptcies`, `market_entries` (auch bei Firmen, die
+  während eines Laufs über das Firmenregister ergänzt werden) und `retailer_price_spread` (Standardabweichung
   der mittleren Retailer-Preise).
 
 #### Ereignisprotokoll (`events.csv`)
@@ -168,7 +168,8 @@ Eine Zeile pro Ereignis mit `year`, `day`, `firm`, `event`, `details`:
 `bankruptcy`, `price_increase` / `price_cut` (Jahresmittelpreis ändert sich um
 mehr als 5 %), `supplier_switch` (grösster Lieferant wechselt),
 `capacity_limit` (Auslastung über 95 % an mindestens 7 Tagen in Folge) und die
-Marktereignisse `heat_summer`, `harvest_failure` und `recall`. Das Protokoll
+  Marktereignisse `heat_summer`, `harvest_failure` und `recall` sowie
+  `market_entry` aus dem Firmenregister. Das Protokoll
 liegt im Speicherstand; Fortsetzen ergibt dieselbe Datei wie ein Lauf ohne
 Unterbruch.
 
@@ -189,8 +190,11 @@ Unterbruch.
   (`competitive_pull`) und auf Marktanteilsverlust (`undercut_fraction`);
   Preisbänder liegen um den Stufen-Basispreis.
 - `start_variation` und `events`: Startkapital, Qualität und Reputation
-  streuen pro Seed (±20 / 10 / 15 %); pro Jahr treten Hitzesommer, Ernteausfall
-  und ein Rückruf mit eigener Wahrscheinlichkeit auf. Alles ist pro Seed festgelegt.
+  streuen pro Seed (±20 / 10 / 15 %). Der generische Ereignisrahmen konfiguriert
+  Typ, Aktivierung, Wahrscheinlichkeit, Dauer, Stärke und Wirkung; alles ist pro Seed festgelegt.
+- `supplier_discovery.enabled`: Leere Lieferantenlisten entdecken zur Laufzeit
+  alle aktiven Firmen der direkt vorgelagerten Stufe; eine nicht leere Liste
+  schränkt diese Kandidaten ein.
 
 #### Vorher und nachher (Mittel über Seeds 0–4, 10 Jahre)
 

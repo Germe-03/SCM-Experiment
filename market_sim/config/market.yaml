@@ -41,17 +41,34 @@ start_variation:
   quality_spread: 0.10
   reputation_spread: 0.15
 
-# Yearly random market events, deterministic per seed.
+# Generic yearly market events, deterministic per seed and evaluated in this order.
 events:
-  heat_summer_probability: 0.25
-  heat_summer_demand_factor: 1.15
-  heat_summer_days: 60
-  harvest_failure_probability: 0.20
-  harvest_failure_cost_factor: 1.30
-  recall_probability: 0.25
-  recall_quality_hit: 0.10
-  recall_reputation_hit: 0.15
-  recall_cost: 8000000.0
+  enabled: true
+  types:
+    - type: heat_summer
+      enabled: true
+      probability_per_year: 0.25
+      duration_days: 60
+      strength: 1.15
+      effect_handler: demand_multiplier
+    - type: harvest_failure
+      enabled: true
+      probability_per_year: 0.20
+      duration_days: 365
+      strength: 1.30
+      effect_handler: material_cost_multiplier
+    - type: recall
+      enabled: true
+      probability_per_year: 0.25
+      duration_days: 1
+      strength: 0.10
+      effect_handler: firm_recall
+      reputation_strength: 0.15
+      cost: 8000000.0
+
+# Empty supplier lists discover every active firm one stage upstream.
+supplier_discovery:
+  enabled: true
 
 price:
   base: 4.99

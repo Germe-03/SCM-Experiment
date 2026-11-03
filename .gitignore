@@ -15,3 +15,4 @@ runs/
 .test_tmp*/
 pytest_*tmp/
 .test_tmp*/
+.tmp/

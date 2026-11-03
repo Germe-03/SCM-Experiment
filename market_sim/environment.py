@@ -7,8 +7,8 @@ from math import exp, floor
 import random
 
 from market_sim.config import MarketConfig, load_market_config
-from market_sim.models import STAGES, SupplyNetwork
-from market_sim.selection import split_order
+from market_sim.models import STAGES, Firm, SupplyNetwork
+from market_sim.selection import split_order, supplier_candidates
 
 
 CONSUMER_ID = "__consumer__"
@@ -192,6 +192,7 @@ class MarketEnvironment:
     def close_firm(self, firm_id: str) -> None:
         """Cancel everything still open with a firm that has left the market."""
         runtime = self.runtimes[firm_id]
+        runtime.active = False
         for customer_id, owed in self._open_units_by_customer(firm_id).items():
             customer = self.runtimes.get(customer_id)
             if customer is not None:
@@ -200,6 +201,26 @@ class MarketEnvironment:
         runtime.backlog_by_downstream = {}
         runtime.backlog = 0
         runtime.on_order = 0
+
+    def add_firm(self, firm: Firm) -> FirmRuntime:
+        """Register one firm and create all mutable runtime state."""
+
+        self.network.add_firm(firm)
+        runtime = self._new_runtime(firm)
+        self.runtimes[firm.id] = runtime
+        self.inventory_history[firm.id] = []
+        self.backlog_history[firm.id] = []
+        self._orders_received_this_period[firm.id] = 0
+        return runtime
+
+    def supplier_candidates(self, firm_id: str) -> list[Firm]:
+        """Resolve the firm's currently active upstream candidates."""
+
+        active = {key for key, runtime in self.runtimes.items() if runtime.active}
+        return supplier_candidates(
+            self.network, self.network.firm(firm_id), active,
+            dynamic=self.config.supplier_discovery.enabled,
+        )
 
     def _open_units_by_customer(self, firm_id: str) -> dict[str, int]:
         """Units each customer ordered from this firm that were never shipped."""
@@ -231,22 +252,37 @@ class MarketEnvironment:
                 )
                 seeded_customer = customers[0] if len(customers) == 1 else INITIAL_ID
                 backlog_map = {seeded_customer: initial_backlog} if initial_backlog else {}
-                self.runtimes[firm.id] = FirmRuntime(
-                    inventory=inventory, backlog=initial_backlog,
-                    incoming_shipments=list(self.initial_pipeline),
-                    # P1 fix: seeded in-transit shipments are already on order.
-                    on_order=sum(self.initial_pipeline),
-                    incoming_orders=[({seeded_customer: qty} if qty else {}) for qty in self.initial_orders],
-                    backlog_by_downstream=backlog_map, holding_cost=self.holding_cost,
-                    backlog_cost=self.backlog_cost,
-                    initial_cash=firm.cash * self.config.costs.initial_cash_scale,
-                    cash=firm.cash * self.config.costs.initial_cash_scale,
-                    employees=firm.employees, wage_level=firm.wage_level,
-                    quality_level=firm.quality_level,
+                self.runtimes[firm.id] = self._new_runtime(
+                    firm, inventory=inventory, backlog_map=backlog_map,
+                    seeded_customer=seeded_customer,
                 )
         self.inventory_history = {firm_id: [] for firm_id in self.runtimes}
         self.backlog_history = {firm_id: [] for firm_id in self.runtimes}
         self._orders_received_this_period = {firm_id: 0 for firm_id in self.runtimes}
+
+    def _new_runtime(
+        self, firm: Firm, *, inventory: int | None = None,
+        backlog_map: dict[str, int] | None = None, seeded_customer: str = INITIAL_ID,
+    ) -> FirmRuntime:
+        """Build the runtime record shared by reset and mid-run registration."""
+
+        initial_backlog = firm.backlog
+        backlog_map = backlog_map or ({seeded_customer: initial_backlog} if initial_backlog else {})
+        scaled_cash = firm.cash * self.config.costs.initial_cash_scale
+        return FirmRuntime(
+            inventory=firm.inventory if inventory is None else inventory,
+            backlog=initial_backlog,
+            incoming_shipments=list(self.initial_pipeline),
+            on_order=sum(self.initial_pipeline),
+            incoming_orders=[
+                ({seeded_customer: qty} if qty else {}) for qty in self.initial_orders
+            ],
+            backlog_by_downstream=backlog_map,
+            holding_cost=self.holding_cost, backlog_cost=self.backlog_cost,
+            initial_cash=scaled_cash, cash=scaled_cash,
+            employees=firm.employees, wage_level=firm.wage_level,
+            quality_level=firm.quality_level,
+        )
 
     def step(self, total_consumer_demand: int, orders: dict[str, int]) -> tuple[bool, dict]:
         if not self.runtimes:
@@ -367,12 +403,12 @@ class MarketEnvironment:
                     self.runtimes[firm.id].on_order += quantity
                     self.runtimes[firm.id].incoming_shipments[-1] += quantity
                     continue
-                candidates = self.network.suppliers_of(firm.id)
+                candidates = self.supplier_candidates(firm.id)
                 lead_times = {candidate.id: self.config.logistics.default_lead_time_days for candidate in candidates}
                 allocations = split_order(
                     firm, candidates, quantity, self.config.supplier_score_weights,
                     lead_times, self.config.policy.concentration,
-                    active_firm_ids=active_ids if market_mode else None,
+                    active_firm_ids=None,
                     priority_boost=self.config.policy.supplier_priority_boost,
                 )
                 split_orders[firm.id] = allocations

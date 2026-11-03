@@ -192,4 +192,10 @@ class FirmPolicy:
 
 def policies_for_network(firms: list[Firm]) -> dict[str, FirmPolicy]:
     """Build independent default policies for a collection of firms."""
-    return {firm.id: FirmPolicy() for firm in firms}
+    return {firm.id: policy_for_firm(firm) for firm in firms}
+
+
+def policy_for_firm(firm: Firm) -> FirmPolicy:
+    """Build the default independent policy for a newly registered firm."""
+
+    return FirmPolicy()

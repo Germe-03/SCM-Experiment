@@ -1,0 +1,28 @@
+"""Seed-0 reference values captured before the Phase-0 refactor."""
+
+from market_sim.run import run_simulation
+
+
+def test_seed_zero_ten_year_reference_is_exact() -> None:
+    result = run_simulation(years=10, seed=0)
+    market_events = [
+        (event["year"], event["day"], event["firm"], event["event"])
+        for event in result.events
+        if event["event"] in {"heat_summer", "harvest_failure", "recall"}
+    ]
+
+    assert market_events == [
+        (1, 156, "", "heat_summer"),
+        (3, 1, "distributor_01", "recall"),
+        (4, 1, "retailer_02", "recall"),
+        (6, 150, "", "heat_summer"),
+        (7, 162, "", "heat_summer"),
+        (9, 164, "", "heat_summer"),
+    ]
+    assert result.system_kpis[0].total_profit == 781072015.9052114
+    assert result.system_kpis[4].service_level == 0.9994299964374778
+    assert result.system_kpis[9].bullwhip_ratio == 139.68856510362642
+    assert result.final_result.total_profit == 5806633636.570863
+    assert result.final_result.cumulative_lost_sales == 26748
+    assert result.final_result.firm_results["retailer_01"].cash == 232755293.42382574
+

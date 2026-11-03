@@ -18,7 +18,6 @@ firms:
     r_and_d_level: 0.30
     r_and_d_budget: 12000
     supplier_priority: reliability
-    suppliers: &wholesalers [wholesaler_01, wholesaler_02, wholesaler_03, wholesaler_04, wholesaler_05, wholesaler_06]
   - id: retailer_02
     name: "Rigi Discount GmbH"
     stage: retailer
@@ -37,7 +36,7 @@ firms:
     r_and_d_level: 0.12
     r_and_d_budget: 5000
     supplier_priority: price
-    suppliers: *wholesalers
+    suppliers: []
   - id: retailer_03
     name: "Limmat Genussladen AG"
     stage: retailer
@@ -56,7 +55,7 @@ firms:
     r_and_d_level: 0.62
     r_and_d_budget: 28000
     supplier_priority: quality
-    suppliers: *wholesalers
+    suppliers: []
   - id: retailer_04
     name: "Helvetia Getränkehaus"
     stage: retailer
@@ -75,7 +74,7 @@ firms:
     r_and_d_level: 0.34
     r_and_d_budget: 15000
     supplier_priority: reliability
-    suppliers: *wholesalers
+    suppliers: []
   - id: retailer_05
     name: "Alpenblick Märkte AG"
     stage: retailer
@@ -94,7 +93,7 @@ firms:
     r_and_d_level: 0.24
     r_and_d_budget: 18000
     supplier_priority: capacity
-    suppliers: *wholesalers
+    suppliers: []
   - id: retailer_06
     name: "Seeland Sparmarkt"
     stage: retailer
@@ -113,7 +112,7 @@ firms:
     r_and_d_level: 0.10
     r_and_d_budget: 4500
     supplier_priority: price
-    suppliers: *wholesalers
+    suppliers: []
   - id: retailer_07
     name: "Zürisee Handels AG"
     stage: retailer
@@ -132,7 +131,7 @@ firms:
     r_and_d_level: 0.28
     r_and_d_budget: 13000
     supplier_priority: price
-    suppliers: *wholesalers
+    suppliers: []
   - id: retailer_08
     name: "Engadin Feinkost AG"
     stage: retailer
@@ -151,7 +150,7 @@ firms:
     r_and_d_level: 0.66
     r_and_d_budget: 30000
     supplier_priority: quality
-    suppliers: *wholesalers
+    suppliers: []
   - id: retailer_09
     name: "Tell Getränke Depot"
     stage: retailer
@@ -170,7 +169,7 @@ firms:
     r_and_d_level: 0.32
     r_and_d_budget: 14500
     supplier_priority: reliability
-    suppliers: *wholesalers
+    suppliers: []
   - id: retailer_10
     name: "Jura Frischmarkt AG"
     stage: retailer
@@ -189,7 +188,7 @@ firms:
     r_and_d_level: 0.22
     r_and_d_budget: 16000
     supplier_priority: capacity
-    suppliers: *wholesalers
+    suppliers: []
 
   # Wholesale: 520 units/day total capacity.
   - id: wholesaler_01
@@ -210,7 +209,7 @@ firms:
     r_and_d_level: 0.30
     r_and_d_budget: 22000
     supplier_priority: reliability
-    suppliers: &distributors [distributor_01, distributor_02, distributor_03, distributor_04]
+    suppliers: []
   - id: wholesaler_02
     name: "Gotthard Preislogistik"
     stage: wholesaler
@@ -229,7 +228,7 @@ firms:
     r_and_d_level: 0.11
     r_and_d_budget: 8000
     supplier_priority: price
-    suppliers: *distributors
+    suppliers: []
   - id: wholesaler_03
     name: "Léman Sélection SA"
     stage: wholesaler
@@ -248,7 +247,7 @@ firms:
     r_and_d_level: 0.64
     r_and_d_budget: 45000
     supplier_priority: quality
-    suppliers: *distributors
+    suppliers: []
   - id: wholesaler_04
     name: "Mittelland Getränkehandel"
     stage: wholesaler
@@ -267,7 +266,7 @@ firms:
     r_and_d_level: 0.26
     r_and_d_budget: 18000
     supplier_priority: price
-    suppliers: *distributors
+    suppliers: []
   - id: wholesaler_05
     name: "Säntis Versorgung AG"
     stage: wholesaler
@@ -286,7 +285,7 @@ firms:
     r_and_d_level: 0.32
     r_and_d_budget: 24000
     supplier_priority: reliability
-    suppliers: *distributors
+    suppliers: []
   - id: wholesaler_06
     name: "Rhone Wachstumshandel SA"
     stage: wholesaler
@@ -305,7 +304,7 @@ firms:
     r_and_d_level: 0.22
     r_and_d_budget: 26000
     supplier_priority: capacity
-    suppliers: *distributors
+    suppliers: []
 
   # Distribution: 520 units/day total capacity.
   - id: distributor_01
@@ -326,7 +325,7 @@ firms:
     r_and_d_level: 0.27
     r_and_d_budget: 30000
     supplier_priority: price
-    suppliers: &factories [factory_01, factory_02]
+    suppliers: []
   - id: distributor_02
     name: "AlpTransit Getränke GmbH"
     stage: distributor
@@ -345,7 +344,7 @@ firms:
     r_and_d_level: 0.13
     r_and_d_budget: 15000
     supplier_priority: price
-    suppliers: *factories
+    suppliers: []
   - id: distributor_03
     name: "Bernina Qualitätslogistik AG"
     stage: distributor
@@ -364,7 +363,7 @@ firms:
     r_and_d_level: 0.61
     r_and_d_budget: 65000
     supplier_priority: quality
-    suppliers: *factories
+    suppliers: []
   - id: distributor_04
     name: "Rheinbogen Logistik AG"
     stage: distributor
@@ -383,7 +382,7 @@ firms:
     r_and_d_level: 0.23
     r_and_d_budget: 42000
     supplier_priority: capacity
-    suppliers: *factories
+    suppliers: []
 
   # Brewing: 520 units/day total capacity; machine capacity is deliberately modest.
   - id: factory_01

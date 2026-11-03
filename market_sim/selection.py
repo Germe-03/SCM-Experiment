@@ -5,12 +5,27 @@ from __future__ import annotations
 from math import floor
 
 from market_sim.config import SupplierScoreWeights
-from market_sim.models import Firm
+from market_sim.models import Firm, SupplyNetwork
 
 
 _FACTORS = (
     "price", "reliability", "quality", "reputation", "lead_time", "capacity",
 )
+
+
+def supplier_candidates(
+    network: SupplyNetwork, downstream: Firm,
+    active_firm_ids: set[str] | None = None, *, dynamic: bool = True,
+) -> list[Firm]:
+    """Return allowed upstream firms, filtered to the active runtime registry."""
+
+    if dynamic:
+        candidates = network.suppliers_of(downstream.id)
+    else:
+        candidates = [network.firm(firm_id) for firm_id in downstream.suppliers]
+    if active_firm_ids is not None:
+        candidates = [firm for firm in candidates if firm.id in active_firm_ids]
+    return candidates
 
 
 def _minmax(values: list[float]) -> list[float]:

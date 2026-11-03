@@ -11,7 +11,17 @@ from market_sim.run import build_runner
 def _runner(seed: int, **events):
     config = load_market_config()
     if events:
-        config = config.model_copy(update={"events": config.events.model_copy(update=events)})
+        definitions = [
+            definition.model_copy(update={
+                "probability_per_year": events.get(
+                    f"{definition.type}_probability", definition.probability_per_year
+                )
+            })
+            for definition in config.events.types
+        ]
+        config = config.model_copy(update={
+            "events": config.events.model_copy(update={"types": definitions})
+        })
     return build_runner(years=3, seed=seed, days_per_year=40, config=config)
 
 

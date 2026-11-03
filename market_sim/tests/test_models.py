@@ -31,7 +31,8 @@ def test_supplier_topology_resolves_to_firms(network: SupplyNetwork) -> None:
         expected_stage = network.upstream_stage(stage)
         expected_ids = {firm.id for firm in network.firms_in(expected_stage)}
         for firm in network.firms_in(stage):
-            assert set(firm.suppliers) == expected_ids
+            assert firm.suppliers == []
+            assert {supplier.id for supplier in network.suppliers_of(firm.id)} == expected_ids
             assert all(
                 supplier.stage == expected_stage
                 for supplier in network.suppliers_of(firm.id)

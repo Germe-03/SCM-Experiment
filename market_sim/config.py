@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from math import isclose
 from pathlib import Path
-from typing import Self
+from typing import Literal, Self
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -96,19 +96,39 @@ class StartVariationConfig(ConfigModel):
     reputation_spread: float = Field(default=0.0, ge=0, lt=1)
 
 
-class MarketEventsConfig(ConfigModel):
-    """Yearly random market events; probabilities are drawn once per year and seed."""
+class MarketEventTypeConfig(ConfigModel):
+    """One reusable yearly event definition and its effect handler."""
 
-    heat_summer_probability: float = Field(default=0.0, ge=0, le=1)
-    heat_summer_demand_factor: float = Field(default=1.15, gt=0)
-    heat_summer_days: int = Field(default=60, gt=0)
-    harvest_failure_probability: float = Field(default=0.0, ge=0, le=1)
-    harvest_failure_cost_factor: float = Field(default=1.35, gt=0)
-    recall_probability: float = Field(default=0.0, ge=0, le=1)
-    recall_quality_hit: float = Field(default=0.10, ge=0, le=1)
-    recall_reputation_hit: float = Field(default=0.15, ge=0, le=1)
-    # One-off cost in real CHF.
-    recall_cost: float = Field(default=0.0, ge=0)
+    type: str = Field(min_length=1)
+    enabled: bool = True
+    probability_per_year: float = Field(ge=0, le=1)
+    duration_days: int = Field(gt=0)
+    strength: float = Field(gt=0)
+    effect_handler: Literal[
+        "demand_multiplier", "material_cost_multiplier", "firm_recall"
+    ]
+    reputation_strength: float = Field(default=0.0, ge=0, le=1)
+    cost: float = Field(default=0.0, ge=0)
+
+
+class MarketEventsConfig(ConfigModel):
+    """Generic yearly events, evaluated in the configured fixed order."""
+
+    enabled: bool = True
+    types: list[MarketEventTypeConfig] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _event_types_must_be_unique(self) -> Self:
+        names = [event.type for event in self.types]
+        if len(names) != len(set(names)):
+            raise ValueError("market event types must be unique")
+        return self
+
+
+class SupplierDiscoveryConfig(ConfigModel):
+    """Runtime discovery of active firms on the immediately upstream stage."""
+
+    enabled: bool = True
 
 
 class PriceConfig(ConfigModel):
@@ -314,6 +334,7 @@ class MarketConfig(ConfigModel):
     bankruptcy: BankruptcyConfig = Field(default_factory=BankruptcyConfig)
     start_variation: StartVariationConfig = Field(default_factory=StartVariationConfig)
     events: MarketEventsConfig = Field(default_factory=MarketEventsConfig)
+    supplier_discovery: SupplierDiscoveryConfig = Field(default_factory=SupplierDiscoveryConfig)
 
     @model_validator(mode="after")
     def _validate_stage_prices(self) -> Self:

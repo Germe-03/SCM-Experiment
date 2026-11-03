@@ -8,14 +8,14 @@ import random
 from statistics import pstdev
 from typing import Callable
 
-from market_sim.config import MarketConfig
+from market_sim.config import MarketConfig, MarketEventTypeConfig
 from market_sim.environment import MarketEnvironment, MarketResult
 from market_sim.kpi import (
     AnnualReport, SystemKPIs, bullwhip_variance_ratio, herfindahl_index,
     service_level,
 )
 from market_sim.models import STAGES, Firm, SupplyNetwork
-from market_sim.policies import FirmPolicy
+from market_sim.policies import FirmPolicy, policy_for_firm
 from market_sim.strategy import AnnualStrategy, FirmObservation
 
 
@@ -65,6 +65,7 @@ class RunState:
     recent_sales: dict[str, list[int]] = field(default_factory=dict)
     events: list[dict[str, object]] = field(default_factory=list)
     main_supplier: dict[str, str] = field(default_factory=dict)
+    market_entries: dict[int, int] = field(default_factory=dict)
 
 
 class ConsumerDemandGenerator:
@@ -213,47 +214,122 @@ class SimulationRunner:
                 firm.reputation * (1 + rng.uniform(-spread.reputation_spread, spread.reputation_spread)), 0.05, 0.98)
 
     def _draw_market_events(self, state: RunState) -> None:
-        """Draw this year's market events; all draws happen in a fixed order."""
+        """Draw configured events and dispatch reusable effect handlers."""
         cfg = self.config.events
         rng = self._event_rng
         days = self.config.simulation.days_per_year
         year = state.year + 1
-        heat, harvest, recall = rng.random(), rng.random(), rng.random()
+        event_rolls = [rng.random() for _ in cfg.types]
+        # Keep auxiliary draws fixed and unconditional for seed compatibility.
         start_roll, target_roll = rng.random(), rng.random()
         self.env.material_cost_multiplier = 1.0
         self.demand.event_windows = [w for w in self.demand.event_windows if w[1] >= state.global_day]
-        if heat < cfg.heat_summer_probability:
-            first = round(days * 0.35 + start_roll * days * 0.2)
-            self.demand.event_windows.append((
-                state.global_day + first, state.global_day + first + cfg.heat_summer_days - 1,
-                cfg.heat_summer_demand_factor,
-            ))
-            state.events.append({
-                "year": year, "day": first + 1, "firm": "", "event": "heat_summer",
-                "details": f"demand x{cfg.heat_summer_demand_factor:g} for {cfg.heat_summer_days} days",
-            })
-        if harvest < cfg.harvest_failure_probability:
-            self.env.material_cost_multiplier = cfg.harvest_failure_cost_factor
-            state.events.append({
-                "year": year, "day": 1, "firm": "", "event": "harvest_failure",
-                "details": f"raw materials x{cfg.harvest_failure_cost_factor:g} all year",
-            })
-        if recall < cfg.recall_probability:
-            active = sorted(
-                firm_id for firm_id, runtime in self.env.runtimes.items() if runtime.active
+        handlers = {
+            "demand_multiplier": self._event_demand_multiplier,
+            "material_cost_multiplier": self._event_material_cost_multiplier,
+            "firm_recall": self._event_firm_recall,
+        }
+        if not cfg.enabled:
+            return
+        for definition, roll in zip(cfg.types, event_rolls):
+            if definition.enabled and roll < definition.probability_per_year:
+                handlers[definition.effect_handler](
+                    definition, state, year, days, start_roll, target_roll,
+                )
+
+    def _event_demand_multiplier(
+        self, event: MarketEventTypeConfig, state: RunState, year: int,
+        days: int, start_roll: float, target_roll: float,
+    ) -> None:
+        first = round(days * 0.35 + start_roll * days * 0.2)
+        self.demand.event_windows.append((
+            state.global_day + first,
+            state.global_day + first + event.duration_days - 1,
+            event.strength,
+        ))
+        state.events.append({
+            "year": year, "day": first + 1, "firm": "", "event": event.type,
+            "details": f"demand x{event.strength:g} for {event.duration_days} days",
+        })
+
+    def _event_material_cost_multiplier(
+        self, event: MarketEventTypeConfig, state: RunState, year: int,
+        days: int, start_roll: float, target_roll: float,
+    ) -> None:
+        self.env.material_cost_multiplier = event.strength
+        state.events.append({
+            "year": year, "day": 1, "firm": "", "event": event.type,
+            "details": f"raw materials x{event.strength:g} all year",
+        })
+
+    def _event_firm_recall(
+        self, event: MarketEventTypeConfig, state: RunState, year: int,
+        days: int, start_roll: float, target_roll: float,
+    ) -> None:
+        active = sorted(
+            firm_id for firm_id, runtime in self.env.runtimes.items() if runtime.active
+        )
+        if not active:
+            return
+        firm_id = active[min(len(active) - 1, int(target_roll * len(active)))]
+        firm = self.network.firm(firm_id)
+        runtime = self.env.runtimes[firm_id]
+        runtime.quality_level = self._clamp(runtime.quality_level - event.strength)
+        firm.quality_level = self._clamp(firm.quality_level - event.strength)
+        firm.reputation = self._clamp(firm.reputation - event.reputation_strength)
+        runtime.fixed_cost += event.cost
+        state.events.append({
+            "year": year, "day": 1, "firm": firm_id, "event": event.type,
+            "details": f"quality -{event.strength:g}, reputation -{event.reputation_strength:g}",
+        })
+
+    def add_firm(
+        self, firm: Firm, state: RunState, policy: FirmPolicy | None = None,
+    ) -> None:
+        """Register a firm at a year boundary and align all result series."""
+
+        if state.global_day != self.env.period:
+            raise ValueError("run state and environment are not at the same day")
+        if state.global_day % self.config.simulation.days_per_year:
+            raise ValueError("firms can only be added at a year boundary")
+        self.env.add_firm(firm)
+        self.policies[firm.id] = policy or policy_for_firm(firm)
+        zeros = [0.0] * state.global_day
+        state.daily_series[firm.id] = {
+            "inventory": list(zeros), "backlog": list(zeros), "cash": list(zeros),
+            "cumulative_profit": list(zeros),
+            **({"consumer_units_sold": list(zeros), "demand_share": list(zeros)}
+               if firm.stage == "retailer" else {}),
+        }
+        empty_financial = {
+            "revenue": 0.0, "purchase_cost": 0.0, "holding_cost": 0.0,
+            "backlog_cost": 0.0, "wage_cost": 0.0, "hiring_cost": 0.0,
+            "rnd_cost": 0.0, "handling_cost": 0.0, "fixed_cost": 0.0,
+            "profit": 0.0, "cash": 0.0,
+        }
+        state.financial_breakdown[firm.id] = [dict(empty_financial) for _ in range(state.year)]
+        state.recent_demand[firm.id] = []
+        state.recent_sales[firm.id] = []
+        for index, summaries in enumerate(state.summaries):
+            summaries[firm.id] = YearSummary(
+                revenue=0.0, profit=0.0, avg_inventory=0.0, avg_backlog=0.0,
+                lost_sales=0, service_level=1.0, avg_sell_price=firm.sell_price,
+                quality=firm.quality_level, capacity_utilization=0.0, cash=0.0,
             )
-            if active:
-                firm_id = active[min(len(active) - 1, int(target_roll * len(active)))]
-                firm = self.network.firm(firm_id)
-                runtime = self.env.runtimes[firm_id]
-                runtime.quality_level = self._clamp(runtime.quality_level - cfg.recall_quality_hit)
-                firm.quality_level = self._clamp(firm.quality_level - cfg.recall_quality_hit)
-                firm.reputation = self._clamp(firm.reputation - cfg.recall_reputation_hit)
-                runtime.fixed_cost += cfg.recall_cost
-                state.events.append({
-                    "year": year, "day": 1, "firm": firm_id, "event": "recall",
-                    "details": f"quality -{cfg.recall_quality_hit:g}, reputation -{cfg.recall_reputation_hit:g}",
-                })
+            state.annual_reports[index][firm.id] = AnnualReport(
+                year=index + 1, firm_id=firm.id, revenue=0.0, profit=0.0,
+                market_share=0.0, average_sell_price=firm.sell_price,
+                average_quality=firm.quality_level, stockout_days=0, lost_sales=0,
+                employee_turnover=0.0, average_wage=firm.wage_level,
+                reputation=firm.reputation, capacity_utilization=0.0,
+                supplier_reliability={}, main_problems=["Not yet active"],
+            )
+        entry_year = state.year + 1
+        state.market_entries[entry_year] = state.market_entries.get(entry_year, 0) + 1
+        state.events.append({
+            "year": entry_year, "day": 1, "firm": firm.id,
+            "event": "market_entry", "details": f"registered in {firm.stage}",
+        })
 
     def run_year(self, state: RunState) -> None:
         """Simulate one full year and append its reports to ``state``."""
@@ -396,6 +472,9 @@ class SimulationRunner:
             b2b_received, b2b_shipped, daily_prices,
         )
         kpis = self._add_experiment_kpis(kpis, reports, annual_reports[-1] if annual_reports else None, summaries[-1])
+        kpis = kpis.model_copy(update={
+            "market_entries": state.market_entries.get(year + 1, 0),
+        })
         self._log_year_events(
             state, year + 1, summaries[-1], previous, utilization, shipped_edges,
         )
