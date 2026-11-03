@@ -37,8 +37,9 @@ class FirmPolicy:
         if firm.stage == "factory" and firm.archetype == "growth":
             price_position = 0.2
         elif firm.archetype == "low_cost":
-            # Discount firms sit about 12 % below the stage base price.
-            price_position = 0.2
+            # Discount firms sit below the stage base price, but not at the floor:
+            # at 0.2 retail discounters went bankrupt in most seeds.
+            price_position = 0.3
         elif firm.stage == "retailer":
             # Retail positions are calibrated to comparable ten-year returns:
             # premium earns margin without dominating, while the middle
