@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 from pathlib import Path
 
 from market_sim.checkpoint import load_checkpoint, year_end_saver
@@ -143,7 +144,7 @@ def write_outputs(result: RunResult, out_dir: str | Path) -> list[Path]:
             with path.open("w", newline="", encoding="utf-8") as output:
                 writer = csv.DictWriter(output, fieldnames=list(rows[0]))
                 writer.writeheader()
-                writer.writerows(rows)
+                writer.writerows({k: json.dumps(v, ensure_ascii=False) if isinstance(v, (dict, list)) else v for k, v in row.items()} for row in rows)
             paths.append(path)
     path = directory / "offence_ledger.csv"
     with path.open("w", newline="", encoding="utf-8") as output:
@@ -151,6 +152,20 @@ def write_outputs(result: RunResult, out_dir: str | Path) -> list[Path]:
         writer.writeheader()
         writer.writerows(result.offence_ledger)
     paths.append(path)
+    for name, rows, fields in (
+        ("decisions.csv", result.decisions, ["year", "month", "firm", "decision", "value", "reason"]),
+        ("region_report.csv", result.region_reports, ["year", "region", "consumer_revenue", "retail_capacity", "retailers", "population_share", "population", "mean_retail_margin"]),
+    ):
+        path = directory / name
+        with path.open("w", newline="", encoding="utf-8") as output:
+            writer = csv.DictWriter(output, fieldnames=fields)
+            writer.writeheader()
+            writer.writerows({k: json.dumps(v, ensure_ascii=False) if isinstance(v, (dict, list)) else v for k, v in row.items()} for row in rows)
+        paths.append(path)
+    for name, data in (("exit_analysis.json", result.exit_analysis), ("personas.json", result.personas)):
+        path = directory / name
+        path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        paths.append(path)
     return paths
 
 

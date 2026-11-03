@@ -91,6 +91,7 @@ class Geography:
             for amount, last in self.depreciation.get(firm_id, []):
                 if env.period <= last:
                     runtime.fixed_cost += amount
+                    runtime.investment_depreciation = getattr(runtime, "investment_depreciation", 0.0) + amount
 
     # -- yearly decisions -------------------------------------------------
     def year_end(self, runner: SimulationRunner, state: RunState) -> None:

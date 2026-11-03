@@ -71,7 +71,14 @@ class StateActor:
                 detect, fine_share = self.beliefs[firm.id][offence.name]
                 benefit = offence.benefit * self._base(offence.kind, runtime, last_revenue)
                 penalty = detect * (offence.fine_fixed + fine_share * last_revenue)
-                if benefit > penalty * (1 + self.cfg.aversion * (1 - risk)):
+                committed = benefit > penalty * (1 + self.cfg.aversion * (1 - risk))
+                runner.decision_log.record(env.period // runner.config.simulation.days_per_year + 1,
+                    firm.id, "offence", {"offence": offence.name, "committed": committed,
+                    "believed_detection_probability": detect,
+                    "believed_fine": offence.fine_fixed + fine_share * last_revenue,
+                    "expected_gain": benefit, "risk_adjusted_penalty": penalty * (1 + self.cfg.aversion * (1 - risk))},
+                    "Erwarteter Vorteil übersteigt risikogewichtete Busse" if committed else "Erwarteter Vorteil deckt risikogewichtete Busse nicht")
+                if committed:
                     self.active.setdefault(firm.id, set()).add(offence.name)
                     self.stats["offences"] += 1
                     if offence.kind == "wage":
@@ -252,6 +259,7 @@ class StateActor:
         t_rt.inventory = 0
         t_rt.cash = 0.0
         runner.close_firm_now(target.id, year, state, "takeover", f"gekauft von {buyer.id} für {chf(price)}")
+        runner.decision_log.record(year, buyer.id, "takeover_bought", {"target": target.id, "price": price}, "Übernahme eines finanziell angeschlagenen Konkurrenten")
         self.stats["takeovers"] += 1
 
     def _break_up(self, runner, state, stage, active, share, year, day) -> None:

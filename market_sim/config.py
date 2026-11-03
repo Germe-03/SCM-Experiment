@@ -297,7 +297,7 @@ class MarketEntryConfig(ConfigModel):
             raise ValueError("start_reputation must be ordered within [0, 1]")
         if self.enabled:
             stages = {"retailer", "wholesaler", "distributor", "factory"}
-            if set(self.names) != stages or set(self.max_firms_per_stage) != stages:
+            if not stages <= set(self.names) or set(self.max_firms_per_stage) != stages:
                 raise ValueError("entry names and limits must cover all stages")
             if any(n < 1 for n in self.max_firms_per_stage.values()) or any(not n for n in self.names.values()):
                 raise ValueError("entry limits and name lists must be nonempty")
@@ -581,7 +581,25 @@ class LongRunConfig(ConfigModel):
     trends: list[TrendConfig] = Field(default_factory=list)
 
 
+class PersonasConfig(ConfigModel):
+    enabled: bool = True
+    first_names: dict[str, list[str]] = Field(default_factory=dict)
+    surnames: list[str] = Field(default_factory=list)
+    age_ranges: dict[str, tuple[int, int]] = Field(default_factory=dict)
+    income_ranges: dict[int, tuple[int, int]] = Field(default_factory=dict)
+    jobs: dict[int, list[str]] = Field(default_factory=dict)
+    priorities: dict[str, str] = Field(default_factory=dict)
+
+
+class TraceabilityConfig(ConfigModel):
+    enabled: bool = True
+    exit_history_years: int = Field(default=5, ge=1, le=5)
+    exit_drivers: int = Field(default=3, ge=1, le=3)
+
+
 class MarketConfig(ConfigModel):
+    personas: PersonasConfig = Field(default_factory=PersonasConfig)
+    traceability: TraceabilityConfig = Field(default_factory=TraceabilityConfig)
     unit_scale: UnitScaleConfig
     demand: DemandConfig
     price: PriceConfig
@@ -653,7 +671,7 @@ def load_market_config(path: str | Path | None = None) -> MarketConfig:
     if not isinstance(data, dict):
         raise ValueError(f"market config must contain a YAML mapping: {config_path}")
     # Phase 2: consumer classes and brands live in their own files next to market.yaml.
-    for key in ("consumers", "brands"):
+    for key in ("consumers", "brands", "personas"):
         side_file = config_path.parent / f"{key}.yaml"
         if key not in data and side_file.exists():
             with side_file.open(encoding="utf-8") as handle:

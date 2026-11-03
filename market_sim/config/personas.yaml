@@ -1,0 +1,27 @@
+enabled: true
+first_names:
+  woman: [Anna, Maria, Laura, Lea, Emma, Mia, Elena, Sofia, Giulia, Chiara, Alessia, Martina, Nina, Sarah, Nora, Lara, Julia, Sara, Amina, Fatima, Leila, Yasmin, Selina, Noemi, Céline, Camille, Chloé, Louise, Manon, Zoé, Valentina, Daria, Anja, Eva, Ruth, Ursula]
+  man: [Luca, Noah, Leon, Matteo, Gabriel, David, Elias, Samuel, Simon, Daniel, Lukas, Jonas, Jan, Marco, Andreas, Thomas, Peter, Hans, Paul, Louis, Julien, Antoine, Nicolas, Romain, Karim, Amir, Youssef, Arben, Adrian, Dario, Fabio, Lorenzo, Rafael, Ivan, Milan, Stefan]
+surnames: [Müller, Meier, Schmid, Keller, Weber, Huber, Schneider, Fischer, Meyer, Steiner, Frei, Brunner, Baumann, Gerber, Zürcher, Hofer, Berger, Martin, Favre, Dubois, Morel, Girard, Blanc, Perrin, Rossi, Bernasconi, Bianchi, Ferrari, Fontana, Colombo, Demir, Yilmaz, Ali, Haddad, Krasniqi, Berisha, Petrovic, Novak, Nguyen, Pereira]
+age_ranges:
+  18-34: [18, 34]
+  35-64: [35, 64]
+  65+: [65, 90]
+income_ranges:
+  1: [2500, 4000]
+  2: [4000, 5500]
+  3: [5500, 7500]
+  4: [7500, 10000]
+  5: [10000, 18000]
+jobs:
+  1: [Reinigungskraft, Küchenhilfe, Verkaufshilfe]
+  2: [Detailhandelsfachkraft, Logistikfachkraft, Servicefachkraft]
+  3: [Pflegefachperson, Sachbearbeitung, Elektroinstallation]
+  4: [Projektleitung, Softwareentwicklung, Teamleitung]
+  5: [Geschäftsleitung, Fachärztliche Tätigkeit, Unternehmensberatung]
+priorities:
+  price: Ein günstiger Preis ist mir beim Einkauf besonders wichtig.
+  quality: Ich achte beim Einkauf besonders auf eine hohe Qualität.
+  brand_reputation: Ich kaufe am liebsten Marken, denen ich vertraue.
+  store_reputation: Ich kaufe besonders gern in einem Geschäft, dem ich vertraue.
+  availability: Mir ist wichtig, dass mein Getränk zuverlässig verfügbar ist.

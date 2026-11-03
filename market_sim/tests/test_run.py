@@ -30,10 +30,15 @@ def test_write_outputs(tmp_path):
         "brand_report.csv": len(result.brand_reports),
         "class_report.csv": len(result.class_reports),
         "offence_ledger.csv": len(result.offence_ledger),
+        "decisions.csv": len(result.decisions),
+        "region_report.csv": len(result.region_reports),
     }
-    assert {path.name for path in paths} == set(expected_rows)
+    json_files = {"exit_analysis.json", "personas.json"}
+    assert {path.name for path in paths} == set(expected_rows) | json_files
     for path in paths:
         assert path.exists() and path.stat().st_size > 0
+        if path.name in json_files:
+            continue
         with path.open(newline="", encoding="utf-8") as source:
             rows = list(csv.reader(source))
         assert rows[0]
@@ -83,6 +88,7 @@ def test_main_writes_to_requested_directory(tmp_path):
     assert {path.name for path in tmp_path.iterdir()} == {
         "annual_reports.csv", "system_kpis.csv", "firm_ranking.csv", "events.csv",
         "brand_report.csv", "class_report.csv", "offence_ledger.csv",
+        "decisions.csv", "region_report.csv", "exit_analysis.json", "personas.json",
     }
 
 

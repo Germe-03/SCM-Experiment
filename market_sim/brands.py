@@ -65,6 +65,8 @@ class ClassStats:
     demand: int = 0
     bought: int = 0
     spend: float = 0.0
+    category_units: dict[str, int] = field(default_factory=dict)
+    brand_units: dict[str, int] = field(default_factory=dict)
 
 
 class BrandBook:
@@ -254,6 +256,15 @@ class BrandBook:
                 self.production_share[b] = max(floor_share, share)
         class_rows = [{
             "year": year, "consumer_class": name, "demand": stats.demand, "bought": stats.bought,
+            "persons": self.classes[name].persons,
+            "income_level": self.classes[name].income_level,
+            "age_group": self.classes[name].age_group,
+            "drinking_habit": name.rsplit("_", 1)[-1],
+            "units_per_person": self.classes[name].units_per_person_per_year,
+            "max_price": self.classes[name].max_price,
+            "purchase_rate": stats.bought / stats.demand if stats.demand else 0.0,
+            "category_shares": {c: stats.category_units.get(c, 0) / stats.bought if stats.bought else 0.0 for c in self.base_share or {"beer": 1}},
+            "favourite_brand": max(sorted(stats.brand_units), key=stats.brand_units.get) if stats.brand_units else None,
             "no_purchase": stats.demand - stats.bought,
             "no_purchase_rate": (stats.demand - stats.bought) / stats.demand if stats.demand else 0.0,
             "avg_price_paid": stats.spend / stats.bought if stats.bought else 0.0,
@@ -402,6 +413,11 @@ class BrandBook:
                     got = min(got, unmet[name])
                     if got:
                         unmet[name] -= got
+                        stats = self.class_stats[name]
+                        brand_id = key[1]
+                        category = self.brands[brand_id].category
+                        stats.category_units[category] = stats.category_units.get(category, 0) + got
+                        stats.brand_units[brand_id] = stats.brand_units.get(brand_id, 0) + got
                         self.class_stats[name].bought += got
                         self.class_stats[name].spend += got * pairs[key][6]
             pairs = {key: value for key, value in pairs.items()

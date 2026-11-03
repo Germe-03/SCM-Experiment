@@ -46,7 +46,7 @@ def test_write_dashboard_html(tmp_path):
     assert "Aare Markt AG" in content
     assert CHART_JS_URL in content
     assert 'id="actor-selector"' in content
-    for tab in ("overview", "market", "firms", "compare", "structure", "chain", "finance", "state", "rnd", "events"):
+    for tab in ("overview", "market", "map", "people", "firms", "compare", "structure", "chain", "finance", "state", "rnd", "events"):
         assert f'data-tab="{tab}"' in content
         assert f'id="tab-{tab}"' in content
     assert 'id="cp-relative"' in content

@@ -79,4 +79,12 @@ def build_dashboard_data(
         "classes": list(result.class_reports),
         "rnd": list(result.rnd_reports),
         "offence_ledger": list(result.offence_ledger),
+        # Yearly decisions only; the monthly order and price averages stay in decisions.csv.
+        "decisions": [d for d in result.decisions if d.get("month") is None],
+        "exit_analysis": result.exit_analysis,
+        "regions": [r.model_dump() for r in config.geography.regions],
+        "region_reports": result.region_reports,
+        "firm_locations": result.firm_locations,
+        "personas": result.personas,
+
     }

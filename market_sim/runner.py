@@ -8,6 +8,9 @@ import random
 from statistics import pstdev
 from typing import Callable
 
+from market_sim.decisions import DecisionLog, exit_analysis
+from market_sim.personas import generate_personas
+from market_sim.region_report import RegionReporter
 from market_sim.longrun import LongRun
 from market_sim.state import StateActor
 from market_sim.research import ResearchLab
@@ -56,6 +59,11 @@ class RunResult:
     class_reports: list[dict[str, object]] = field(default_factory=list)
     rnd_reports: list[dict[str, object]] = field(default_factory=list)
     offence_ledger: list[dict[str, object]] = field(default_factory=list)
+    decisions: list[dict] = field(default_factory=list)
+    region_reports: list[dict] = field(default_factory=list)
+    firm_locations: list[dict] = field(default_factory=list)
+    personas: list[dict] = field(default_factory=list)
+    exit_analysis: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -120,6 +128,9 @@ class SimulationRunner:
     ) -> None:
         self.network = network
         self.config = config
+        self.seed = seed
+        self.decision_log = DecisionLog(config.traceability.enabled)
+        self.region_reporter = RegionReporter(config.traceability.enabled)
         self.policies = policies
         firm_ids = {firm.id for firm in self._firms()}
         if set(policies) != firm_ids:
@@ -192,7 +203,11 @@ class SimulationRunner:
         return self.result(state)
 
     def result(self, state: RunState) -> RunResult:
-        return RunResult(
+        result = RunResult(
+            decisions=list(self.decision_log.entries),
+            region_reports=list(self.region_reporter.rows),
+            firm_locations=list(self.region_reporter.locations),
+            personas=generate_personas(self.config, self.seed, state.class_reports, state.brand_reports) if self.config.traceability.enabled else [],
             years=state.year, network=self.network, yearly_summaries=state.summaries,
             final_result=self.env.get_result(), annual_reports=state.annual_reports,
             system_kpis=state.system_kpis,
@@ -203,6 +218,10 @@ class SimulationRunner:
             rnd_reports=list(self.lab.reports) if self.lab is not None else [],
             offence_ledger=list(self.state_actor.offence_ledger) if self.state_actor is not None else [],
         )
+
+        if self.config.traceability.enabled:
+            object.__setattr__(result, "exit_analysis", exit_analysis(result, self.config.traceability.exit_history_years, self.config.traceability.exit_drivers))
+        return result
 
     def _scale_for_categories(self) -> None:
         """Phase 4: wine and spirits add volume; trade stages and demand grow with it."""
@@ -389,6 +408,8 @@ class SimulationRunner:
     def run_year(self, state: RunState) -> None:
         """Simulate one full year and append its reports to ``state``."""
         year = state.year
+        event_start = len(state.events)
+        self.region_reporter.start_year(self)
         summaries, annual_reports, system_kpis = (
             state.summaries, state.annual_reports, state.system_kpis,
         )
@@ -428,6 +449,7 @@ class SimulationRunner:
             ).validate_for_config(self.config)
             self.strategies[firm.id] = strategy
             self._apply_annual(firm, strategy)
+            self.decision_log.annual(year + 1, firm, strategy)
         if self.state_actor is not None:
             self.state_actor.apply_offences(self)
 
@@ -453,6 +475,7 @@ class SimulationRunner:
                 if firm.id not in decisions:
                     continue
                 decision = decisions[firm.id]
+                self.decision_log.daily(year + 1, day, self.config.simulation.days_per_year, firm.id, decision)
                 firm.sell_price = decision.sell_price
                 firm.overtime_level = decision.overtime_level
                 price_totals[firm.id] += firm.sell_price
@@ -461,6 +484,7 @@ class SimulationRunner:
                 self.applied_prices.append((firm.id, firm.sell_price, band.min_price, band.max_price))
             total_demand = self.demand(global_day)
             _, info = self.env.step(total_demand, {key: value.order_qty for key, value in decisions.items()})
+            self.region_reporter.daily(self)
             demand_series.append(total_demand)
             factory_order_series.append(sum(
                 decisions[f.id].order_qty for f in self.network.firms_in("factory")
@@ -538,7 +562,7 @@ class SimulationRunner:
                 for key in (
                     "revenue", "purchase_cost", "holding_cost",
                     "backlog_cost", "wage_cost", "hiring_cost",
-                    "rnd_cost", "handling_cost", "fixed_cost", "interest_cost", "negative_interest_cost", "profit",
+                    "rnd_cost", "handling_cost", "fixed_cost", "interest_cost", "negative_interest_cost", "investment_depreciation", "profit",
                 )
             } | {"cash": end["cash"]})
         # P4b fix: exits are deterministic year-end events; cash freezes
@@ -564,6 +588,8 @@ class SimulationRunner:
             brand_rows, class_rows = self.env.brand_book.year_end(self.env, self.network, year + 1)
             state.brand_reports.extend(brand_rows)
             state.class_reports.extend(class_rows)
+        self.decision_log.finish_year()
+        self.region_reporter.finish_year(self, year + 1, summaries[-1])
         self._apply_bankruptcy(year + 1, state.events)
         system_kpis[-1] = system_kpis[-1].model_copy(update={
             "bankruptcies": len(self.exits) - exits_before,
@@ -581,6 +607,9 @@ class SimulationRunner:
             self.state_actor.takeovers(self, state)
         if self.lab is not None:
             self.lab.year_end(self, state)
+        for event in state.events[event_start:]:
+            if event["event"] in ("expand_started", "site_started", "rnd_started", "strategy_change", "transport_switch"):
+                self.decision_log.record(event["year"], event["firm"], event["event"], event["details"], event["details"])
         update = {"market_entries": state.market_entries.get(state.year, 0), "strategy_changes": changes,
                   "price_index": self.long_run.price_index, "population_index": self.long_run.population_index,
                   "trend": self.long_run.trend, "fx_rate": self.env.fx_rate,
@@ -701,7 +730,8 @@ class SimulationRunner:
                 template = template.model_copy(update={"category": category, "importer": False})
             self._entry_counters[stage] += 1
             counter = self._entry_counters[stage]
-            names = cfg.names[stage]
+            name_key = ("factory_import" if template.importer else f"factory_{template.category}") if stage == "factory" else stage
+            names = cfg.names.get(name_key, cfg.names[stage])
             cycle, index = divmod(counter - 1, len(names))
             name = names[index] + (f" {cycle + 1}" if cycle else "")
             firm = template.model_copy(deep=True, update={
@@ -1117,6 +1147,7 @@ class SimulationRunner:
                 "rnd_cost": float(getattr(runtime, "rnd_spend", 0.0)),
                 "handling_cost": float(getattr(runtime, "handling_cost", 0.0)),
                 "fixed_cost": float(getattr(runtime, "fixed_cost", 0.0)),
+                "investment_depreciation": getattr(runtime, "investment_depreciation", 0.0),
                 "interest_cost": runtime.interest_cost,
                 "negative_interest_cost": runtime.negative_interest_cost,
                 "profit": float(getattr(runtime, "profit", 0.0)),

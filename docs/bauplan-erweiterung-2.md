@@ -238,3 +238,22 @@ Symbol einen Hinweis, wie man ihn startet.
   Dashboard für drei Jahre erzeugt; JavaScript-Syntax und ausführbare
   Vergleichsprüfungen mit Node geprüft. Eine Sichtprüfung im Browser war
   nicht möglich, weil der Browserzugriff nicht erreichbar war.
+- **2026-11-04, Phase 9:** Entscheidungsprotokoll (`decisions.csv`: jährliche
+  Planung jeder Firma, Monatsmittel von Bestellmengen und Preisen,
+  Straftat-Entscheide mit der eigenen Schätzung der Firma, Investitionen,
+  Projekte, Strategiewechsel, Übernahmen) und regelbasierte Konkursanalyse
+  (`exit_analysis.json`: die grössten Treiber der letzten bis zu 5 Jahre,
+  Entscheidungen und Marktereignisse, ein deutscher Satz pro Firma; Treiber
+  unter 1 % des Umsatzes werden weggelassen). Neue Reiter «Karte»
+  (schematische Schweiz aus einem groben Umriss, in die 8 Regionen geteilt;
+  Ebenen Bevölkerung, Firmen, Händler pro Kopf, Händlermarge, Umsatz pro
+  Region; Umsatz pro Region über das Einzugsgebiet jedes Ladens verteilt,
+  `region_report.csv`) und «Bevölkerung» (30 Klassen als Raster, je eine
+  Frau und ein Mann als Persona aus Vorlagen, `personas.json`). In der
+  Firmendetailansicht eine Zeitleiste der Entscheidungen mit Filtern und
+  ein Kasten «Warum ausgeschieden?». Neue Hersteller heissen nach ihrer
+  Kategorie. Codex erreichte mitten in der Phase sein Limit; Dashboard,
+  Tests und Korrekturen (kaputte Umlaute in YAML und Texten, gelockerte
+  Prüfung der Eintrittsnamen) hat Claude gemacht. Die Ökonomie ist
+  unverändert: Seed 0 über 10 Jahre ergibt vorher und nachher genau
+  CHF 9'190'532'019 Gewinn, darum keine neue Kalibrierung.

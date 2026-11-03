@@ -1,3 +1,8 @@
+traceability:
+  enabled: true
+  exit_history_years: 5
+  exit_drivers: 3
+
 market_entry:
   enabled: true
   base_probability: 0.08
@@ -11,6 +16,9 @@ market_entry:
   start_reputation: [0.40, 0.50]
   start_quality_fraction: 0.9
   names:
+    factory_wine: [Lavaux Vins, Rebenhof, Valais Wein, Seeland Kellerei]
+    factory_spirits: [Alpen Destillerie, Jura Brennerei, Säntis Spirituosen, Ticino Distillati]
+    factory_import: [Helvetia Import, Mondial Getränke, Global Vins, Alpina Import]
     retailer: [Aare Laden, Rigi Markt, Limmat Shop, Emme Markt, Jura Laden, Pilatus Markt, Reuss Shop, Sihl Laden]
     wholesaler: [Helvetia Handel, Aare Handel, Seeland Handel, Rigi Handel, Thur Handel, Linth Handel]
     distributor: [Alpen Logistik, Mittelland Verteilung, Gotthard Vertrieb, Jura Logistik]
