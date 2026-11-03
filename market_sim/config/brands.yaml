@@ -12,3 +12,9 @@ brands:
   - {id: alpen_lager, name: Alpen Lager, owner: factory_01, positioning: standard, traits: [lager]}
   - {id: see_reserve, name: See Reserve, owner: factory_02, positioning: standard, traits: [lager]}
   - {id: see_hell, name: See Hell, owner: factory_02, positioning: cheap, traits: [lager, discount]}
+  - {id: lavaux_cru, name: Lavaux Cru, owner: winery_01, positioning: premium, category: wine, maturation_days: 730, traits: [wine]}
+  - {id: lavaux_blanc, name: Lavaux Blanc, owner: winery_01, positioning: standard, category: wine, maturation_days: 365, traits: [wine]}
+  - {id: wallis_rot, name: Wallis Rot, owner: winery_02, positioning: standard, category: wine, maturation_days: 365, traits: [wine]}
+  - {id: alpen_kraeuter, name: Alpen Kraeuter, owner: distillery_01, positioning: standard, category: spirits, traits: [spirits]}
+  - {id: euro_pils, name: Euro Pils, owner: importer_01, positioning: cheap, category: beer, traits: [lager, discount, import]}
+  - {id: rioja_import, name: Rioja Import, owner: importer_02, positioning: cheap, category: wine, traits: [wine, import]}

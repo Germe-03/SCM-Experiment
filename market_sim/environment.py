@@ -9,7 +9,7 @@ import random
 from market_sim.config import MarketConfig, load_market_config
 from market_sim.models import STAGES, Firm, SupplyNetwork
 from market_sim.selection import split_order, supplier_candidates
-from market_sim.brands import BrandBook, add_to_stock, take_from_stock
+from market_sim.brands import BrandBook, add_to_stock, largest_remainder, take_from_stock
 
 
 CONSUMER_ID = "__consumer__"
@@ -49,6 +49,8 @@ class FirmRuntime:
     # Phase 2: units per brand on hand and per brand in transit (parallel to incoming_shipments).
     stock: dict[str, int] = field(default_factory=dict)
     incoming_brands: list[dict[str, int]] = field(default_factory=list)
+    # Phase 4: wine maturing in the cellar as (release day, brand, units, vintage bonus).
+    maturing: list[tuple[int, str, int, float]] = field(default_factory=list)
     order_history: list[int] = field(default_factory=list)
     shipment_history: list[int] = field(default_factory=list)
     orders_received_history: list[int] = field(default_factory=list)
@@ -255,6 +257,10 @@ class MarketEnvironment:
         self.cancelled_units = 0
         # Phase 3: temporary capacity cuts per stage as (stage, first day, last day, factor).
         self.capacity_windows: list[tuple[str, int, int, float]] = []
+        # Phase 4: CHF per EUR, the wine weather and the domestic demand that sizes exports.
+        self.fx_rate = self.config.categories.fx_start
+        self._wine_rng = random.Random(f"wine-{self.seed}")
+        self.domestic_daily_demand = float(self.config.demand.daily_demand_units)
         self.runtimes = {}
         self._commodity_rng = random.Random(f"commodities-{self.seed}")
         self.commodity_log_index = {name: 0.0 for name in self.config.commodities.components}
@@ -309,8 +315,19 @@ class MarketEnvironment:
             employees=firm.employees, wage_level=firm.wage_level,
             quality_level=firm.quality_level,
         )
+        if firm.importer and getattr(self, "brand_book", None) is not None and self.brand_book.categories_on:
+            extra = self.config.categories.imports.lead_days - len(runtime.incoming_shipments)
+            if extra > 0:
+                runtime.incoming_shipments = [0] * extra + runtime.incoming_shipments
         if getattr(self, "brand_book", None) is not None:
             runtime.stock = self.brand_book.initial_stock(firm, runtime.inventory)
+            book = self.brand_book
+            if book.categories_on and firm.category == "wine" and not firm.importer:
+                # The cellar already holds the vintages that mature in the coming years.
+                harvest = self.config.categories.harvest_day
+                for brand_id, units in book.production_mix(firm.id, runtime.inventory).items():
+                    for k in range(book.brands[brand_id].maturation_days // 365):
+                        runtime.maturing.append((self.period + harvest + 365 * k, brand_id, units, 0.0))
             runtime.incoming_brands = [
                 self.brand_book.initial_stock(firm, qty) for qty in runtime.incoming_shipments
             ]
@@ -330,6 +347,9 @@ class MarketEnvironment:
             for firm_id in sorted(self.runtimes):
                 if not market_mode or self.runtimes[firm_id].active:
                     self._update_turnover_rate(firm_id)
+
+        if self.brand_book is not None and self.brand_book.categories_on:
+            self._release_matured()
 
         # 1. Receive shipments.
         for runtime in self._ordered_runtimes():
@@ -417,16 +437,23 @@ class MarketEnvironment:
             shipped_this_period[supplier_id] = allocations
             for downstream_id, quantity in allocations.items():
                 if downstream_id in self.runtimes:
-                    if self.brand_book is not None and quantity:
-                        add_to_stock(
-                            self.runtimes[downstream_id].incoming_brands[-1],
-                            take_from_stock(runtime.stock, quantity),
-                        )
                     price = self.network.firm(supplier_id).sell_price
                     trade_value = self._trade_value(quantity, price)
+                    if self.brand_book is not None and quantity:
+                        parcel = self.brand_book.take_for(
+                            self.network.firm(downstream_id), runtime.stock, quantity)
+                        add_to_stock(self.runtimes[downstream_id].incoming_brands[-1], parcel)
+                        if self.brand_book.categories_on:
+                            trade_value = self._trade_value(1, self.brand_book.parcel_value(parcel, price))
+                            # Wine and spirits cost more to handle, in line with their value.
+                            runtime.handling_cost += self.config.costs.handling_cost_per_unit * (
+                                self.brand_book.parcel_value(parcel, 1.0) - sum(parcel.values()))
                     runtime.revenue += trade_value
                     self.runtimes[downstream_id].purchase_cost += trade_value
                     self.runtimes[downstream_id].incoming_shipments[-1] += quantity
+
+        if self.brand_book is not None and self.brand_book.categories_on:
+            self._export()
 
         # 4. Record post-fulfillment state.
         for firm_id, runtime in self.runtimes.items():
@@ -447,7 +474,9 @@ class MarketEnvironment:
                     # when the optional clamp is enabled.
                     if self.enforce_capacity:
                         quantity = min(quantity, self._effective_capacity(firm.id))
-                    self.runtimes[firm.id].purchase_cost += quantity * self.material_cost_per_unit()
+                    if self._harvest_producer(firm):
+                        continue
+                    self.runtimes[firm.id].purchase_cost += quantity * self.unit_production_cost(firm)
                     # P1 fix: a factory production start is its replenishment order.
                     self.runtimes[firm.id].on_order += quantity
                     self.runtimes[firm.id].incoming_shipments[-1] += quantity
@@ -458,13 +487,7 @@ class MarketEnvironment:
                         )
                     continue
                 candidates = self.supplier_candidates(firm.id)
-                lead_times = {candidate.id: self.config.logistics.default_lead_time_days for candidate in candidates}
-                allocations = split_order(
-                    firm, candidates, quantity, self.config.supplier_score_weights,
-                    lead_times, self.config.policy.concentration,
-                    active_firm_ids=None,
-                    priority_boost=self.config.policy.supplier_priority_boost,
-                )
+                allocations = self._split_by_category(firm, candidates, quantity)
                 split_orders[firm.id] = allocations
                 if allocations:
                     selected_suppliers[firm.id] = min(
@@ -524,6 +547,111 @@ class MarketEnvironment:
             "total_cash": sum(r.cash for r in self.runtimes.values()),
         }
         return self.period >= self.horizon, info
+
+    def _split_order(self, firm: Firm, candidates: list[Firm], quantity: int) -> dict[str, int]:
+        lead_times = {candidate.id: self.config.logistics.default_lead_time_days for candidate in candidates}
+        return split_order(
+            firm, candidates, quantity, self.config.supplier_score_weights,
+            lead_times, self.config.policy.concentration,
+            active_firm_ids=None,
+            priority_boost=self.config.policy.supplier_priority_boost,
+        )
+
+    def _split_by_category(self, firm: Firm, candidates: list[Firm], quantity: int) -> dict[str, int]:
+        """Phase 4: a distributor splits its order by category and buys each from its producers."""
+        book = self.brand_book
+        if book is None or not book.categories_on or firm.stage != "distributor":
+            return self._split_order(firm, candidates, quantity)
+        groups: dict[str, list[Firm]] = {}
+        for candidate in candidates:
+            groups.setdefault(candidate.category, []).append(candidate)
+        weights = {c: book.global_weight.get(c, 0.0) for c in groups}
+        allocations: dict[str, int] = {}
+        for category, units in largest_remainder(quantity, weights).items():
+            if units:
+                for supplier_id, part in self._split_order(firm, groups[category], units).items():
+                    allocations[supplier_id] = allocations.get(supplier_id, 0) + part
+        return allocations
+
+    def unit_production_cost(self, firm: Firm) -> float:
+        """Raw materials per unit; imports pay the foreign price, exchange rate and tariff."""
+        cost = self.material_cost_per_unit()
+        book = self.brand_book
+        if book is None or not book.categories_on:
+            return cost
+        cost *= book.category_value(firm.category)
+        if firm.importer:
+            imports = self.config.categories.imports
+            cost *= imports.cost_factor * self.fx_rate * (1 + imports.tariff)
+        return cost
+
+    def _harvest_producer(self, firm: Firm) -> bool:
+        """Wineries press grapes once a year; the wine matures before it can be sold."""
+        book = self.brand_book
+        if book is None or not book.categories_on or firm.category != "wine" or firm.importer:
+            return False
+        cfg = self.config.categories
+        days = self.config.simulation.days_per_year
+        if self.period % days != min(cfg.harvest_day, days - 1):
+            return True
+        runtime = self.runtimes[firm.id]
+        # Forecast from what was actually delivered; order books overstate demand.
+        delivered = sum(runtime.shipment_history[-days:])
+        yield_factor = max(0.3, self._wine_rng.gauss(1.0, cfg.yield_sd))
+        batch = round(min(self._effective_capacity(firm.id) * days, delivered * cfg.wine_forecast_buffer) * yield_factor)
+        runtime.purchase_cost += batch * self.unit_production_cost(firm)
+        bonus = max(-0.1, min(0.1, (yield_factor - 1) * cfg.vintage_quality_slope))
+        for brand_id, units in book.production_mix(firm.id, batch).items():
+            brand = book.brands[brand_id]
+            runtime.maturing.append((self.period + brand.maturation_days, brand_id, units, bonus))
+        return True
+
+    def _release_matured(self) -> None:
+        book = self.brand_book
+        for runtime in self.runtimes.values():
+            if not runtime.maturing:
+                continue
+            due = [item for item in runtime.maturing if item[0] <= self.period]
+            if not due:
+                continue
+            runtime.maturing = [item for item in runtime.maturing if item[0] > self.period]
+            for _, brand_id, units, bonus in due:
+                runtime.stock[brand_id] = runtime.stock.get(brand_id, 0) + units
+                runtime.inventory += units
+                book.brands[brand_id].vintage_bonus = bonus
+
+    def _export(self) -> None:
+        """Foreign demand buys good domestic brands; a weak franc helps exporters."""
+        book = self.brand_book
+        cfg = self.config.categories.exports
+        if not cfg.enabled:
+            return
+        factory_price = self.config.stage_prices["factory"].base
+        for category, share in sorted(cfg.share.items()):
+            daily = self.domestic_daily_demand * book.base_share.get(category, 0.0)
+            wanted = round(share * daily * self.fx_rate ** cfg.fx_elasticity)
+            if wanted <= 0:
+                continue
+            sellers = {}
+            for firm in self.network.firms_in("factory"):
+                runtime = self.runtimes[firm.id]
+                if not runtime.active or firm.importer or firm.category != category or runtime.inventory <= 0:
+                    continue
+                quality = runtime.quality_level
+                if quality >= cfg.quality_threshold:
+                    sellers[firm.id] = quality
+            for firm_id, units in largest_remainder(wanted, sellers).items():
+                runtime = self.runtimes[firm_id]
+                units = min(units, runtime.inventory)
+                if not units:
+                    continue
+                parcel = take_from_stock(runtime.stock, units)
+                sent = sum(parcel.values())
+                runtime.inventory -= sent
+                price = factory_price * cfg.world_price_factor * self.fx_rate
+                runtime.revenue += self._trade_value(1, book.parcel_value(parcel, price))
+                runtime.handling_cost += book.parcel_value(parcel, self.config.costs.handling_cost_per_unit)
+                book.export_units += sent
 
     def _cancel_stale_backlog(self, supplier_id: str, market_mode: bool) -> None:
         """Cancel open orders a slow supplier cannot serve within the limit."""

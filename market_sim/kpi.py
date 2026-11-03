@@ -74,6 +74,11 @@ class SystemKPIs(BaseModel):
     price_index: float = 1.0
     population_index: float = 1.0
     trend: str = ""
+    fx_rate: float = 1.0
+    export_units: int = 0
+    share_beer: float = 0.0
+    share_wine: float = 0.0
+    share_spirits: float = 0.0
     interest_cost_retailer: float = 0.0
     interest_cost_wholesaler: float = 0.0
     interest_cost_distributor: float = 0.0

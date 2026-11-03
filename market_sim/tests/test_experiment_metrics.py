@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from market_sim.config import load_market_config
+from market_sim.models import load_firms
 from market_sim.run import EVENT_FIELDS, build_runner, run_simulation, write_outputs
 from market_sim.runner import YearSummary
 
@@ -25,7 +26,8 @@ def test_new_kpis_are_filled_and_plausible(short_run) -> None:
         assert 0 <= item.firms_with_loss <= 22
     assert kpis[0].market_share_movement == 0.0
     assert kpis[1].market_share_movement > 0.0
-    assert all(item.market_entries == 0 for item in kpis)
+    entries = [e for e in short_run.events if e["event"] == "market_entry"]
+    assert sum(item.market_entries for item in kpis) == len(entries)
 
 
 def test_bankruptcies_are_counted_and_logged(tmp_path) -> None:
@@ -36,8 +38,9 @@ def test_bankruptcies_are_counted_and_logged(tmp_path) -> None:
     })})
     result = run_simulation(years=2, days_per_year=5, seed=0, config=config)
     exits = [e for e in result.events if e["event"] == "bankruptcy"]
-    assert len(exits) == len(result.exits) == 22
-    assert result.system_kpis[0].bankruptcies == 22
+    firms = sum(len(stage.firms) for stage in load_firms().stages)
+    assert len(exits) == len(result.exits) == firms
+    assert result.system_kpis[0].bankruptcies == firms
     assert result.system_kpis[1].bankruptcies == 0
     assert all(e["year"] == 1 and e["day"] == 5 for e in exits)
 

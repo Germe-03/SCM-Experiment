@@ -2,6 +2,7 @@
 
 from market_sim.run import run_simulation
 from market_sim.config import load_market_config
+from market_sim.models import load_firms
 
 
 def test_seed_zero_ten_year_reference_is_exact() -> None:
@@ -12,7 +13,11 @@ def test_seed_zero_ten_year_reference_is_exact() -> None:
     config.consumer_model = "segments"
     config.long_run.enabled = False
     config.events.types = [t for t in config.events.types if t.type in {"heat_summer", "harvest_failure", "recall"}]
-    result = run_simulation(years=10, seed=0, config=config)
+    config.categories.enabled = False
+    network = load_firms()
+    for stage in network.stages:
+        stage.firms = [f for f in stage.firms if f.category == "beer" and not f.importer]
+    result = run_simulation(years=10, seed=0, config=config, network=network)
     market_events = [
         (event["year"], event["day"], event["firm"], event["event"])
         for event in result.events

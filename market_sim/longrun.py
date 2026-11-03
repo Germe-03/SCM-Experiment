@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import random
 from typing import TYPE_CHECKING
 
@@ -33,12 +34,15 @@ class LongRun:
         # Fixed draw order: inflation, trend switch, trend choice.
         inflation_roll = self.rng.gauss(cfg.inflation_mean, cfg.inflation_sd)
         switch_choice = self.rng.random()
+        fx_roll = self.rng.gauss(0.0, 1.0)
         if not cfg.enabled:
             return
         inflation = max(cfg.inflation_min, min(cfg.inflation_max, inflation_roll))
         self._inflate(runner, 1 + inflation)
         self._grow_population(runner)
         self._advance_trends(runner, state, switch_choice)
+        self._drift_exchange_rate(runner, fx_roll)
+        runner.env.domestic_daily_demand = runner.demand.mean
         state.events.append({
             "year": state.year, "day": runner.config.simulation.days_per_year, "firm": "",
             "event": "inflation", "details": f"{inflation:.2%}, price index {self.price_index:.3f}",
@@ -104,6 +108,16 @@ class LongRun:
             book.class_volume = {
                 c.name: c.persons * c.units_per_person_per_year / units for c in config.consumers.classes
             }
+
+    def _drift_exchange_rate(self, runner: SimulationRunner, roll: float) -> None:
+        """Phase 4: CHF per EUR follows a mean-reverting random walk around its start."""
+        cats = runner.config.categories
+        if not cats.enabled:
+            return
+        env = runner.env
+        log_fx = math.log(env.fx_rate / cats.fx_start)
+        log_fx = (1 - cats.fx_reversion) * log_fx + cats.fx_sd * roll
+        env.fx_rate = cats.fx_start * math.exp(log_fx)
 
     # -- trends ----------------------------------------------------------
     def _advance_trends(self, runner: SimulationRunner, state: RunState, choice: float) -> None:

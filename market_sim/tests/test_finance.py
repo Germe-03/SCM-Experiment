@@ -2,14 +2,18 @@
 
 import pytest
 
+from market_sim.config import load_market_config
 from market_sim.environment import MarketEnvironment
 from market_sim.models import STAGES, load_firms
 
 
 def _run(days: int = 6) -> MarketEnvironment:
     network = load_firms()
+    # Unit economics of the beer chain; Phase 4 categories have their own tests.
+    config = load_market_config()
+    config.categories.enabled = False
     market = MarketEnvironment(
-        network, horizon=days, consumer_demand_mode="attractiveness_lost",
+        network, config=config, horizon=days, consumer_demand_mode="attractiveness_lost",
         enforce_capacity=True,
     )
     market.reset()

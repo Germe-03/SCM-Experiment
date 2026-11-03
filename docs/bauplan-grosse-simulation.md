@@ -532,3 +532,26 @@ Seed, was angepasst wurde.
   pro Seed über 50 Jahre bei 10 parallelen Läufen. Offen: Die Brauereistufe
   hat im Mittel über die Jahre eine leicht negative Marge (−12 % bis +3 %),
   weil Rohstoffschocks und Engpässe sie am stärksten treffen.
+- **2026-11-03, Phase 4:** Bier, Wein und Spirituosen. Einheiten sind
+  Standardgläser; Wein kostet pro Einheit das 1.6-Fache, Spirituosen das
+  2.2-Fache (Preise, Rohstoffe und Handling). Jede Klasse hat einen festen
+  Gesamtbedarf, aufgeteilt nach Kategorie (reichere Klassen trinken mehr
+  Wein), Trends wie die Weinwelle verschieben die Aufteilung; fehlt eine
+  Kategorie, weichen Kunden aus. Neue Hersteller: 2 Weingüter (Weinlese am
+  Tag 270, Reifung 1–2 Jahre je Marke, Ernte und Jahrgangsqualität wetter-
+  abhängig, Keller zu Beginn gefüllt), 1 Brennerei, 2 Importeure
+  (Fremdpreis × Wechselkurs × Zoll, 10 Tage Lieferzeit). Export: Auslands-
+  nachfrage nach guten Schweizer Marken, stärker bei schwachem Franken.
+  Distributoren kaufen jede Kategorie bei deren Herstellern, Lieferungen
+  folgen dem Kategorienmix des Kunden. Erste Messungen zu bequem (Gewinn
+  19–23 %), weil der Mehrumsatz ohne mehr Personal und Grundkosten getragen
+  wurde. Angepasst: Handel wächst über mehr Personal, Maschinen und
+  Grundkosten (`downstream_capacity_factor: 1.47`), Handling teurer
+  (`handling_cost_factor: 1.53`), Importkosten 0.75. Ergebnis (10 Seeds,
+  50 Jahre): Gewinn 13.4 % des Endkundenumsatzes, Service Level 98.8 %,
+  22.4 Neueintritte und 27.1 Konkurse pro Lauf. Seed 0: Anteile Bier / Wein /
+  Spirituosen rund 70 / 21 / 9 %; Export steigt von 3'200 auf 7'300
+  Einheiten pro Jahr, wenn der Franken von 1.00 auf 1.13 CHF/EUR schwächer
+  wird. Spezialisierung bleibt schwach: Premium-Läden führen nach 20 Jahren
+  31–32 % Wein, Discounter 21 %, Standardläden 24 %; echte Spezialisten
+  bräuchten begrenzten Regalplatz (noch nicht umgesetzt). 150 Tests bestanden.

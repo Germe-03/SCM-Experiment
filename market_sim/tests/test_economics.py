@@ -28,12 +28,15 @@ def test_factory_pays_raw_materials_per_produced_unit() -> None:
     config = load_market_config()
     flat = config.model_copy(update={"commodities": config.commodities.model_copy(
         update={"index_volatility": 0.0})})
+    # Wine is only pressed at harvest; this test covers the daily production path.
+    flat.categories.enabled = False
     env = _env(flat)
     unit_cost = sum(config.commodities.components.values())
     assert env.material_cost_per_unit() == pytest.approx(unit_cost)
     env.step(0, _orders(env, 20))
-    for factory in env.network.firms_in("factory"):
-        assert env.runtimes[factory.id].purchase_cost == pytest.approx(20 * unit_cost)
+    # The two breweries can produce 20 units a day; the small Phase-4 producers cannot.
+    for factory_id in ("factory_01", "factory_02"):
+        assert env.runtimes[factory_id].purchase_cost == pytest.approx(20 * unit_cost)
     # Downstream firms only pay their suppliers, never raw materials.
     assert env.runtimes["retailer_01"].purchase_cost == 0
 

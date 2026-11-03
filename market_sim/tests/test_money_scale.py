@@ -9,8 +9,10 @@ from market_sim.models import load_firms
 
 def test_b2b_shipment_books_scaled_symmetric_trade_value() -> None:
     network = load_firms()
+    config = load_market_config()
+    config.categories.enabled = False  # one price per unit, as before Phase 4
     market = MarketEnvironment(
-        network, horizon=1, consumer_demand_mode="attractiveness_lost"
+        network, config=config, horizon=1, consumer_demand_mode="attractiveness_lost"
     )
     market.reset()
     supplier = network.firm("wholesaler_01")

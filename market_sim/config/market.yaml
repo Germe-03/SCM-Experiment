@@ -4,7 +4,7 @@ market_entry:
   margin_threshold: 0.05
   margin_slope: 2.0
   max_probability: 0.5
-  max_firms_per_stage: {retailer: 14, wholesaler: 9, distributor: 6, factory: 4}
+  max_firms_per_stage: {retailer: 14, wholesaler: 9, distributor: 6, factory: 9}
   start_cash_fraction: 0.5
   start_capacity_fraction: 0.5
   start_reputation: [0.40, 0.50]
@@ -142,7 +142,8 @@ supplier_discovery:
 price:
   base: 4.99
   min: 1.40
-  max: 12.00
+  # Wide enough for wine and spirits (value factor up to 2.2).
+  max: 30.00
 
 # P3 fix: stage-specific bands preserve markup through the supply chain.
 stage_prices:
@@ -275,3 +276,40 @@ long_run:
     - {name: alkoholfrei, trait: alkoholfrei, strength: 0.40}
     - {name: sparwelle, trait: discount, strength: 0.25}
     - {name: tradition, trait: lager, strength: 0.15, age_groups: ["35-64", "65+"]}
+    - {name: wein_boom, trait: wine, strength: 0.30}
+
+# Phase 4: a fixed alcohol need split over beer, wine and spirits (units are standard
+# drinks), wineries with harvest and maturation, a distillery, importers and exports.
+categories:
+  enabled: true
+  categories:
+    - {name: beer, value_factor: 1.0, relative_volume: 1.0, income_tilt: 0.95}
+    - {name: wine, value_factor: 1.6, relative_volume: 0.35, income_tilt: 1.25}
+    - {name: spirits, value_factor: 2.2, relative_volume: 0.12, income_tilt: 1.05}
+  # Consumers switch to another category only when theirs is gone; score x this factor.
+  substitution: 0.5
+  # Retail, wholesale and distribution grow to carry the extra wine and spirits volume.
+  downstream_capacity_factor: 1.47
+  # Calibrated so that system profit stays at 5-15 % of consumer revenue.
+  handling_cost_factor: 1.53
+  retailer_bias:
+    premium: {beer: 0.35, wine: 0.45, spirits: 0.20}
+    low_cost: {beer: 0.80, wine: 0.15, spirits: 0.05}
+    standard: {beer: 0.68, wine: 0.24, spirits: 0.08}
+    reliable: {beer: 0.68, wine: 0.24, spirits: 0.08}
+    growth: {beer: 0.70, wine: 0.20, spirits: 0.10}
+  bias_weight: 0.3
+  harvest_day: 270
+  yield_sd: 0.15
+  vintage_quality_slope: 0.3
+  wine_forecast_buffer: 1.1
+  fx_start: 1.0
+  fx_sd: 0.06
+  fx_reversion: 0.3
+  imports: {cost_factor: 0.75, tariff: 0.05, lead_days: 10}
+  exports:
+    enabled: true
+    share: {beer: 0.04, wine: 0.03, spirits: 0.05}
+    fx_elasticity: 1.5
+    quality_threshold: 0.6
+    world_price_factor: 1.0

@@ -82,9 +82,11 @@ def test_scenario_effects_point_the_right_way(baseline):
     pricier = run_fork(checkpoint, get_scenario("preiserhoehung_brauerei"))
     assert factory_price(pricier) > factory_price(straight)
     weaker = run_fork(checkpoint, get_scenario("nachfrage_einbruch"))
-    assert sum(weaker.annual_reports[-1][firm].revenue for firm in factories) < sum(
-        straight.annual_reports[-1][firm].revenue for firm in factories
-    )
+    # With 20-day years, revenue reacts to prices more than to volume; count bottles bought.
+    last = straight.years
+    def bought(result):
+        return sum(row["bought"] for row in result.class_reports if row["year"] == last)
+    assert bought(weaker) < bought(straight)
 
 
 def test_price_shift_stays_inside_stage_band(baseline):

@@ -155,6 +155,7 @@ class SimulationRunner:
         )
         self._event_rng = random.Random(f"events-{seed}")
         self.long_run = LongRun(self, seed)
+        self._scale_for_categories()
         self._phase1_rng = random.Random(f"phase1-{seed}")
         self._entry_counters = {stage: 0 for stage in STAGES}
         self._entry_cash = {
@@ -213,6 +214,27 @@ class SimulationRunner:
             exits=dict(self.exits), events=list(state.events),
             brand_reports=list(state.brand_reports), class_reports=list(state.class_reports),
         )
+
+    def _scale_for_categories(self) -> None:
+        """Phase 4: wine and spirits add volume; trade stages and demand grow with it."""
+        cats = self.config.categories
+        if not (cats.enabled and cats.categories and self.config.consumer_model == "classes"):
+            return
+        beer = next((c.relative_volume for c in cats.categories if c.name == "beer"), 1.0)
+        self.demand.mean *= sum(c.relative_volume for c in cats.categories) / beer
+        self.env.domestic_daily_demand = self.demand.mean
+        # More staff, machines and rent, not a cheaper unit: wages and fixed costs grow too.
+        factor = cats.downstream_capacity_factor
+        for firm in self._firms():
+            if firm.stage != "factory":
+                firm.capacity = round(firm.capacity * factor)
+                firm.machine_capacity = round(firm.machine_capacity * factor)
+                firm.employees = max(1, round(firm.employees * factor))
+        self.config.costs.handling_cost_per_unit *= cats.handling_cost_factor
+        fixed = self.config.fixed_costs
+        fixed.base_per_day = {
+            stage: value * (factor if stage != "factory" else 1.0) for stage, value in fixed.base_per_day.items()
+        }
 
     def _apply_start_variation(self, rng: random.Random) -> None:
         """Seeded start values: the same seed always yields the same market."""
@@ -558,6 +580,7 @@ class SimulationRunner:
                 "interest_cost": financial_breakdown[firm.id][-1]["interest_cost"],
             })
         if self.env.brand_book is not None:
+            self._last_brand_units = dict(self.env.brand_book.brand_units)
             brand_rows, class_rows = self.env.brand_book.year_end(self.env, self.network, year + 1)
             state.brand_reports.extend(brand_rows)
             state.class_reports.extend(class_rows)
@@ -572,7 +595,8 @@ class SimulationRunner:
         self.long_run.year_end(self, state)
         update = {"market_entries": state.market_entries.get(state.year, 0), "strategy_changes": changes,
                   "price_index": self.long_run.price_index, "population_index": self.long_run.population_index,
-                  "trend": self.long_run.trend,
+                  "trend": self.long_run.trend, "fx_rate": self.env.fx_rate,
+                  **self._category_kpis(),
                   "total_profit": sum(s.profit for s in summaries[-1].values())}
         for stage in STAGES:
             firms = self.network.firms_in(stage)
@@ -581,6 +605,20 @@ class SimulationRunner:
                                          if self.env.runtimes[f.id].active)
             update[f"active_firms_{stage}"] = sum(self.env.runtimes[f.id].active for f in firms)
         system_kpis[-1] = system_kpis[-1].model_copy(update=update)
+
+    def _category_kpis(self) -> dict[str, float]:
+        """Export volume and consumer shares per category of the finished year."""
+        book = self.env.brand_book
+        if book is None or not book.categories_on:
+            return {}
+        units = getattr(self, "_last_brand_units", {})
+        total = sum(units.values()) or 1
+        shares = {c: 0.0 for c in book.base_share}
+        for brand_id, sold in units.items():
+            shares[book.brands[brand_id].category] = shares.get(book.brands[brand_id].category, 0.0) + sold / total
+        exported = book.export_units
+        book.export_units = 0
+        return {"export_units": exported, **{f"share_{c}": v for c, v in shares.items() if c in ("beer", "wine", "spirits")}}
 
     def _enter_market(self, state: RunState) -> None:
         """Draw exactly three numbers per stage, including disabled/full stages."""

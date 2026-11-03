@@ -54,6 +54,10 @@ class Brand:
     positioning: str
     reputation: float
     traits: list[str] = field(default_factory=list)
+    category: str = "beer"
+    maturation_days: int = 0
+    # Phase 4: quality bonus or malus of the vintage currently on sale (wine).
+    vintage_bonus: float = 0.0
 
 
 @dataclass
@@ -78,6 +82,7 @@ class BrandBook:
             self.brands[item.id] = Brand(
                 item.id, item.name, item.owner, item.positioning,
                 owner.reputation if owner else 0.5, list(item.traits),
+                item.category, item.maturation_days,
             )
         for firm in firms:
             if firm.stage == "factory" and not self.brands_of(firm.id):
@@ -92,6 +97,16 @@ class BrandBook:
         # Phase 3: active trends as (trait, score boost, age groups; empty = all).
         self.trend_boosts: list[tuple[str, float, set[str]]] = []
         self.entrant_trait: str | None = None
+        # Phase 4: categories with value factors and a fixed total need.
+        cats = config.categories
+        self.categories_on = cats.enabled and bool(cats.categories)
+        self.cat_cfg = cats
+        self.value = {c.name: c.value_factor for c in cats.categories} if self.categories_on else {}
+        total_volume = sum(c.relative_volume for c in cats.categories) or 1.0
+        self.base_share = {c.name: c.relative_volume / total_volume for c in cats.categories}
+        self.global_weight = dict(self.base_share)
+        self.retail_weight: dict[str, dict[str, float]] = {}
+        self.export_units = 0
         self.reset_year()
 
     # -- brand registry -------------------------------------------------
@@ -102,11 +117,17 @@ class BrandBook:
         """Give a new brewery its own brand, positioned by its archetype."""
         brand_id = f"{firm.id}_brand"
         positioning = self.cfg.entrant_positioning.get(firm.archetype, "standard")
-        traits = list(self.cfg.entrant_traits.get(firm.archetype, ["lager"]))
+        if firm.category == "beer":
+            traits = list(self.cfg.entrant_traits.get(firm.archetype, ["lager"]))
+        else:
+            traits = [firm.category]
         trend_trait = getattr(self, "entrant_trait", None)
-        if trend_trait and trend_trait not in traits:
+        categories = getattr(self, "value", {})
+        if trend_trait and trend_trait not in traits and firm.category == "beer" and trend_trait not in categories:
             traits.append(trend_trait)
-        self.brands[brand_id] = Brand(brand_id, firm.name, firm.id, positioning, firm.reputation, traits)
+        maturation = 365 if firm.category == "wine" and not firm.importer else 0
+        self.brands[brand_id] = Brand(brand_id, firm.name, firm.id, positioning, firm.reputation, traits,
+                                      firm.category, maturation)
         if hasattr(self, "production_share"):
             self.production_share[brand_id] = 1.0
         return brand_id
@@ -114,10 +135,70 @@ class BrandBook:
     def quality(self, brand: Brand, env: MarketEnvironment) -> float:
         owner = env.runtimes.get(brand.owner)
         base = owner.quality_level if owner is not None else 0.5
-        return max(0.0, min(1.0, base + self.cfg.quality_offsets.get(brand.positioning, 0.0)))
+        offset = self.cfg.quality_offsets.get(brand.positioning, 0.0) + brand.vintage_bonus
+        return max(0.0, min(1.0, base + offset))
+
+    def value_factor(self, brand_id: str) -> float:
+        return self.value.get(self.brands[brand_id].category, 1.0) if self.value else 1.0
+
+    def category_value(self, category: str) -> float:
+        return self.value.get(category, 1.0) if self.value else 1.0
 
     def retail_price(self, sell_price: float, brand: Brand) -> float:
-        return sell_price * self.cfg.price_factors.get(brand.positioning, 1.0)
+        return sell_price * self.cfg.price_factors.get(brand.positioning, 1.0) * self.category_value(brand.category)
+
+    def parcel_value(self, parcel: dict[str, int], price: float) -> float:
+        """Units of a mixed shipment times price, weighted by each brand's category."""
+        return sum(units * price * self.value_factor(b) for b, units in parcel.items())
+
+    # -- category weights ----------------------------------------------
+    def class_shares(self, cls, boosts: dict[str, float]) -> dict[str, float]:
+        """Category split of a class: base share, income tilt and trends (fixed total need)."""
+        level = (cls.income_level or 3) - 3
+        raw = {}
+        for c in self.cat_cfg.categories:
+            raw[c.name] = self.base_share[c.name] * c.income_tilt ** level * (1 + boosts.get(c.name, 0.0))
+        total = sum(raw.values()) or 1.0
+        return {k: v / total for k, v in raw.items()}
+
+    def customer_weights(self, firm: Firm) -> dict[str, float]:
+        if firm.stage != "retailer":
+            return self.global_weight
+        own = self.retail_weight.get(firm.id, self.global_weight)
+        bias = self.cat_cfg.retailer_bias.get(firm.archetype)
+        if not bias:
+            return own
+        bw = self.cat_cfg.bias_weight
+        return {c: (1 - bw) * own.get(c, 0.0) + bw * bias.get(c, 0.0) for c in self.base_share}
+
+    def take_for(self, customer: Firm | None, stock: dict[str, int], quantity: int) -> dict[str, int]:
+        """Ship from a mixed stock; the customer's category mix decides what it gets."""
+        if not self.categories_on or customer is None:
+            return take_from_stock(stock, quantity)
+        weights = self.customer_weights(customer)
+        by_cat: dict[str, int] = {}
+        for b, units in stock.items():
+            if units > 0:
+                c = self.brands[b].category
+                by_cat[c] = by_cat.get(c, 0) + units
+        remaining = min(quantity, sum(by_cat.values()))
+        alloc = {c: 0 for c in by_cat}
+        while remaining > 0:
+            open_cats = {c: max(1e-6, weights.get(c, 0.0)) for c in by_cat if alloc[c] < by_cat[c]}
+            if not open_cats:
+                break
+            for c, units in largest_remainder(remaining, open_cats).items():
+                units = min(units, by_cat[c] - alloc[c])
+                alloc[c] += units
+                remaining -= units
+        parcel: dict[str, int] = {}
+        for c, units in alloc.items():
+            if units:
+                sub = {b: v for b, v in stock.items() if v > 0 and self.brands[b].category == c}
+                for b, got in take_from_stock(sub, units).items():
+                    stock[b] -= got
+                    parcel[b] = got
+        return parcel
 
     # -- flows ----------------------------------------------------------
     def initial_stock(self, firm: Firm, inventory: int) -> dict[str, int]:
@@ -153,7 +234,7 @@ class BrandBook:
             brand.reputation += self.cfg.reputation_speed * (target - brand.reputation)
             brand_rows.append({
                 "year": year, "brand": brand_id, "name": brand.name, "owner": brand.owner,
-                "positioning": brand.positioning, "owner_active": owner_active,
+                "positioning": brand.positioning, "category": brand.category, "owner_active": owner_active,
                 "units_sold": self.brand_units.get(brand_id, 0),
                 "revenue": self.brand_revenue.get(brand_id, 0.0),
                 "market_share": self.brand_units.get(brand_id, 0) / total_units,
@@ -212,9 +293,11 @@ class BrandBook:
             for brand_id in sorted(carried):
                 brand = self.brands[brand_id]
                 price = env._market_price(self.retail_price(firm.sell_price, brand))
+                # Price score and willingness to pay compare the price per beer-equivalent.
+                norm = price / self.category_value(brand.category)
                 pairs[(firm.id, brand_id)] = (
-                    price, env._consumer_price_score(price), quality[brand_id],
-                    brand.reputation, firm.reputation, availability,
+                    norm, env._consumer_price_score(norm), quality[brand_id],
+                    brand.reputation, firm.reputation, availability, price, brand.category,
                 )
         # Trend multipliers per age group and brand, fixed for the day.
         trend_mult: dict[str | None, dict[str, float]] = {}
@@ -225,6 +308,14 @@ class BrandBook:
                                if trait in brand.traits and (not ages or age in ages))
                     for b, brand in self.brands.items()
                 }
+        cat_boost: dict[str | None, dict[str, float]] = {}
+        if self.categories_on:
+            for age in {self.classes[n].age_group for n in self.class_names}:
+                cat_boost[age] = {c: sum(boost for trait, boost, ages in self.trend_boosts
+                                         if trait == c and (not ages or age in ages)) for c in self.base_share}
+        class_cats = {n: self.class_shares(self.classes[n], cat_boost.get(self.classes[n].age_group, {}))
+                      for n in self.class_names} if self.categories_on else {}
+        sub = self.cat_cfg.substitution
         unmet = dict(demand_by_class)
         for round_index in range(4):
             # Fractional wants per class; small classes would otherwise always round
@@ -238,24 +329,47 @@ class BrandBook:
                 w = cls.weights
                 mult = trend_mult.get(cls.age_group)
                 scores = {}
-                for key, (price, p_score, q, brand_rep, store_rep, avail) in pairs.items():
+                for key, (price, p_score, q, brand_rep, store_rep, avail, _, cat) in pairs.items():
                     if price > cls.max_price * (1 + slope * (brand_rep - 0.5)):
                         continue
                     score = (w.price * p_score + w.quality * q + w.brand_reputation * brand_rep
                              + w.store_reputation * store_rep + w.availability * avail)
                     scores[key] = score * mult[key[1]] if mult else score
-                total_score = sum(scores.values())
-                if total_score > 0:
-                    wants[name] = {key: units * value / total_score for key, value in scores.items()}
+                if not self.categories_on:
+                    total_score = sum(scores.values())
+                    if total_score > 0:
+                        wants[name] = {key: units * value / total_score for key, value in scores.items()}
+                    continue
+                shares = class_cats[name]
+                if round_index == 0:
+                    # Fixed need per category; a category without any offer waits for the spill rounds.
+                    by_cat: dict[str, float] = {}
+                    for key, value in scores.items():
+                        by_cat[pairs[key][7]] = by_cat.get(pairs[key][7], 0.0) + value
+                    wants[name] = {key: units * shares[pairs[key][7]] * value / by_cat[pairs[key][7]]
+                                   for key, value in scores.items() if by_cat[pairs[key][7]] > 0}
+                else:
+                    weighted = {key: value * (sub + (1 - sub) * shares[pairs[key][7]]) for key, value in scores.items()}
+                    total_score = sum(weighted.values())
+                    if total_score > 0:
+                        wants[name] = {key: units * value / total_score for key, value in weighted.items()}
             pair_float: dict[tuple[str, str], float] = {}
             for shares in wants.values():
                 for key, units in shares.items():
                     pair_float[key] = pair_float.get(key, 0.0) + units
             per_pair = largest_remainder(round(sum(pair_float.values())), pair_float)
             if round_index == 0:
+                cat_total: dict[str, float] = {}
+                cat_retail: dict[str, dict[str, float]] = {}
                 for (firm_id, brand_id), units in per_pair.items():
                     requested[firm_id] += units
                     self.brand_wanted[brand_id] = self.brand_wanted.get(brand_id, 0) + units
+                    c = self.brands[brand_id].category
+                    cat_total[c] = cat_total.get(c, 0.0) + units
+                    store = cat_retail.setdefault(firm_id, {})
+                    store[c] = store.get(c, 0.0) + units
+                if self.categories_on:
+                    self._update_weights(cat_total, cat_retail)
             served = self._serve(env, per_pair, capacity, sold)
             for key, units in served.items():
                 if not units:
@@ -266,7 +380,7 @@ class BrandBook:
                     if got:
                         unmet[name] -= got
                         self.class_stats[name].bought += got
-                        self.class_stats[name].spend += got * pairs[key][0]
+                        self.class_stats[name].spend += got * pairs[key][6]
             pairs = {key: value for key, value in pairs.items()
                      if env.runtimes[key[0]].stock.get(key[1], 0) > 0 and sold[key[0]] < capacity[key[0]]}
             if not pairs or not any(unmet.values()):
@@ -274,6 +388,20 @@ class BrandBook:
         for name, units in demand_by_class.items():
             self.class_stats[name].demand += units
         return requested, sold, max(0, total_demand - sum(sold.values()))
+
+    def _update_weights(self, cat_total, cat_retail, alpha: float = 0.02) -> None:
+        """Slowly follow what consumers ask for, market-wide and per store."""
+        total = sum(cat_total.values())
+        if total:
+            self.global_weight = {c: (1 - alpha) * self.global_weight.get(c, 0.0) + alpha * cat_total.get(c, 0.0) / total
+                                  for c in self.base_share}
+        for firm_id, wanted in cat_retail.items():
+            subtotal = sum(wanted.values())
+            if not subtotal:
+                continue
+            old = self.retail_weight.get(firm_id, self.global_weight)
+            self.retail_weight[firm_id] = {c: (1 - alpha) * old.get(c, 0.0) + alpha * wanted.get(c, 0.0) / subtotal
+                                           for c in self.base_share}
 
     def _serve(self, env, per_pair, capacity, sold) -> dict[tuple[str, str], int]:
         """Book sales limited by brand stock and remaining retailer capacity."""
@@ -299,7 +427,7 @@ class BrandBook:
                 sold[firm_id] += units
                 value = env._trade_value(units, price)
                 runtime.revenue += value
-                runtime.handling_cost += units * env.config.costs.handling_cost_per_unit
+                runtime.handling_cost += units * env.config.costs.handling_cost_per_unit * self.value_factor(key[1])
                 self.brand_units[key[1]] = self.brand_units.get(key[1], 0) + units
                 self.brand_revenue[key[1]] = self.brand_revenue.get(key[1], 0.0) + value
                 served[key] = units

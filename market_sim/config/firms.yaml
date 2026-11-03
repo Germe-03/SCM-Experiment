@@ -425,3 +425,113 @@ firms:
     supplier_priority: capacity
     suppliers: []
     machine_capacity: 12
+  - id: winery_01
+    name: "Domaine Lavaux SA"
+    stage: factory
+    archetype: premium
+    cash: 2600000
+    inventory: 9000
+    backlog: 0
+    sell_price: 2.55
+    quality_level: 0.88
+    reputation: 0.84
+    reliability: 0.88
+    capacity: 18
+    employees: 2
+    wage_level: 5300
+    productivity_per_employee: 8.0
+    r_and_d_level: 0.40
+    r_and_d_budget: 60000
+    supplier_priority: quality
+    suppliers: []
+    machine_capacity: 4
+    category: wine
+    importer: false
+  - id: winery_02
+    name: "Walliser Kellerei AG"
+    stage: factory
+    archetype: standard
+    cash: 2400000
+    inventory: 8500
+    backlog: 0
+    sell_price: 2.4
+    quality_level: 0.74
+    reputation: 0.74
+    reliability: 0.84
+    capacity: 20
+    employees: 2
+    wage_level: 5300
+    productivity_per_employee: 8.0
+    r_and_d_level: 0.40
+    r_and_d_budget: 60000
+    supplier_priority: reliability
+    suppliers: []
+    machine_capacity: 4
+    category: wine
+    importer: false
+  - id: distillery_01
+    name: "Brennerei Alpenrose AG"
+    stage: factory
+    archetype: standard
+    cash: 2000000
+    inventory: 600
+    backlog: 0
+    sell_price: 2.45
+    quality_level: 0.78
+    reputation: 0.76
+    reliability: 0.86
+    capacity: 14
+    employees: 1
+    wage_level: 5300
+    productivity_per_employee: 10.0
+    r_and_d_level: 0.40
+    r_and_d_budget: 60000
+    supplier_priority: reliability
+    suppliers: []
+    machine_capacity: 4
+    category: spirits
+    importer: false
+  - id: importer_01
+    name: "Euro Getränkeimport AG"
+    stage: factory
+    archetype: low_cost
+    cash: 1800000
+    inventory: 500
+    backlog: 0
+    sell_price: 2.2
+    quality_level: 0.66
+    reputation: 0.62
+    reliability: 0.8
+    capacity: 30
+    employees: 1
+    wage_level: 5300
+    productivity_per_employee: 20.0
+    r_and_d_level: 0.40
+    r_and_d_budget: 60000
+    supplier_priority: price
+    suppliers: []
+    machine_capacity: 10
+    category: beer
+    importer: true
+  - id: importer_02
+    name: "Vino Import GmbH"
+    stage: factory
+    archetype: low_cost
+    cash: 1800000
+    inventory: 600
+    backlog: 0
+    sell_price: 2.25
+    quality_level: 0.68
+    reputation: 0.64
+    reliability: 0.8
+    capacity: 20
+    employees: 1
+    wage_level: 5300
+    productivity_per_employee: 14.0
+    r_and_d_level: 0.40
+    r_and_d_budget: 60000
+    supplier_priority: price
+    suppliers: []
+    machine_capacity: 6
+    category: wine
+    importer: true

@@ -45,6 +45,9 @@ class Firm(NetworkModel):
     overtime_level: float = 0.0
     machine_capacity: int = Field(default=0, ge=0)
     turnover_rate: float = 0.0
+    # Phase 4: product category of a producer and whether it imports instead of brewing.
+    category: str = "beer"
+    importer: bool = False
 
     @model_validator(mode="after")
     def _capture_initial_economic_anchors(self) -> Self:

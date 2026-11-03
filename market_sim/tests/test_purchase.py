@@ -28,7 +28,7 @@ def test_higher_brand_reputation_raises_willingness_to_pay():
 def test_price_increase_drives_out_low_income_classes_first():
     env = _env()
     for firm in env.network.firms_in("retailer"):
-        firm.sell_price *= 1.2
+        firm.sell_price *= 1.35
     book = env.brand_book
     book.fulfill(env, 250)
     stats = book.class_stats

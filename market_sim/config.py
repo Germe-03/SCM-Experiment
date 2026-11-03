@@ -395,6 +395,7 @@ class ConsumerClass(ConfigModel):
     units_per_person_per_year: float = Field(gt=0)
     max_price: float = Field(gt=0)
     age_group: str | None = None
+    income_level: int | None = None
     weights: ConsumerWeights
 
 
@@ -417,6 +418,9 @@ class BrandDefinition(ConfigModel):
     owner: str
     positioning: Literal["premium", "standard", "cheap"]
     traits: list[str] = Field(default_factory=list)
+    # Phase 4: category and maturation time (wine) of the brand.
+    category: str = "beer"
+    maturation_days: int = Field(default=0, ge=0)
 
 
 class BrandsConfig(ConfigModel):
@@ -431,6 +435,53 @@ class BrandsConfig(ConfigModel):
     # Phase 3: trait of a new brewery's brand by archetype (it also adopts the current trend).
     entrant_traits: dict[str, list[str]] = Field(default_factory=dict)
     brands: list[BrandDefinition]
+
+
+class CategoryConfig(ConfigModel):
+    name: str
+    # Price and cost level of one unit relative to beer (all units are standard drinks).
+    value_factor: float = Field(gt=0)
+    # Consumption relative to beer; beer is 1.0.
+    relative_volume: float = Field(gt=0)
+    # Share multiplier per income level above the middle (wine rises with income).
+    income_tilt: float = Field(default=1.0, gt=0)
+
+
+class ImportConfig(ConfigModel):
+    cost_factor: float = Field(default=0.85, gt=0)
+    tariff: float = Field(default=0.05, ge=0)
+    lead_days: int = Field(default=10, ge=1)
+
+
+class ExportConfig(ConfigModel):
+    enabled: bool = True
+    # Foreign demand per day as a share of domestic demand of that category.
+    share: dict[str, float] = Field(default_factory=dict)
+    fx_elasticity: float = Field(default=1.5, ge=0)
+    quality_threshold: float = Field(default=0.6, ge=0, le=1)
+    world_price_factor: float = Field(default=1.0, gt=0)
+
+
+class CategoriesConfig(ConfigModel):
+    """Phase 4: beer, wine and spirits with a fixed total need, imports and exports."""
+
+    enabled: bool = False
+    categories: list[CategoryConfig] = Field(default_factory=list)
+    substitution: float = Field(default=0.5, ge=0, le=1)
+    downstream_capacity_factor: float = Field(default=1.0, gt=0)
+    # Handling of a mixed beverage range costs more per unit than pure beer.
+    handling_cost_factor: float = Field(default=1.0, gt=0)
+    retailer_bias: dict[str, dict[str, float]] = Field(default_factory=dict)
+    bias_weight: float = Field(default=0.3, ge=0, le=1)
+    harvest_day: int = Field(default=270, ge=0)
+    yield_sd: float = Field(default=0.15, ge=0)
+    vintage_quality_slope: float = Field(default=0.3, ge=0)
+    wine_forecast_buffer: float = Field(default=1.1, gt=0)
+    fx_start: float = Field(default=1.0, gt=0)
+    fx_sd: float = Field(default=0.06, ge=0)
+    fx_reversion: float = Field(default=0.3, ge=0, le=1)
+    imports: ImportConfig = Field(default_factory=ImportConfig)
+    exports: ExportConfig = Field(default_factory=ExportConfig)
 
 
 class TrendConfig(ConfigModel):
@@ -487,6 +538,7 @@ class MarketConfig(ConfigModel):
     consumers: ConsumersConfig | None = None
     brands: BrandsConfig | None = None
     long_run: LongRunConfig = Field(default_factory=LongRunConfig)
+    categories: CategoriesConfig = Field(default_factory=CategoriesConfig)
 
     @model_validator(mode="after")
     def _validate_stage_prices(self) -> Self:
