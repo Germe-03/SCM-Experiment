@@ -86,7 +86,7 @@ costs:
 # Rent, vehicles and machines, real CHF per day; grows with capacity.
 fixed_costs:
   base_per_day: {factory: 55000.0, distributor: 12000.0, wholesaler: 12000.0, retailer: 18000.0}
-  per_capacity_unit_per_day: {factory: 1820.0, distributor: 3700.0, wholesaler: 3900.0, retailer: 3300.0}
+  per_capacity_unit_per_day: {factory: 1820.0, distributor: 3700.0, wholesaler: 3500.0, retailer: 3300.0}
 
 # Raw materials per produced sim-unit (real CHF); each index fluctuates over time.
 commodities:
