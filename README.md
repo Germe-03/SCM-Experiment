@@ -44,6 +44,46 @@ Tick-Mechanik der Engine wurde nachgebaut und per Paritätstest gegen die
 Referenz geprüft. Die Herleitung steht in
 [`docs/market-extension-plan.md`](docs/market-extension-plan.md).
 
+### Stand: eine grosse Simulation (Phasen 0–7)
+
+Statt einzelner Szenarien läuft jetzt ein langer Lauf über 50 Jahre, in dem
+der Markt von selbst lebt. Bauplan, Begründungen und Messwerte jeder Phase
+stehen in [`docs/bauplan-grosse-simulation.md`](docs/bauplan-grosse-simulation.md).
+
+- **Lebendiger Markt:** Neueintritte, Bank mit Zins und Kreditlimite,
+  Sanierung statt Zombie-Firmen, Strategiewechsel durch Ausprobieren und
+  Nachahmen, Stornierung blockierter Bestellungen.
+- **Kunden und Marken:** 30 Kundenklassen (Einkommen × Alter ×
+  Trinkverhalten) mit Höchstpreis; Marken tragen ihre eigene Reputation.
+- **Lange Zeit:** Teuerung, Löhne, Produktivität, alternde Bevölkerung,
+  Trends; Rezession, Rohstoffknappheit, Kostenschock und Lohnschub treten
+  zufällig auf.
+- **Getränke und Ausland:** Bier, Wein (Weinlese, Reifung, Jahrgang) und
+  Spirituosen mit festem Gesamtbedarf, Importeure mit Wechselkurs und Zoll,
+  Export.
+- **Orte und Logistik:** acht Regionen, Transportkosten, eigene Flotte oder
+  Transportdienst, Ausbau und neue Standorte mit Bauzeit und Abschreibung.
+- **Staat:** Gewinnsteuer, Straftaten mit versteckten Bussen, die die Firmen
+  erst lernen müssen, Vergiftungsskandal mit Angst, Übernahmen und
+  Wettbewerbsbehörde (Verbot, Zerschlagung).
+- **F&E-Projekte:** teuer, langsam, unsicher; Ergebnisse sind mehr
+  Produktivität, tiefere Rohstoffkosten oder neue Marken (auch alkoholfrei).
+
+Zusätzliche Ausgaben eines Laufs: `brand_report.csv`, `class_report.csv`,
+`rnd_projects.csv`. Jede Erweiterung lässt sich in `config/market.yaml` mit
+`enabled: false` abschalten; `consumer_model: segments` bringt das alte
+Nachfragemodell zurück.
+
+**TODO:**
+
+- Bericht mit lokalem LLM (Ollama): Fakten in Python berechnen, Text vom
+  Modell schreiben lassen, jede Zahl gegen die Fakten prüfen (Bauplan,
+  Phase 7b).
+- Zigaretten als eigene Kategorie mit Sucht und Regulierung (Idee 15).
+- Begrenzter Regalplatz, damit Läden sich stärker spezialisieren.
+- Bestellungen pro Marke statt Gesamtmengen.
+- Lieferzeit abhängig von der Distanz (heute nur in der Lieferantenwahl).
+
 ### Modell in Kürze
 
 - **Netzwerk:** 10 Retailer → 6 Wholesaler → 4 Distributoren → 2 Brauereien
@@ -344,8 +384,6 @@ Jahre 6 bis 10.
 - Die Ergebnisse in `runs/` stammen von älteren Ständen und sollten neu
   gerechnet werden. Alte Speicherstände sind nicht mehr kompatibel
   (Checkpoint-Version 2).
-- Markteintritte neuer Firmen (bei dauerhaft hoher Marge einer Stufe) sind
-  noch nicht umgesetzt; die Kennzahl `market_entries` bleibt 0.
 - Die Koeffizienten für Löhne, F&E und Handlingkosten sind Schätzungen und
   noch nicht an echten Branchendaten kalibriert.
 - Rohstoffe haben jetzt Kosten und einen schwankenden Preisindex. Ein

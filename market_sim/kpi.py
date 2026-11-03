@@ -94,6 +94,11 @@ class SystemKPIs(BaseModel):
     takeovers: int = 0
     takeovers_blocked: int = 0
     breakups: int = 0
+    rnd_started: int = 0
+    rnd_successes: int = 0
+    rnd_failures: int = 0
+    rnd_project_spend: float = 0.0
+    rnd_running: int = 0
     interest_cost_retailer: float = 0.0
     interest_cost_wholesaler: float = 0.0
     interest_cost_distributor: float = 0.0

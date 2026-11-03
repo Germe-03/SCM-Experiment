@@ -72,6 +72,7 @@ def ten_year_results():
         feature.enabled = False
     config.consumer_model = "segments"
     config.state.enabled = False
+    config.research.enabled = False
     config.policy.max_backlog_days = None
 
     def beer_network():

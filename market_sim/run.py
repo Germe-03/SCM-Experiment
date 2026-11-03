@@ -136,7 +136,8 @@ def write_outputs(result: RunResult, out_dir: str | Path) -> list[Path]:
         writer.writerows(sorted(result.events, key=lambda event: (event["year"], event["day"])))
     paths = [annual_path, system_path, ranking_path, events_path]
     # Phase 2: brand and consumer-class reports exist only in the classes model.
-    for name, rows in (("brand_report.csv", result.brand_reports), ("class_report.csv", result.class_reports)):
+    for name, rows in (("brand_report.csv", result.brand_reports), ("class_report.csv", result.class_reports),
+                       ("rnd_projects.csv", result.rnd_reports)):
         if rows:
             path = directory / name
             with path.open("w", newline="", encoding="utf-8") as output:

@@ -268,6 +268,9 @@ class MarketEnvironment:
         self.fx_rate = self.config.categories.fx_start
         # Phase 6: producers cutting corners on ingredients pay less per unit.
         self.firm_material_factor: dict[str, float] = {}
+        # Phase 7: lasting savings from successful research projects.
+        self.process_cost_factor: dict[str, float] = {}
+        self.research = None
         self._wine_rng = random.Random(f"wine-{self.seed}")
         self.domestic_daily_demand = float(self.config.demand.daily_demand_units)
         self.runtimes = {}
@@ -523,6 +526,8 @@ class MarketEnvironment:
 
         if self.geography is not None:
             self.geography.daily(self)
+        if self.research is not None:
+            self.research.daily(self)
 
         # 6-7. Accumulate costs and advance time.
         for firm_id in sorted(self.runtimes):
@@ -608,7 +613,8 @@ class MarketEnvironment:
 
     def unit_production_cost(self, firm: Firm) -> float:
         """Raw materials per unit; imports pay the foreign price, exchange rate and tariff."""
-        cost = self.material_cost_per_unit() * self.firm_material_factor.get(firm.id, 1.0)
+        cost = (self.material_cost_per_unit() * self.firm_material_factor.get(firm.id, 1.0)
+                * self.process_cost_factor.get(firm.id, 1.0))
         book = self.brand_book
         if book is None or not book.categories_on:
             return cost

@@ -12,7 +12,7 @@ import pickle
 
 from market_sim.runner import RunState, SimulationRunner
 
-CHECKPOINT_VERSION = 9
+CHECKPOINT_VERSION = 10
 
 
 def checkpoint_path(directory: str | Path, year: int) -> Path:

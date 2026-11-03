@@ -76,4 +76,5 @@ def build_dashboard_data(
         "ranking": ranking,
         "brands": list(result.brand_reports),
         "classes": list(result.class_reports),
+        "rnd": list(result.rnd_reports),
     }

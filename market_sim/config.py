@@ -562,6 +562,28 @@ class StateConfig(ConfigModel):
     breakup_fraction: float = Field(default=0.3, gt=0, lt=1)
 
 
+class ResearchProjectConfig(ConfigModel):
+    name: str
+    # productivity: more output per employee; cost_reduction: cheaper raw materials;
+    # new_brand: a premium brand; alkoholfrei: an alcohol-free beer brand.
+    kind: Literal["productivity", "cost_reduction", "new_brand", "alkoholfrei"]
+    cost: float = Field(gt=0)
+    duration_days: int = Field(gt=0)
+    success_probability: float = Field(ge=0, le=1)
+    effect: float = Field(default=0.0, ge=0)
+    stages: list[str] = Field(default_factory=lambda: ["retailer", "wholesaler", "distributor", "factory"])
+
+
+class ResearchConfig(ConfigModel):
+    """Phase 7: expensive research projects with an uncertain outcome."""
+
+    enabled: bool = False
+    start_probability: float = Field(default=0.3, ge=0, le=1)
+    cash_cover: float = Field(default=3.0, ge=0)
+    projects: list[ResearchProjectConfig] = Field(default_factory=list)
+    preferences: dict[str, list[str]] = Field(default_factory=dict)
+
+
 class TrendConfig(ConfigModel):
     name: str
     trait: str
@@ -619,6 +641,7 @@ class MarketConfig(ConfigModel):
     categories: CategoriesConfig = Field(default_factory=CategoriesConfig)
     geography: GeographyConfig = Field(default_factory=GeographyConfig)
     state: StateConfig = Field(default_factory=StateConfig)
+    research: ResearchConfig = Field(default_factory=ResearchConfig)
 
     @model_validator(mode="after")
     def _validate_stage_prices(self) -> Self:

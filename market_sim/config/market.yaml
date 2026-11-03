@@ -377,3 +377,21 @@ state:
   block_share: 0.35
   breakup_share: 0.5
   breakup_fraction: 0.3
+
+# Phase 7: research projects. Expensive, slow and uncertain; firms pick projects that
+# fit their archetype. The yearly R&D budget (rnd block) keeps working as before.
+research:
+  enabled: true
+  start_probability: 0.30
+  cash_cover: 3.0
+  projects:
+    - {name: prozessautomation, kind: productivity, cost: 60000000, duration_days: 540, success_probability: 0.6, effect: 0.15}
+    - {name: rezeptur_optimierung, kind: cost_reduction, cost: 50000000, duration_days: 365, success_probability: 0.5, effect: 0.08, stages: [factory]}
+    - {name: neue_marke, kind: new_brand, cost: 80000000, duration_days: 730, success_probability: 0.4, effect: 0.10, stages: [factory]}
+    - {name: alkoholfreies_bier, kind: alkoholfrei, cost: 70000000, duration_days: 540, success_probability: 0.5, stages: [factory]}
+  preferences:
+    premium: [neue_marke, alkoholfreies_bier]
+    low_cost: [rezeptur_optimierung, prozessautomation]
+    growth: [prozessautomation, alkoholfreies_bier]
+    standard: [prozessautomation, rezeptur_optimierung]
+    reliable: [prozessautomation]

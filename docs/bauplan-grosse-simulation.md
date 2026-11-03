@@ -395,6 +395,9 @@ stattfinden und die Wettbewerbsbehörde mindestens einmal eingreift.
 
 ### 7b. Bericht mit lokalem LLM (Idee 8)
 
+> **TODO (2026-11-03):** Auf Wunsch von David nicht umgesetzt; der Plan unten bleibt
+> die Vorlage für später.
+
 - Neues Modul `market_sim/report.py` und Schalter `--report` in `run.py`.
 - Python rechnet zuerst die Fakten aus (grösste Änderungen, Konkurse,
   Übernahmen, Trends, Skandale) und gibt sie als kompaktes JSON weiter.
@@ -609,3 +612,15 @@ Seed, was angepasst wurde.
   Übernahmen, 75–172 verbotene Übernahmen und 3–9 Zerschlagungen.
   161 Tests bestanden. Zigaretten (Idee 15) sind nicht gebaut und bleiben
   ein TODO.
+- **2026-11-03, Phase 7:** F&E-Projekte zusätzlich zum bisherigen
+  F&E-Budget: Prozessautomation (+15 % Produktivität, 60 Mio., 1.5 Jahre,
+  60 % Erfolg), Rezeptur-Optimierung (−8 % Rohstoffkosten, nur Hersteller),
+  neue Premium-Marke und alkoholfreies Bier (neue Marke mit diesem Merkmal,
+  passt zum Trend). Firmen wählen passend zum Archetyp, brauchen Gewinn und
+  die dreifache Kassendeckung; Kosten laufen täglich während des Projekts.
+  Neue Dashboard-Ansicht «Forschung und Entwicklung» und Datei
+  `rnd_projects.csv`. Ergebnis (10 Seeds, 50 Jahre): Gewinn 12.0 % des
+  Endkundenumsatzes (5.6–15.7 %), Service Level 98.3 % (alle Seeds über
+  96 %), 36.7 Eintritte und 18.8 Konkurse pro Lauf, 108–170 Projekte pro
+  Lauf, davon 52–87 erfolgreich. 166 Tests bestanden. Der Bericht mit
+  lokalem LLM (7b) ist nicht gebaut und als TODO festgehalten.

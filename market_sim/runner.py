@@ -10,6 +10,7 @@ from typing import Callable
 
 from market_sim.longrun import LongRun
 from market_sim.state import StateActor
+from market_sim.research import ResearchLab
 from market_sim.config import MarketConfig, MarketEventTypeConfig
 from market_sim.environment import MarketEnvironment, MarketResult
 from market_sim.kpi import (
@@ -52,6 +53,7 @@ class RunResult:
     events: list[dict[str, object]] = field(default_factory=list)
     brand_reports: list[dict[str, object]] = field(default_factory=list)
     class_reports: list[dict[str, object]] = field(default_factory=list)
+    rnd_reports: list[dict[str, object]] = field(default_factory=list)
 
 
 @dataclass
@@ -158,6 +160,7 @@ class SimulationRunner:
         self.long_run = LongRun(self, seed)
         self._scale_for_categories()
         self.state_actor = StateActor(self, seed) if config.state.enabled else None
+        self.lab = ResearchLab(self, seed) if config.research.enabled else None
         self._phase1_rng = random.Random(f"phase1-{seed}")
         self._entry_counters = {stage: 0 for stage in STAGES}
         self._entry_cash = {
@@ -177,6 +180,7 @@ class SimulationRunner:
     def start(self) -> RunState:
         """Reset the market and return the empty cross-year loop state."""
         self.env.reset()
+        self.env.research = self.lab
         self.exits = {}
         return RunState(
             daily_series={
@@ -215,6 +219,7 @@ class SimulationRunner:
             financial_breakdown=state.financial_breakdown,
             exits=dict(self.exits), events=list(state.events),
             brand_reports=list(state.brand_reports), class_reports=list(state.class_reports),
+            rnd_reports=list(self.lab.reports) if self.lab is not None else [],
         )
 
     def _scale_for_categories(self) -> None:
@@ -603,10 +608,12 @@ class SimulationRunner:
         if self.state_actor is not None:
             self.state_actor.year_end(self, state)
             self.state_actor.takeovers(self, state)
+        if self.lab is not None:
+            self.lab.year_end(self, state)
         update = {"market_entries": state.market_entries.get(state.year, 0), "strategy_changes": changes,
                   "price_index": self.long_run.price_index, "population_index": self.long_run.population_index,
                   "trend": self.long_run.trend, "fx_rate": self.env.fx_rate,
-                  **self._geography_kpis(), **self._state_kpis(),
+                  **self._geography_kpis(), **self._state_kpis(), **self._research_kpis(),
                   **self._category_kpis(),
                   "total_profit": sum(s.profit for s in summaries[-1].values())}
         for stage in STAGES:
@@ -616,6 +623,14 @@ class SimulationRunner:
                                          if self.env.runtimes[f.id].active)
             update[f"active_firms_{stage}"] = sum(self.env.runtimes[f.id].active for f in firms)
         system_kpis[-1] = system_kpis[-1].model_copy(update=update)
+
+    def _research_kpis(self) -> dict[str, float]:
+        lab = self.lab
+        if lab is None:
+            return {}
+        stats = dict(lab.stats)
+        lab.stats = {key: type(value)() for key, value in lab.stats.items()}
+        return {**stats, "rnd_running": len(lab.running)}
 
     def _state_kpis(self) -> dict[str, float]:
         actor = self.state_actor
