@@ -33,7 +33,7 @@ def test_two_bad_years_switch_and_lockout(explore):
     if not explore:
         assert firm.archetype == "premium"
     event = [e for e in state.events if e["firm"] == firm.id and e["event"] == "strategy_change"][-1]
-    assert ("explore" if explore else "imitate") in event["details"]
+    assert ("ausprobiert" if explore else "nachgeahmt") in event["details"]
     switched = firm.archetype
     for _ in range(3):
         state.year += 1

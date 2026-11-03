@@ -6,6 +6,7 @@ import math
 import random
 from typing import TYPE_CHECKING
 
+from market_sim.kpi import chf
 from market_sim.models import STAGES, Firm
 
 if TYPE_CHECKING:
@@ -137,7 +138,8 @@ class Geography:
         if choice != firm.transport_mode:
             firm.transport_mode = choice
             state.events.append({"year": state.year, "day": runner.config.simulation.days_per_year,
-                                 "firm": firm.id, "event": "transport_switch", "details": f"now {choice}"})
+                                 "firm": firm.id, "event": "transport_switch",
+                                 "details": "jetzt Transportdienst" if choice == "service" else "jetzt eigene Flotte"})
 
     def _invest(self, runner, firm, summary, state, days) -> None:
         cfg = self.cfg
@@ -167,9 +169,9 @@ class Geography:
         self.projects.append((finish, firm.id, kind, payload))
         daily = cost / (cfg.depreciation_years * days)
         self.depreciation.setdefault(firm.id, []).append((daily, finish + cfg.depreciation_years * days))
-        what = f"+{payload} capacity" if kind == "expand" else f"site in {payload[0]}"
+        what = f"+{payload} Kapazität" if kind == "expand" else f"Standort {payload[0]}"
         state.events.append({"year": state.year, "day": days, "firm": firm.id, "event": f"{kind}_started",
-                             "details": f"{what}, cost {cost:,.0f}, ready in {build} days"})
+                             "details": f"{what}, Kosten {chf(cost)}, fertig in {build} Tagen"})
 
     def _finish_projects(self, runner, state) -> None:
         env = runner.env
@@ -191,7 +193,9 @@ class Geography:
                 firm.capacity += units
                 self.stats["new_sites"] += 1
             state.events.append({"year": state.year, "day": runner.config.simulation.days_per_year,
-                                 "firm": firm_id, "event": f"{kind}_finished", "details": str(payload)})
+                                 "firm": firm_id, "event": f"{kind}_finished",
+                                 "details": f"+{payload} Kapazität" if kind == "expand"
+                                 else f"Standort {payload[0]} (+{payload[1]} Kapazität)"})
 
     def catchment(self, retailers: list[Firm]) -> dict[str, float]:
         """Population a store reaches, each region weighted by 1 / (1 + km / travel_km); mean 1."""

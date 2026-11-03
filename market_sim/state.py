@@ -6,6 +6,7 @@ import math
 import random
 from typing import TYPE_CHECKING
 
+from market_sim.kpi import OFFENCE_DE, chf
 from market_sim.models import STAGES
 
 if TYPE_CHECKING:
@@ -119,7 +120,7 @@ class StateActor:
                     self.stats["fines"] += fine
                     verdicts.setdefault(offence.name, []).append(offence.fine_revenue_share)
                     state.events.append({"year": year, "day": day, "firm": firm.id, "event": "offence_detected",
-                                         "details": f"{offence.name}, fine {fine:,.0f}"})
+                                         "details": f"{OFFENCE_DE.get(offence.name, offence.name)}, Busse {chf(fine)}"})
             if (any(o.kind == "material" and o.name in self.active.get(firm.id, ()) for o in cfg.offences)
                     and rolls[-1] < cfg.poisoning_probability):
                 self._poisoning(runner, state, firm, year, day)
@@ -140,7 +141,7 @@ class StateActor:
         cfg = self.cfg
         env = runner.env
         runner.close_firm_now(firm.id, year, state, "poisoning",
-                              f"{cfg.poisoning_deaths} deaths, {cfg.poisoning_sick} sick")
+                              f"{cfg.poisoning_deaths} Tote, {cfg.poisoning_sick} Kranke")
         self.stats["poisonings"] += 1
         self.fear[firm.category] = min(0.9, self.fear.get(firm.category, 0.0) + cfg.fear_strength)
         consumers = runner.config.consumers
@@ -192,7 +193,7 @@ class StateActor:
                     if combined > cfg.block_share:
                         self.stats["takeovers_blocked"] += 1
                         state.events.append({"year": year, "day": day, "firm": buyer.id, "event": "takeover_blocked",
-                                             "details": f"{target.id}, combined share {combined:.0%}"})
+                                             "details": f"{target.id}, gemeinsamer Marktanteil {combined:.0%}"})
                         continue
                     self._merge(runner, state, buyer, target, price, year, day)
                     share[buyer.id] = combined
@@ -224,7 +225,7 @@ class StateActor:
         t_rt.stock = {}
         t_rt.inventory = 0
         t_rt.cash = 0.0
-        runner.close_firm_now(target.id, year, state, "takeover", f"bought by {buyer.id} for {price:,.0f}")
+        runner.close_firm_now(target.id, year, state, "takeover", f"gekauft von {buyer.id} für {chf(price)}")
         self.stats["takeovers"] += 1
 
     def _break_up(self, runner, state, stage, active, share, year, day) -> None:
@@ -248,4 +249,4 @@ class StateActor:
             spin = runner.spin_off(firm, state, region, moved, moved_machines, moved_staff)
             self.stats["breakups"] += 1
             state.events.append({"year": year, "day": day, "firm": firm.id, "event": "breakup",
-                                 "details": f"share {share[firm.id]:.0%}, site {region} sold to {spin}"})
+                                 "details": f"Marktanteil {share[firm.id]:.0%}, Standort {region} an {spin} verkauft"})

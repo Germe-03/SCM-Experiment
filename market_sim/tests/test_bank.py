@@ -31,7 +31,7 @@ def test_credit_limit_cancels_loan():
     events = []
     runner._apply_bankruptcy(5, events)
     assert not runtime.active
-    assert "bank cancelled credit" in events[0]["details"]
+    assert "Bank kündigt Kredit" in events[0]["details"]
 
 
 def test_disabled_bank_and_rate_cap():

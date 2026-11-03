@@ -13,6 +13,7 @@ from market_sim.state import StateActor
 from market_sim.research import ResearchLab
 from market_sim.config import MarketConfig, MarketEventTypeConfig
 from market_sim.environment import MarketEnvironment, MarketResult
+from market_sim.kpi import ARCHETYPE_DE, REGION_DE, STAGE_DE, chf
 from market_sim.kpi import (
     AnnualReport, SystemKPIs, bullwhip_variance_ratio, herfindahl_index,
     service_level,
@@ -294,7 +295,7 @@ class SimulationRunner:
         ))
         state.events.append({
             "year": year, "day": first + 1, "firm": "", "event": event.type,
-            "details": f"demand x{event.strength:g} for {event.duration_days} days",
+            "details": f"Nachfrage ×{event.strength:g} während {event.duration_days} Tagen",
         })
 
     def _event_material_cost_multiplier(
@@ -304,7 +305,7 @@ class SimulationRunner:
         self.env.material_cost_multiplier *= event.strength
         state.events.append({
             "year": year, "day": 1, "firm": "", "event": event.type,
-            "details": f"raw materials x{event.strength:g} all year",
+            "details": f"Rohstoffe ×{event.strength:g} während des ganzen Jahres",
         })
 
     def _event_stage_capacity(
@@ -318,7 +319,7 @@ class SimulationRunner:
         ))
         state.events.append({
             "year": year, "day": first + 1, "firm": "", "event": event.type,
-            "details": f"{stage} capacity x{event.strength:g} for {event.duration_days} days",
+            "details": f"Kapazität {STAGE_DE.get(stage, stage)} ×{event.strength:g} während {event.duration_days} Tagen",
         })
 
     def _event_wage_push(
@@ -330,7 +331,7 @@ class SimulationRunner:
             firm.wage_level *= event.strength
         state.events.append({
             "year": year, "day": 1, "firm": "", "event": event.type,
-            "details": f"all wages x{event.strength:g}",
+            "details": f"alle Löhne ×{event.strength:g}",
         })
 
     def _event_firm_recall(
@@ -353,7 +354,7 @@ class SimulationRunner:
             self.env.brand_book.recall(firm_id, event.reputation_strength)
         state.events.append({
             "year": year, "day": 1, "firm": firm_id, "event": event.type,
-            "details": f"quality -{event.strength:g}, reputation -{event.reputation_strength:g}",
+            "details": f"Qualität −{event.strength:g}, Reputation −{event.reputation_strength:g}",
         })
 
     def add_firm(
@@ -401,7 +402,7 @@ class SimulationRunner:
         state.market_entries[entry_year] = state.market_entries.get(entry_year, 0) + 1
         state.events.append({
             "year": entry_year, "day": 1, "firm": firm.id,
-            "event": "market_entry", "details": f"registered in {firm.stage}",
+            "event": "market_entry", "details": f"neu im {STAGE_DE.get(firm.stage, firm.stage)}",
         })
 
     def run_year(self, state: RunState) -> None:
@@ -655,13 +656,13 @@ class SimulationRunner:
         """Phase 6: a site sold off by antitrust order becomes a new firm."""
         self._spin_offs = getattr(self, "_spin_offs", 0) + 1
         firm = parent.model_copy(deep=True, update={
-            "id": f"{parent.stage}_s{self._spin_offs:02d}", "name": f"{parent.name} ({region})",
+            "id": f"{parent.stage}_s{self._spin_offs:02d}", "name": f"{parent.name} ({REGION_DE.get(region, region)})",
             "region": region, "extra_regions": [], "capacity": capacity, "machine_capacity": machines,
             "employees": staff, "inventory": 0, "backlog": 0, "suppliers": [],
             "cash": parent.cash * self.config.market_entry.start_cash_fraction,
         })
         self.add_firm(firm, state)
-        state.events[-1].update(event="spin_off", details=f"from {parent.id}")
+        state.events[-1].update(event="spin_off", details=f"abgespalten von {parent.id}")
         return firm.id
 
     def _geography_kpis(self) -> dict[str, float]:
@@ -731,7 +732,7 @@ class SimulationRunner:
             counter = self._entry_counters[stage]
             names = cfg.names[stage]
             cycle, index = divmod(counter - 1, len(names))
-            name = names[index] + (" " + "I" * (cycle + 1) if cycle else "")
+            name = names[index] + (f" {cycle + 1}" if cycle else "")
             firm = template.model_copy(deep=True, update={
                 "id": f"{stage}_e{counter:02d}", "name": name,
                 "archetype": archetypes[int(archetype_roll * len(archetypes))],
@@ -751,7 +752,7 @@ class SimulationRunner:
             state.market_entries[state.year + 1] -= 1
             state.market_entries[state.year] = state.market_entries.get(state.year, 0) + 1
             state.events[-1].update(year=state.year, day=self.config.simulation.days_per_year,
-                                    details=f"archetype {firm.archetype}")
+                                    details=f"Strategie {ARCHETYPE_DE.get(firm.archetype, firm.archetype)}")
 
     def _change_strategies(self, state: RunState) -> int:
         """Use a simultaneous ranking and two unconditional draws per firm."""
@@ -818,7 +819,8 @@ class SimulationRunner:
             financial["cash"] = runtime.cash
             state.events.append({"year": state.year, "day": self.config.simulation.days_per_year,
                                  "firm": firm.id, "event": "strategy_change",
-                                 "details": f"{old} -> {new}, reason {reason}"})
+                                 "details": f"{ARCHETYPE_DE.get(old, old)} → {ARCHETYPE_DE.get(new, new)}, "
+                                            f"{'ausprobiert' if reason == 'explore' else 'nachgeahmt'}"})
             changes += 1
         return changes
 
@@ -1012,7 +1014,7 @@ class SimulationRunner:
                         events.append({
                             "year": completed_years, "day": self.config.simulation.days_per_year,
                             "firm": firm_id, "event": "restructuring",
-                            "details": f"bank wrote off {written_off:,.0f}",
+                            "details": f"Bank schreibt {chf(written_off)} ab",
                         })
                 continue
             if cfg.max_exits_per_stage_per_year and exits_per_stage.get(stage, 0) >= cfg.max_exits_per_stage_per_year:
@@ -1025,9 +1027,9 @@ class SimulationRunner:
                 events.append({
                     "year": completed_years, "day": self.config.simulation.days_per_year,
                     "firm": firm_id, "event": "bankruptcy",
-                    "details": (f"bank cancelled credit, cash {self.env.runtimes[firm_id].cash:,.0f}, "
-                                f"limit {self.env.runtimes[firm_id].credit_limit:,.0f}"
-                                if self.config.bank.enabled else f"cash {self.env.runtimes[firm_id].cash:,.0f}"),
+                    "details": (f"Bank kündigt Kredit, Cash {chf(self.env.runtimes[firm_id].cash)}, "
+                                f"Limite {chf(self.env.runtimes[firm_id].credit_limit)}"
+                                if self.config.bank.enabled else f"Cash {chf(self.env.runtimes[firm_id].cash)}"),
                 })
 
     def _add_experiment_kpis(self, kpis, reports, previous_reports, summaries):
@@ -1072,7 +1074,7 @@ class SimulationRunner:
                     state.events.append({
                         "year": year, "day": 1, "firm": firm.id,
                         "event": "price_increase" if change > 0 else "price_cut",
-                        "details": f"average price {old.avg_sell_price:.2f} -> {new_price:.2f} ({change:+.1%})",
+                        "details": f"Durchschnittspreis {old.avg_sell_price:.2f} → {new_price:.2f} ({change:+.1%})",
                     })
             shipped = shipped_edges[firm.id]
             if shipped:
@@ -1081,7 +1083,7 @@ class SimulationRunner:
                 if before is not None and before != top:
                     state.events.append({
                         "year": year, "day": days, "firm": firm.id, "event": "supplier_switch",
-                        "details": f"largest supplier {before} -> {top}",
+                        "details": f"grösster Lieferant {before} → {top}",
                     })
                 state.main_supplier[firm.id] = top
             episodes: list[list[int]] = []
@@ -1098,7 +1100,7 @@ class SimulationRunner:
                     state.events.append({
                         "year": year, "day": start + 1, "firm": firm.id,
                         "event": "capacity_limit",
-                        "details": f"utilization above 95 % for {end - start + 1} days",
+                        "details": f"über 95 % ausgelastet während {end - start + 1} Tagen",
                     })
 
     def _rival_prices(self, previous: dict[str, YearSummary]) -> dict[str, float]:

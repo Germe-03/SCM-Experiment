@@ -69,4 +69,4 @@ def test_entry_template_cash_and_name_cycle():
     assert first.cash == initial_mean * cfg.start_cash_fraction
     assert runner.env.runtimes[first.id].initial_cash == first.cash * runner.config.costs.initial_cash_scale
     runner.run_year(state)
-    assert runner.network.firm("retailer_e02").name == "Aare II"
+    assert runner.network.firm("retailer_e02").name == "Aare 2"

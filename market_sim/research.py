@@ -6,6 +6,7 @@ import random
 from typing import TYPE_CHECKING
 
 from market_sim.brands import Brand
+from market_sim.kpi import PROJECT_DE, chf
 
 if TYPE_CHECKING:
     from market_sim.runner import RunState, SimulationRunner
@@ -44,13 +45,14 @@ class ResearchLab:
                 continue
             project = self.projects[name]
             success = roll < project.success_probability
-            detail = self._apply(runner, runner.network.firm(firm_id), project) if success else "no result"
+            detail = self._apply(runner, runner.network.firm(firm_id), project) if success else "kein Ergebnis"
             self.stats["rnd_successes" if success else "rnd_failures"] += 1
             self.reports.append({"firm": firm_id, "project": name, "start_year": start_year,
                                  "end_year": state.year, "cost": daily_cost * (end - start),
                                  "success": success, "result": detail})
             state.events.append({"year": state.year, "day": days, "firm": firm_id,
-                                 "event": "rnd_success" if success else "rnd_failure", "details": f"{name}: {detail}"})
+                                 "event": "rnd_success" if success else "rnd_failure",
+                                 "details": f"{PROJECT_DE.get(name, name)}: {detail}"})
         summaries = state.summaries[-1]
         for firm in runner._firms():
             choice_roll = self.rng.random()
@@ -73,19 +75,20 @@ class ResearchLab:
                                      cost / project.duration_days, state.year)
             self.stats["rnd_started"] += 1
             state.events.append({"year": state.year, "day": days, "firm": firm.id, "event": "rnd_started",
-                                 "details": f"{project.name}, cost {cost:,.0f}, {project.duration_days} days"})
+                                 "details": f"{PROJECT_DE.get(project.name, project.name)}, Kosten {chf(cost)}, "
+                                            f"{project.duration_days} Tage"})
 
     def _apply(self, runner: SimulationRunner, firm, project) -> str:
         env = runner.env
         if project.kind == "productivity":
             firm.productivity_per_employee *= 1 + project.effect
-            return f"productivity +{project.effect:.0%}"
+            return f"Produktivität +{project.effect:.0%}"
         if project.kind == "cost_reduction":
             env.process_cost_factor[firm.id] = env.process_cost_factor.get(firm.id, 1.0) * (1 - project.effect)
-            return f"material cost -{project.effect:.0%}"
+            return f"Rohstoffkosten −{project.effect:.0%}"
         book = env.brand_book
         if book is None:
-            return "no brand market"
+            return "kein Markenmarkt"
         self._brands += 1
         brand_id = f"{firm.id}_rd{self._brands:02d}"
         if project.kind == "alkoholfrei":
@@ -100,4 +103,4 @@ class ResearchLab:
         book.brands[brand_id] = Brand(brand_id, f"{firm.name} Neu {self._brands}", firm.id, positioning,
                                       reputation, traits, firm.category, maturation)
         book.production_share[brand_id] = 1.0
-        return f"new brand {brand_id} ({', '.join(traits)})"
+        return f"neue Marke {brand_id} ({', '.join(traits)})"

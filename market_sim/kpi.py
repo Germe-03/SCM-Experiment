@@ -112,3 +112,24 @@ class SystemKPIs(BaseModel):
     active_firms_distributor: int = 0
     active_firms_factory: int = 0
     retailer_price_spread: float = 0.0
+
+
+# German wording for the event log (events.csv and dashboard).
+STAGE_DE = {"retailer": "Detailhandel", "wholesaler": "Grosshandel", "distributor": "Verteilung", "factory": "Hersteller"}
+ARCHETYPE_DE = {"low_cost": "Discount", "standard": "Standard", "premium": "Premium",
+                "reliable": "Zuverlässig", "growth": "Wachstum"}
+TREND_DE = {"craft_welle": "Craft-Welle", "alkoholfrei": "Alkoholfrei", "sparwelle": "Sparwelle",
+            "tradition": "Tradition", "wein_boom": "Wein-Boom"}
+OFFENCE_DE = {"lohndumping": "Lohndumping", "pfusch": "Pfusch bei Rohstoffen",
+              "steuerhinterziehung": "Steuerhinterziehung"}
+REGION_DE = {"genfersee": "Genferseeregion", "bern": "Bern", "jura_freiburg": "Jura/Freiburg/Neuenburg",
+             "nordwestschweiz": "Nordwestschweiz", "zuerich": "Zürich", "ostschweiz": "Ostschweiz",
+             "zentralschweiz": "Zentralschweiz", "tessin": "Tessin"}
+PROJECT_DE = {"prozessautomation": "Prozessautomation", "rezeptur_optimierung": "Rezeptur-Optimierung",
+              "neue_marke": "Neue Marke", "alkoholfreies_bier": "Alkoholfreies Bier"}
+
+
+def chf(value: float) -> str:
+    """Swiss money format for event texts, e.g. 1'234'567 CHF."""
+    return f"{value:,.0f} CHF".replace(",", "'")
+

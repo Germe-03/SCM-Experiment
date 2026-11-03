@@ -6,6 +6,8 @@ import math
 import random
 from typing import TYPE_CHECKING
 
+from market_sim.kpi import TREND_DE
+
 if TYPE_CHECKING:
     from market_sim.runner import RunState, SimulationRunner
 
@@ -45,7 +47,7 @@ class LongRun:
         runner.env.domestic_daily_demand = runner.demand.mean
         state.events.append({
             "year": state.year, "day": runner.config.simulation.days_per_year, "firm": "",
-            "event": "inflation", "details": f"{inflation:.2%}, price index {self.price_index:.3f}",
+            "event": "inflation", "details": f"{inflation:.2%}, Preisindex {self.price_index:.3f}",
         })
 
     # -- inflation, wages and productivity -----------------------------
@@ -132,7 +134,8 @@ class LongRun:
             self.next_switch = self._draw_gap(state.year)
             state.events.append({
                 "year": state.year, "day": runner.config.simulation.days_per_year, "firm": "",
-                "event": "trend_change", "details": f"{self.previous or 'none'} -> {new}",
+                "event": "trend_change",
+                "details": f"{TREND_DE.get(self.previous, self.previous) if self.previous else 'kein Trend'} → {TREND_DE.get(new, new)}",
             })
         boosts = []
         if self.current:
