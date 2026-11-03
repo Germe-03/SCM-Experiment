@@ -32,7 +32,7 @@ bankruptcy:
   # A stage never drops below this many active firms.
   min_firms_per_stage: 2
   # Insolvency proceedings take time: at most this many exits per stage and year.
-  max_exits_per_stage_per_year: 1
+  max_exits_per_stage_per_year: 2
   min_years_before_exit: 1
 
 # Seeded start values: every seed begins with a slightly different market (+/- fraction).
