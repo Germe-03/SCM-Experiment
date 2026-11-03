@@ -28,6 +28,8 @@ def service_level(served: int, demand: int) -> float:
 
 
 class AnnualReport(BaseModel):
+    category_share: float = Field(default=0.0, ge=0, le=1)
+    service_level: float = Field(default=1.0, ge=0, le=1)
     archetype: str = ""
     interest_cost: float = 0.0
     year: int
@@ -48,6 +50,13 @@ class AnnualReport(BaseModel):
 
 
 class SystemKPIs(BaseModel):
+    hhi_wholesaler: float = 0.0
+    hhi_distributor: float = 0.0
+    hhi_factory: float = 0.0
+    negative_interest_retailer: float = 0.0
+    negative_interest_wholesaler: float = 0.0
+    negative_interest_distributor: float = 0.0
+    negative_interest_factory: float = 0.0
     year: int
     total_profit: float
     total_backlog: int = Field(ge=0)
@@ -125,7 +134,9 @@ OFFENCE_DE = {"lohndumping": "Lohndumping", "pfusch": "Pfusch bei Rohstoffen",
 REGION_DE = {"genfersee": "Genferseeregion", "bern": "Bern", "jura_freiburg": "Jura/Freiburg/Neuenburg",
              "nordwestschweiz": "Nordwestschweiz", "zuerich": "Zürich", "ostschweiz": "Ostschweiz",
              "zentralschweiz": "Zentralschweiz", "tessin": "Tessin"}
-PROJECT_DE = {"prozessautomation": "Prozessautomation", "rezeptur_optimierung": "Rezeptur-Optimierung",
+PROJECT_DE = {"leichtere_flaschen": "Leichtere Flaschen", "waermerueckgewinnung": "Wärmerückgewinnung",
+              "ausbeute_optimierung": "Ausbeute-Optimierung", "routenplanung": "Routenplanung",
+              "lagerautomation": "Lagerautomation", "robotik": "Robotik", "prozessautomation": "Prozessautomation", "rezeptur_optimierung": "Rezeptur-Optimierung",
               "neue_marke": "Neue Marke", "alkoholfreies_bier": "Alkoholfreies Bier"}
 
 

@@ -27,6 +27,8 @@ def build_dashboard_data(
     identities = [
         {"id": f.id, "name": f.name, "stage": f.stage, "archetype": f.archetype,
          "category": f.category, "importer": f.importer, "region": f.region,
+         "entry_year": min((int(e["year"]) for e in result.events
+                            if e["firm"] == f.id and e["event"] in ("market_entry", "spin_off")), default=1),
          "exit_year": result.exits.get(f.id)}
         for f in firms
     ]
@@ -36,14 +38,6 @@ def build_dashboard_data(
         for index in range(result.years):
             report = result.annual_reports[index][firm.id].model_dump(mode="json")
             report.update(result.financial_breakdown[firm.id][index])
-            if firm.stage == "retailer":
-                start = index * config.simulation.days_per_year
-                end = start + config.simulation.days_per_year
-                sold = sum(result.daily_series[firm.id]["consumer_units_sold"][start:end])
-                demand = sum(result.daily_series[firm.id]["demand_share"][start:end])
-                report["service_level"] = sold / demand if demand else 1.0
-            else:
-                report["service_level"] = None
             yearly.append(report)
         firm_data[firm.id] = {
             **next(item for item in identities if item["id"] == firm.id),
@@ -64,7 +58,7 @@ def build_dashboard_data(
             ),
             "final_cash": result.final_result.firm_results[firm.id].cash,
             "final_market_share": (
-                final.market_share if final is not None and firm.stage == "retailer" else None
+                final.market_share if final is not None else None
             ),
         })
     ranking.sort(key=lambda item: (-item["cumulative_profit"], item["firm_id"]))
@@ -84,4 +78,5 @@ def build_dashboard_data(
         "brands": list(result.brand_reports),
         "classes": list(result.class_reports),
         "rnd": list(result.rnd_reports),
+        "offence_ledger": list(result.offence_ledger),
     }

@@ -24,6 +24,7 @@ class Geography:
         self.population = {r.name: r.population_share / total for r in self.cfg.regions}
         self.rng = random.Random(f"geography-{seed}")
         self.fuel_index = 1.0
+        self.transport_factor: dict[str, float] = {}
         # Investments under construction as (finish day, firm id, kind, region or units).
         self.projects: list[tuple[int, str, str, object]] = []
         # Depreciation still to book per firm as (daily amount, last day).
@@ -51,7 +52,7 @@ class Geography:
 
     def rate(self, firm: Firm) -> float:
         base = self.cfg.service_rate if firm.transport_mode == "service" else self.cfg.own_rate
-        return base * self.fuel_index
+        return base * self.fuel_index * self.transport_factor.get(firm.id, 1.0)
 
     def unit_transport_cost(self, supplier: Firm, customer: Firm) -> float:
         return self.km(supplier, customer) * self.rate(supplier)

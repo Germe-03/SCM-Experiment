@@ -128,10 +128,11 @@ python -m pytest market_sim
 
 - `dashboard` rechnet einen Lauf und schreibt `runs/dashboard.html` mit
   Reitern für Überblick, Markt, Firmen, Vergleich, Lieferkette, Finanzen,
-  Staat, F&E und Ereignisse.
+  Staat, F&E, Marktaufbau und Ereignisse. Der Vergleich zeigt bis zu sechs
+  Firmen in einem Diagramm, wahlweise relativ zum jährlichen Stufenschnitt.
 - `run` schreibt `annual_reports.csv`, `firm_ranking.csv`, `system_kpis.csv`,
   `events.csv`, `brand_report.csv`, `class_report.csv` und
-  `rnd_projects.csv`.
+  `rnd_projects.csv` und `offence_ledger.csv`.
 - `experiment` rechnet mehrere Seeds parallel und schreibt
   `experiment_runs.csv` (pro Seed) und `experiment_summary.csv` (Mittelwert,
   Streuung, Minimum, Maximum pro Kennzahl), ohne die Anlaufjahre.
@@ -149,6 +150,23 @@ python -m market_sim.run --resume runs/seed0/checkpoints/year_20.pkl --out runs/
 ```
 
 ### Ergebnisse
+
+Phase 8 ergänzt Umsatzanteile und HHI für alle vorgelagerten Stufen,
+Kategorieanteile für Hersteller sowie Negativzinsen auf grosse Guthaben.
+Die Zinsschwelle ist das Maximum aus dem inflationsbereinigten Mindestbetrag
+und dem konfigurierten Anteil am Vorjahresumsatz. `negative_interest_enabled`
+schaltet die neue Zinsregel ab. `negative_interest_<stage>` misst nur die
+Belastung; `interest_cost_<stage>` enthält weiterhin den Nettozins.
+
+`offence_ledger.csv` enthält pro Firma, Straftat und Jahr die tatsächliche
+Ersparnis, Busse, den geschätzten Reputationsschaden, Nettoertrag und das
+Urteil `paid_off`. Die Schadensschätzung ist keine zusätzliche Buchung.
+Neue Forschungsprojekte senken einzelne Materialkomponenten, Transport-
+oder Lagerkosten; Robotik spart Personal bei gleicher Kapazität.
+Projekte können mit `enabled` abgeschaltet und mit `selection_weight`
+innerhalb der Archetyp-Präferenzen gewichtet werden.
+Die Messung steht in [`docs/bauplan-erweiterung-2.md`](docs/bauplan-erweiterung-2.md).
+Checkpoint-Version 11 ist erforderlich; ältere Speicherstände werden abgewiesen.
 
 Die Messwerte jeder Ausbauphase stehen im Messprotokoll von
 [`docs/bauplan-grosse-simulation.md`](docs/bauplan-grosse-simulation.md).

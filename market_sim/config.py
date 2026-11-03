@@ -311,6 +311,10 @@ class BankConfig(ConfigModel):
     leverage_premium: float = Field(default=0.04, ge=0)
     max_rate: float = Field(default=0.15, ge=0)
     deposit_rate: float = Field(default=0.005, ge=0)
+    negative_interest_enabled: bool = True
+    deposit_threshold_revenue_fraction: float = Field(default=0.5, ge=0)
+    deposit_threshold_min: float = Field(default=50_000_000, ge=0)
+    negative_rate: float = Field(default=0.0075, ge=0)
     credit_limit_revenue_fraction: float = Field(default=0.25, ge=0)
     credit_limit_initial_cash_fraction: float = Field(default=1.0, ge=0)
     credit_limit_min: float = Field(default=0.0, ge=0)
@@ -496,6 +500,7 @@ class StateConfig(ConfigModel):
     """Phase 6: taxes, offences with hidden detection and fines, poisoning, takeovers, antitrust."""
 
     enabled: bool = False
+    reputation_value_factor: float = Field(default=0.5, ge=0)
     profit_tax: float = Field(default=0.15, ge=0, le=1)
     offences: list[OffenceConfig] = Field(default_factory=list)
     # Firms start with guesses between true value x e^-spread and x e^spread.
@@ -521,14 +526,26 @@ class StateConfig(ConfigModel):
 
 class ResearchProjectConfig(ConfigModel):
     name: str
+    selection_weight: float = Field(default=1.0, gt=0)
     # productivity: more output per employee; cost_reduction: cheaper raw materials;
     # new_brand: a premium brand; alkoholfrei: an alcohol-free beer brand.
-    kind: Literal["productivity", "cost_reduction", "new_brand", "alkoholfrei"]
+    kind: Literal["productivity", "cost_reduction", "new_brand", "alkoholfrei",
+                  "component_reduction", "transport_efficiency", "storage_automation", "robotics"]
+    enabled: bool = True
+    component: Literal["malt", "hops", "packaging", "energy"] | None = None
     cost: float = Field(gt=0)
     duration_days: int = Field(gt=0)
     success_probability: float = Field(ge=0, le=1)
     effect: float = Field(default=0.0, ge=0)
     stages: list[str] = Field(default_factory=lambda: ["retailer", "wholesaler", "distributor", "factory"])
+
+    @model_validator(mode="after")
+    def validate_effect(self) -> Self:
+        if self.kind == "component_reduction" and self.component is None:
+            raise ValueError("component_reduction requires a component")
+        if self.kind in ("component_reduction", "transport_efficiency", "storage_automation", "robotics") and self.effect >= 1:
+            raise ValueError("reduction effects must be smaller than one")
+        return self
 
 
 class ResearchConfig(ConfigModel):

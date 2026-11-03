@@ -54,6 +54,7 @@ class LongRun:
     def _inflate(self, runner: SimulationRunner, factor: float) -> None:
         config = runner.config
         self.price_index *= factor
+        runner.env.price_index = self.price_index
         config.price.min *= factor
         config.price.max *= factor
         for band in config.stage_prices.values():

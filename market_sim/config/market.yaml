@@ -23,6 +23,10 @@ bank:
   leverage_premium: 0.04
   max_rate: 0.15
   deposit_rate: 0.005
+  negative_interest_enabled: true
+  deposit_threshold_revenue_fraction: 0.5
+  deposit_threshold_min: 50000000
+  negative_rate: 0.0075
   credit_limit_revenue_fraction: 0.25
   credit_limit_initial_cash_fraction: 1.0
   credit_limit_min: 0.0
@@ -330,6 +334,7 @@ geography:
 state:
   enabled: true
   profit_tax: 0.15
+  reputation_value_factor: 0.5
   offences:
     - {name: lohndumping, kind: wage, benefit: 0.08, detection_probability: 0.15, fine_fixed: 2000000, fine_revenue_share: 0.005, reputation_hit: 0.08}
     - {name: pfusch, kind: material, benefit: 0.10, detection_probability: 0.20, fine_fixed: 5000000, fine_revenue_share: 0.02, reputation_hit: 0.15}
@@ -364,9 +369,16 @@ research:
     - {name: rezeptur_optimierung, kind: cost_reduction, cost: 50000000, duration_days: 365, success_probability: 0.5, effect: 0.08, stages: [factory]}
     - {name: neue_marke, kind: new_brand, cost: 80000000, duration_days: 730, success_probability: 0.4, effect: 0.10, stages: [factory]}
     - {name: alkoholfreies_bier, kind: alkoholfrei, cost: 70000000, duration_days: 540, success_probability: 0.5, stages: [factory]}
+    # New efficiency projects complement, rather than crowd out, capacity research.
+    - {name: leichtere_flaschen, enabled: true, selection_weight: 0.25, kind: component_reduction, component: packaging, cost: 40000000, duration_days: 365, success_probability: 0.7, effect: 0.15, stages: [factory]}
+    - {name: waermerueckgewinnung, enabled: true, selection_weight: 0.25, kind: component_reduction, component: energy, cost: 60000000, duration_days: 540, success_probability: 0.6, effect: 0.20, stages: [factory]}
+    - {name: ausbeute_optimierung, enabled: true, selection_weight: 0.25, kind: component_reduction, component: malt, cost: 30000000, duration_days: 365, success_probability: 0.5, effect: 0.08, stages: [factory]}
+    - {name: routenplanung, enabled: true, selection_weight: 0.25, kind: transport_efficiency, cost: 30000000, duration_days: 365, success_probability: 0.7, effect: 0.15, stages: [wholesaler, distributor, factory]}
+    - {name: lagerautomation, enabled: true, selection_weight: 0.25, kind: storage_automation, cost: 50000000, duration_days: 540, success_probability: 0.6, effect: 0.25}
+    - {name: robotik, enabled: true, selection_weight: 0.25, kind: robotics, cost: 80000000, duration_days: 730, success_probability: 0.4, effect: 0.25}
   preferences:
-    premium: [neue_marke, alkoholfreies_bier]
-    low_cost: [rezeptur_optimierung, prozessautomation]
-    growth: [prozessautomation, alkoholfreies_bier]
-    standard: [prozessautomation, rezeptur_optimierung]
-    reliable: [prozessautomation]
+    premium: [neue_marke, alkoholfreies_bier, leichtere_flaschen]
+    low_cost: [rezeptur_optimierung, prozessautomation, robotik, ausbeute_optimierung, waermerueckgewinnung]
+    growth: [prozessautomation, alkoholfreies_bier, robotik, routenplanung]
+    standard: [prozessautomation, rezeptur_optimierung, leichtere_flaschen, lagerautomation]
+    reliable: [prozessautomation, routenplanung, lagerautomation]

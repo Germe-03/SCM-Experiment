@@ -55,6 +55,7 @@ class RunResult:
     brand_reports: list[dict[str, object]] = field(default_factory=list)
     class_reports: list[dict[str, object]] = field(default_factory=list)
     rnd_reports: list[dict[str, object]] = field(default_factory=list)
+    offence_ledger: list[dict[str, object]] = field(default_factory=list)
 
 
 @dataclass
@@ -200,6 +201,7 @@ class SimulationRunner:
             exits=dict(self.exits), events=list(state.events),
             brand_reports=list(state.brand_reports), class_reports=list(state.class_reports),
             rnd_reports=list(self.lab.reports) if self.lab is not None else [],
+            offence_ledger=list(self.state_actor.offence_ledger) if self.state_actor is not None else [],
         )
 
     def _scale_for_categories(self) -> None:
@@ -358,7 +360,7 @@ class SimulationRunner:
             "revenue": 0.0, "purchase_cost": 0.0, "holding_cost": 0.0,
             "backlog_cost": 0.0, "wage_cost": 0.0, "hiring_cost": 0.0,
             "rnd_cost": 0.0, "handling_cost": 0.0, "fixed_cost": 0.0,
-            "profit": 0.0, "cash": 0.0, "interest_cost": 0.0,
+            "profit": 0.0, "cash": 0.0, "interest_cost": 0.0, "negative_interest_cost": 0.0,
         }
         state.financial_breakdown[firm.id] = [dict(empty_financial) for _ in range(state.year)]
         state.recent_demand[firm.id] = []
@@ -536,7 +538,7 @@ class SimulationRunner:
                 for key in (
                     "revenue", "purchase_cost", "holding_cost",
                     "backlog_cost", "wage_cost", "hiring_cost",
-                    "rnd_cost", "handling_cost", "fixed_cost", "interest_cost", "profit",
+                    "rnd_cost", "handling_cost", "fixed_cost", "interest_cost", "negative_interest_cost", "profit",
                 )
             } | {"cash": end["cash"]})
         # P4b fix: exits are deterministic year-end events; cash freezes
@@ -587,6 +589,7 @@ class SimulationRunner:
                   "total_profit": sum(s.profit for s in summaries[-1].values())}
         for stage in STAGES:
             firms = self.network.firms_in(stage)
+            update[f"negative_interest_{stage}"] = sum(financial_breakdown[f.id][-1]["negative_interest_cost"] for f in firms)
             update[f"interest_cost_{stage}"] = sum(financial_breakdown[f.id][-1]["interest_cost"] for f in firms)
             update[f"debt_{stage}"] = sum(max(0.0, -self.env.runtimes[f.id].cash) for f in firms
                                          if self.env.runtimes[f.id].active)
@@ -805,6 +808,11 @@ class SimulationRunner:
             firm.id: (served[firm.id] / total_sales if total_sales else 0.0)
             for firm in self.network.firms_in("retailer")
         }
+        stage_revenue = {stage: sum(summaries[f.id].revenue for f in self.network.firms_in(stage)
+                                    if self.env.runtimes[f.id].active) for stage in STAGES}
+        category_revenue = {f.category: sum(summaries[p.id].revenue for p in self.network.firms_in("factory")
+                                          if p.category == f.category and self.env.runtimes[p.id].active)
+                            for f in self.network.firms_in("factory")}
         reports = {}
         for firm in self._firms():
             summary = summaries[firm.id]
@@ -837,7 +845,14 @@ class SimulationRunner:
             reports[firm.id] = AnnualReport(
                 archetype=firm.archetype,
                 year=year, firm_id=firm.id, revenue=summary.revenue,
-                profit=summary.profit, market_share=retailer_shares.get(firm.id, 0.0),
+                profit=summary.profit,
+                market_share=(retailer_shares.get(firm.id, 0.0) if firm.stage == "retailer" else
+                              summary.revenue / stage_revenue[firm.stage]
+                              if stage_revenue[firm.stage] and self.env.runtimes[firm.id].active else 0.0),
+                category_share=(summary.revenue / category_revenue[firm.category]
+                                if firm.stage == "factory" and category_revenue[firm.category]
+                                and self.env.runtimes[firm.id].active else 0.0),
+                service_level=fill,
                 average_sell_price=(
                     prices[firm.id] / len(daily_prices[firm.id])
                     if daily_prices[firm.id] else firm.sell_price
@@ -864,6 +879,9 @@ class SimulationRunner:
             bullwhip_ratio=bullwhip_variance_ratio(factory_order_series, demand_series),
             service_level=service_level(total_served, total_demand),
         )
+        kpis = kpis.model_copy(update={f"hhi_{stage}": herfindahl_index(
+            [reports[f.id].market_share for f in self.network.firms_in(stage)])
+            for stage in STAGES if stage != "retailer"})
         return reports, kpis
 
     def _apply_feedback_links(
@@ -1100,6 +1118,7 @@ class SimulationRunner:
                 "handling_cost": float(getattr(runtime, "handling_cost", 0.0)),
                 "fixed_cost": float(getattr(runtime, "fixed_cost", 0.0)),
                 "interest_cost": runtime.interest_cost,
+                "negative_interest_cost": runtime.negative_interest_cost,
                 "profit": float(getattr(runtime, "profit", 0.0)),
                 "cash": float(getattr(runtime, "cash", 0.0)),
             }

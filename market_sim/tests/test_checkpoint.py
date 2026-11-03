@@ -41,6 +41,7 @@ def test_resume_matches_uninterrupted_run(baseline):
     assert _reports(resumed) == _reports(straight)
     assert _kpis(resumed) == _kpis(straight)
     assert resumed.exits == straight.exits
+    assert resumed.offence_ledger == straight.offence_ledger
     assert resumed.days_total == straight.days_total
     assert {key: value.cash for key, value in resumed.final_result.firm_results.items()} == {
         key: value.cash for key, value in straight.final_result.firm_results.items()
@@ -62,3 +63,23 @@ def test_cli_checkpoints_and_resume(tmp_path):
     with (tmp_path / "a" / "system_kpis.csv").open(encoding="utf-8") as first, \
             (tmp_path / "b" / "system_kpis.csv").open(encoding="utf-8") as second:
         assert first.read() == second.read()
+
+
+def test_phase8_effects_survive_checkpoint(tmp_path):
+    from market_sim.checkpoint import save_checkpoint
+    from market_sim.run import build_runner
+
+    runner, _ = build_runner(2, 0, days_per_year=10)
+    state = runner.start()
+    runner.continue_run(state, 1)
+    firm = runner.network.firm("factory_01")
+    for name in ("leichtere_flaschen", "routenplanung", "lagerautomation", "robotik"):
+        runner.lab._apply(runner, firm, runner.lab.projects[name])
+    path = save_checkpoint(runner, state, tmp_path / "phase8.pkl")
+    restored, restored_state = load_checkpoint(path)
+    straight = runner.continue_run(state, 2)
+    resumed = restored.continue_run(restored_state, 2)
+    assert _reports(straight) == _reports(resumed)
+    assert _kpis(straight) == _kpis(resumed)
+    assert straight.offence_ledger == resumed.offence_ledger
+    assert straight.events == resumed.events

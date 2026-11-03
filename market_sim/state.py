@@ -25,6 +25,8 @@ class StateActor:
         self.rng = random.Random(f"state-{seed}")
         self.beliefs: dict[str, dict[str, list[float]]] = {}
         self.active: dict[str, set[str]] = {}
+        self.offence_ledger: list[dict[str, object]] = []
+        self.previous_revenue: dict[str, float] = {}
         self.fear: dict[str, float] = {}
         self.stats = self._empty_stats()
         for firm in runner._firms():
@@ -51,6 +53,10 @@ class StateActor:
         env = runner.env
         self.active = {}
         env.firm_material_factor = {}
+        env.material_savings = {}
+        env.wage_savings = {}
+        env.wage_saving_ratio = {}
+        self.previous_revenue = {key: rt.last_year_revenue for key, rt in env.runtimes.items()}
         for firm in runner._firms():
             runtime = env.runtimes[firm.id]
             if not runtime.active:
@@ -69,7 +75,10 @@ class StateActor:
                     self.active.setdefault(firm.id, set()).add(offence.name)
                     self.stats["offences"] += 1
                     if offence.kind == "wage":
+                        before = firm.wage_level
                         firm.wage_level *= 1 - offence.benefit
+                        runtime.wage_level = firm.wage_level
+                        env.wage_saving_ratio[firm.id] = before / firm.wage_level - 1 if firm.wage_level else 0.0
                     elif offence.kind == "material":
                         env.firm_material_factor[firm.id] = 1 - offence.benefit
 
@@ -93,6 +102,14 @@ class StateActor:
             runtime = env.runtimes[firm.id]
             rolls = [self.rng.random() for _ in cfg.offences] + [self.rng.random()]
             if not runtime.active or firm.id not in summaries:
+                # Insolvent firms have already closed before the state's year-end visit.
+                for offence in cfg.offences:
+                    if offence.name in self.active.get(firm.id, ()):
+                        gain = (env.wage_savings.get(firm.id, 0.0) if offence.kind == "wage" else
+                                env.material_savings.get(firm.id, 0.0) if offence.kind == "material" else 0.0)
+                        self.offence_ledger.append({"firm": firm.id, "offence": offence.name, "year": year,
+                                                    "gain": gain, "fine": 0.0, "damage": 0.0,
+                                                    "net": gain, "paid_off": gain > 0})
                 continue
             summary = summaries[firm.id]
             runtime.wage_cost_last_year = runtime.wage_cost - runtime.wage_cost_mark
@@ -110,17 +127,26 @@ class StateActor:
                 if offence.name not in self.active.get(firm.id, ()):
                     continue
                 caught = roll < offence.detection_probability
+                gain = (env.wage_savings.get(firm.id, 0.0) if offence.kind == "wage" else
+                        env.material_savings.get(firm.id, 0.0) if offence.kind == "material" else
+                        max(0.0, summary.profit) * cfg.profit_tax * offence.benefit)
+                fine = damage = 0.0
                 belief = self.beliefs[firm.id][offence.name]
                 belief[0] += cfg.learning_rate * ((1.0 if caught else 0.0) - belief[0])
                 if caught:
                     fine = offence.fine_fixed * runner.long_run.price_index + offence.fine_revenue_share * summary.revenue
                     runtime.cash -= fine
+                    damage = offence.reputation_hit * self.previous_revenue.get(firm.id, 0.0) * cfg.reputation_value_factor
                     firm.reputation = max(0.0, firm.reputation - offence.reputation_hit)
                     self.stats["offences_detected"] += 1
                     self.stats["fines"] += fine
                     verdicts.setdefault(offence.name, []).append(offence.fine_revenue_share)
                     state.events.append({"year": year, "day": day, "firm": firm.id, "event": "offence_detected",
                                          "details": f"{OFFENCE_DE.get(offence.name, offence.name)}, Busse {chf(fine)}"})
+                net = gain - fine - damage
+                self.offence_ledger.append({"firm": firm.id, "offence": offence.name, "year": year,
+                                            "gain": gain, "fine": fine, "damage": damage,
+                                            "net": net, "paid_off": net > 0})
             if (any(o.kind == "material" and o.name in self.active.get(firm.id, ()) for o in cfg.offences)
                     and rolls[-1] < cfg.poisoning_probability):
                 self._poisoning(runner, state, firm, year, day)

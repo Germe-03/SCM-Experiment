@@ -237,6 +237,7 @@ class BrandBook:
             brand_rows.append({
                 "year": year, "brand": brand_id, "name": brand.name, "owner": brand.owner,
                 "positioning": brand.positioning, "category": brand.category, "owner_active": owner_active,
+                "traits": list(brand.traits),
                 "units_sold": self.brand_units.get(brand_id, 0),
                 "revenue": self.brand_revenue.get(brand_id, 0.0),
                 "market_share": self.brand_units.get(brand_id, 0) / total_units,

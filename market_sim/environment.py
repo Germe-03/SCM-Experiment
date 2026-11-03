@@ -85,6 +85,7 @@ class FirmRuntime:
     negative_cash_years: int = 0
     interest_cost: float = 0.0
     last_year_revenue: float = 0.0
+    negative_interest_cost: float = 0.0
     consecutive_loss_years: int = 0
     credit_limit: float = 0.0
     consecutive_bad_years: int = 0
@@ -263,6 +264,11 @@ class MarketEnvironment:
         self.fx_rate = self.config.categories.fx_start
         # Phase 6: producers cutting corners on ingredients pay less per unit.
         self.firm_material_factor: dict[str, float] = {}
+        self.price_index = 1.0
+        self.component_factor: dict[str, dict[str, float]] = {}
+        self.material_savings: dict[str, float] = {}
+        self.wage_savings: dict[str, float] = {}
+        self.wage_saving_ratio: dict[str, float] = {}
         # Phase 7: lasting savings from successful research projects.
         self.process_cost_factor: dict[str, float] = {}
         self.research = None
@@ -466,7 +472,7 @@ class MarketEnvironment:
                         quantity = min(quantity, self._effective_capacity(firm.id))
                     if self._harvest_producer(firm):
                         continue
-                    self.runtimes[firm.id].purchase_cost += quantity * self.unit_production_cost(firm)
+                    self.runtimes[firm.id].purchase_cost += quantity * self.unit_production_cost(firm, quantity)
                     # P1 fix: a factory production start is its replenishment order.
                     self.runtimes[firm.id].on_order += quantity
                     self.runtimes[firm.id].incoming_shipments[-1] += quantity
@@ -517,6 +523,7 @@ class MarketEnvironment:
             if self.enable_rnd:
                 self._apply_rnd(firm_id)
             runtime.calculate_period_cost(daily_wage)
+            self.wage_savings[firm_id] = self.wage_savings.get(firm_id, 0.0) + daily_wage * self.wage_saving_ratio.get(firm_id, 0.0)
             self._apply_interest(runtime)
         self.period += 1
         firm_financials = {
@@ -575,18 +582,19 @@ class MarketEnvironment:
                     allocations[supplier_id] = allocations.get(supplier_id, 0) + part
         return allocations
 
-    def unit_production_cost(self, firm: Firm) -> float:
+    def unit_production_cost(self, firm: Firm, quantity: int = 0) -> float:
         """Raw materials per unit; imports pay the foreign price, exchange rate and tariff."""
-        cost = (self.material_cost_per_unit() * self.firm_material_factor.get(firm.id, 1.0)
-                * self.process_cost_factor.get(firm.id, 1.0))
+        cost = self.material_cost_per_unit(firm.id) * self.process_cost_factor.get(firm.id, 1.0)
         book = self.brand_book
-        if not book.categories_on:
-            return cost
-        cost *= book.category_value(firm.category)
-        if firm.importer:
+        if book is not None and book.categories_on:
+            cost *= book.category_value(firm.category)
+        if firm.importer and book is not None and book.categories_on:
             imports = self.config.categories.imports
             cost *= imports.cost_factor * self.fx_rate * (1 + imports.tariff)
-        return cost
+        factor = self.firm_material_factor.get(firm.id, 1.0)
+        if quantity:
+            self.material_savings[firm.id] = self.material_savings.get(firm.id, 0.0) + quantity * cost * (1 - factor)
+        return cost * factor
 
     def _harvest_producer(self, firm: Firm) -> bool:
         """Wineries press grapes once a year; the wine matures before it can be sold."""
@@ -602,7 +610,7 @@ class MarketEnvironment:
         delivered = sum(runtime.shipment_history[-days:])
         yield_factor = max(0.3, self._wine_rng.gauss(1.0, cfg.yield_sd))
         batch = round(min(self._effective_capacity(firm.id) * days, delivered * cfg.wine_forecast_buffer) * yield_factor)
-        runtime.purchase_cost += batch * self.unit_production_cost(firm)
+        runtime.purchase_cost += batch * self.unit_production_cost(firm, batch)
         bonus = max(-0.1, min(0.1, (yield_factor - 1) * cfg.vintage_quality_slope))
         for brand_id, units in book.production_mix(firm.id, batch).items():
             brand = book.brands[brand_id]
@@ -731,6 +739,12 @@ class MarketEnvironment:
                    + cfg.risk_premium_per_loss_year * runtime.consecutive_loss_years
                    + cfg.leverage_premium * min(1.0, debt / max(1.0, runtime.last_year_revenue)))
         cost = debt * rate / 365 if debt else -runtime.cash * cfg.deposit_rate / 365
+        if not debt and cfg.negative_interest_enabled:
+            threshold = max(cfg.deposit_threshold_min * self.price_index,
+                            cfg.deposit_threshold_revenue_fraction * runtime.last_year_revenue)
+            negative = max(0.0, runtime.cash - threshold) * cfg.negative_rate / 365
+            cost = negative - min(runtime.cash, threshold) * cfg.deposit_rate / 365
+            runtime.negative_interest_cost += negative
         runtime.interest_cost += cost
         runtime.cash -= cost
 
@@ -820,10 +834,10 @@ class MarketEnvironment:
                 (1 - cfg.index_mean_reversion) * self.commodity_log_index[name] + shock
             )
 
-    def material_cost_per_unit(self) -> float:
+    def material_cost_per_unit(self, firm_id: str | None = None) -> float:
         """Current raw-material cost of one produced sim-unit in real CHF."""
         return self.material_cost_multiplier * sum(
-            cost * exp(self.commodity_log_index.get(name, 0.0))
+            cost * exp(self.commodity_log_index.get(name, 0.0)) * self.component_factor.get(firm_id, {}).get(name, 1.0)
             for name, cost in self.config.commodities.components.items()
         )
 

@@ -87,7 +87,7 @@ def _ranking_rows(result: RunResult) -> list[dict[str, object]]:
                 "final_cash": result.final_result.firm_results[firm.id].cash,
                 "exit_year": result.exits.get(firm.id, ""),
                 "final_reputation": report.reputation if report else firm.reputation,
-                "final_market_share": report.market_share if report and stage == "retailer" else "",
+                "final_market_share": report.market_share if report else "",
             })
     return sorted(rows, key=lambda row: (-float(row["cumulative_profit"]), str(row["firm"])))
 
@@ -145,6 +145,12 @@ def write_outputs(result: RunResult, out_dir: str | Path) -> list[Path]:
                 writer.writeheader()
                 writer.writerows(rows)
             paths.append(path)
+    path = directory / "offence_ledger.csv"
+    with path.open("w", newline="", encoding="utf-8") as output:
+        writer = csv.DictWriter(output, fieldnames=["firm", "offence", "year", "gain", "fine", "damage", "net", "paid_off"])
+        writer.writeheader()
+        writer.writerows(result.offence_ledger)
+    paths.append(path)
     return paths
 
 

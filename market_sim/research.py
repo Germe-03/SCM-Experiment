@@ -61,13 +61,19 @@ class ResearchLab:
                 continue
             if summaries[firm.id].profit <= 0:
                 continue
-            options = [p for p in self.cfg.projects if firm.stage in p.stages
+            options = [p for p in self.cfg.projects if p.enabled and firm.stage in p.stages
                        and (p.kind != "alkoholfrei" or firm.category == "beer")]
             preferred = [p for p in options if p.name in self.cfg.preferences.get(firm.archetype, [])]
             pool = preferred or options
             if not pool or choice_roll >= self.cfg.start_probability:
                 continue
-            project = pool[int(choice_roll / self.cfg.start_probability * len(pool)) % len(pool)]
+            target = choice_roll / self.cfg.start_probability * sum(p.selection_weight for p in pool)
+            project = pool[-1]
+            for candidate in pool:
+                target -= candidate.selection_weight
+                if target < 0:
+                    project = candidate
+                    break
             cost = project.cost * runner.long_run.price_index
             if runtime.cash < self.cfg.cash_cover * cost:
                 continue
@@ -80,6 +86,26 @@ class ResearchLab:
 
     def _apply(self, runner: SimulationRunner, firm, project) -> str:
         env = runner.env
+        if project.kind == "component_reduction":
+            factors = env.component_factor.setdefault(firm.id, {})
+            factors[project.component] = factors.get(project.component, 1.0) * (1 - project.effect)
+            component = {"malt": "Malz", "hops": "Hopfen", "packaging": "Verpackung", "energy": "Energie"}[project.component]
+            return f"{component} −{project.effect:.0%}"
+        if project.kind == "transport_efficiency":
+            if env.geography is None:
+                return "keine Transportkosten"
+            factors = env.geography.transport_factor
+            factors[firm.id] = factors.get(firm.id, 1.0) * (1 - project.effect)
+            return f"Transportkosten −{project.effect:.0%}"
+        if project.kind == "storage_automation":
+            env.runtimes[firm.id].holding_cost *= 1 - project.effect
+            return f"Lagerkosten −{project.effect:.0%}"
+        if project.kind == "robotics":
+            before = firm.employees
+            firm.employees = max(1, before - round(before * project.effect))
+            firm.productivity_per_employee *= before / firm.employees
+            env.runtimes[firm.id].employees = firm.employees
+            return f"Mitarbeitende {before} → {firm.employees}, Kapazität unverändert"
         if project.kind == "productivity":
             firm.productivity_per_employee *= 1 + project.effect
             return f"Produktivität +{project.effect:.0%}"
