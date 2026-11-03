@@ -14,6 +14,7 @@ def test_seed_zero_ten_year_reference_is_exact() -> None:
     config.long_run.enabled = False
     config.events.types = [t for t in config.events.types if t.type in {"heat_summer", "harvest_failure", "recall"}]
     config.categories.enabled = False
+    config.state.enabled = False
     network = load_firms()
     for stage in network.stages:
         stage.firms = [f for f in stage.firms if f.category == "beer" and not f.importer]

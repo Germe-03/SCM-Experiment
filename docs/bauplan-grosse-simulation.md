@@ -580,3 +580,32 @@ Seed, was angepasst wurde.
   Bern (−1.3 %) und Jura/Freiburg (−2.3 %), wo sich Neueinsteiger drängen.
   Entscheidend ist also der Wettbewerb vor Ort, nicht die Dichte allein.
   156 Tests bestanden.
+- **2026-11-03, Phase 6:** Der Staat erhebt 15 % Gewinnsteuer und verfolgt
+  drei Straftaten: Lohndumping (8 % tiefere Löhne), Pfusch bei Rohstoffen
+  (10 % billiger, nur Hersteller, Vergiftungsrisiko) und Steuerhinterziehung
+  (60 % weniger Steuern). Die wahren Entdeckungsraten und Bussen sind den
+  Firmen unbekannt; jede startet mit einer eigenen falschen Schätzung (Faktor
+  e^−1 bis e^1), lernt aus eigenen Urteilen und hört von öffentlichen.
+  Entschieden wird nach erwartetem Nutzen gegen erwartete Busse und
+  Risikobereitschaft; manche Taten lohnen sich tatsächlich. Vergiftung:
+  40 Tote, 1'500 Kranke, Firma sofort geschlossen, Angst senkt die Nachfrage
+  der Kategorie um 15 % und halbiert sich jedes Jahr, andere Marken der
+  Kategorie verlieren Reputation. Übernahmen: Firmen in Not werden an
+  gesunde Konkurrenten derselben Kategorie verkauft (Kapazität, Marken,
+  Standorte, Schulden gehen mit); die Wettbewerbsbehörde verbietet
+  Übernahmen über 35 % gemeinsamen Marktanteil und zwingt Firmen über 50 %,
+  einen Standort an eine Abspaltung zu verkaufen. Erste Messung: 2 von 10
+  Seeds brachen ein, weil die Mindestzahl pro Stufe auch durch Weingüter
+  erfüllt war und das Bier ganz fehlen konnte, und weil leere Stufen zu
+  langsam neu besetzt wurden. Angepasst: Der letzte inländische Hersteller
+  einer Kategorie ist geschützt, eine fehlende Kategorie bekommt sofort einen
+  neuen Hersteller, und eine Stufe mit weniger als 1.1-mal der Tagesnachfrage
+  an Kapazität bekommt sicher einen Neueinsteiger in voller Grösse
+  (`market_entry.shortage_capacity_ratio`); Vergiftungsrisiko 1 % pro Jahr
+  und pfuschendem Hersteller. Ergebnis (10 Seeds, 50 Jahre): Gewinn 10.1 %
+  des Endkundenumsatzes (8.1–14.1 %), Service Level 97.7 % (alle Seeds über
+  95 %), 36.2 Eintritte und 17.4 Konkurse pro Lauf; pro Lauf rund 1'000
+  begangene und 134 entdeckte Straftaten, 0–4 Vergiftungen, 20–32
+  Übernahmen, 75–172 verbotene Übernahmen und 3–9 Zerschlagungen.
+  161 Tests bestanden. Zigaretten (Idee 15) sind nicht gebaut und bleiben
+  ein TODO.

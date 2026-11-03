@@ -29,10 +29,10 @@ def test_new_brewery_gets_its_own_brand():
     state = runner.start()
     runner.continue_run(state, 1)
     template = runner.network.firm("factory_02").model_copy(
-        deep=True, update={"id": "factory_e01", "name": "Neu Bräu", "archetype": "premium", "suppliers": []})
+        deep=True, update={"id": "factory_x01", "name": "Neu Bräu", "archetype": "premium", "suppliers": []})
     runner.add_firm(template, state)
-    assert runner.env.brand_book.brands_of("factory_e01") == ["factory_e01_brand"]
-    assert runner.env.brand_book.brands["factory_e01_brand"].positioning == "premium"
+    assert runner.env.brand_book.brands_of("factory_x01") == ["factory_x01_brand"]
+    assert runner.env.brand_book.brands["factory_x01_brand"].positioning == "premium"
 
 
 def test_recall_hits_the_brands_of_a_brewery():

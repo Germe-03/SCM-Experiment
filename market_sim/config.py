@@ -321,6 +321,9 @@ class SupplierScoreWeights(ConfigModel):
 class MarketEntryConfig(ConfigModel):
     enabled: bool = False
     base_probability: float = Field(default=0.08, ge=0, le=1)
+    # Phase 6: a stage with less capacity than this multiple of daily demand gets a
+    # full-size entrant for sure (0 switches the rule off).
+    shortage_capacity_ratio: float = Field(default=0.0, ge=0)
     margin_threshold: float = 0.05
     margin_slope: float = Field(default=2.0, ge=0)
     max_probability: float = Field(default=0.5, ge=0, le=1)
@@ -521,6 +524,44 @@ class GeographyConfig(ConfigModel):
     site_coverage_gap: float = Field(default=0.7, gt=0)
 
 
+class OffenceConfig(ConfigModel):
+    name: str
+    # wage: pay less than agreed; material: cheaper, unsafe ingredients; tax: hide profit.
+    kind: Literal["wage", "material", "tax"]
+    benefit: float = Field(gt=0, lt=1)
+    detection_probability: float = Field(ge=0, le=1)
+    fine_fixed: float = Field(default=0.0, ge=0)
+    fine_revenue_share: float = Field(default=0.0, ge=0)
+    reputation_hit: float = Field(default=0.0, ge=0, le=1)
+
+
+class StateConfig(ConfigModel):
+    """Phase 6: taxes, offences with hidden detection and fines, poisoning, takeovers, antitrust."""
+
+    enabled: bool = False
+    profit_tax: float = Field(default=0.15, ge=0, le=1)
+    offences: list[OffenceConfig] = Field(default_factory=list)
+    # Firms start with guesses between true value x e^-spread and x e^spread.
+    belief_spread: float = Field(default=1.0, ge=0)
+    aversion: float = Field(default=1.0, ge=0)
+    learning_rate: float = Field(default=0.3, ge=0, le=1)
+    public_learning: float = Field(default=0.2, ge=0, le=1)
+    poisoning_probability: float = Field(default=0.03, ge=0, le=1)
+    poisoning_deaths: int = Field(default=40, ge=0)
+    poisoning_sick: int = Field(default=1500, ge=0)
+    fear_strength: float = Field(default=0.15, ge=0, le=1)
+    fear_half_life_years: float = Field(default=1.0, gt=0)
+    category_reputation_hit: float = Field(default=0.2, ge=0, le=1)
+    distress_fraction: float = Field(default=0.6, ge=0)
+    distress_loss_years: int = Field(default=2, ge=1)
+    price_per_capacity_unit: float = Field(default=1_500_000.0, ge=0)
+    cash_cover: float = Field(default=1.5, ge=0)
+    max_takeovers_per_stage: int = Field(default=1, ge=0)
+    block_share: float = Field(default=0.35, ge=0, le=1)
+    breakup_share: float = Field(default=0.5, ge=0, le=1)
+    breakup_fraction: float = Field(default=0.3, gt=0, lt=1)
+
+
 class TrendConfig(ConfigModel):
     name: str
     trait: str
@@ -577,6 +618,7 @@ class MarketConfig(ConfigModel):
     long_run: LongRunConfig = Field(default_factory=LongRunConfig)
     categories: CategoriesConfig = Field(default_factory=CategoriesConfig)
     geography: GeographyConfig = Field(default_factory=GeographyConfig)
+    state: StateConfig = Field(default_factory=StateConfig)
 
     @model_validator(mode="after")
     def _validate_stage_prices(self) -> Self:

@@ -51,6 +51,7 @@ def test_disabled_bank_and_rate_cap():
 def test_year_end_limit_and_financial_reporting():
     runner, _ = build_runner(days_per_year=3)
     runner.config.market_entry.enabled = False
+    runner.state_actor = None  # taxes and fines move cash outside the profit
     state = runner.start()
     runner.run_year(state)
     cfg = runner.config.bank

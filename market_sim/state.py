@@ -1,0 +1,251 @@
+"""Phase 6: the state with taxes, offences, fines, poisoning scandals, takeovers and antitrust."""
+
+from __future__ import annotations
+
+import math
+import random
+from typing import TYPE_CHECKING
+
+from market_sim.models import STAGES
+
+if TYPE_CHECKING:
+    from market_sim.runner import RunState, SimulationRunner
+
+
+class StateActor:
+    """Collects taxes, detects offences, punishes them and supervises takeovers.
+
+    The true detection rates and fines are hidden. Each firm starts with its own wrong
+    guess and learns from its own outcomes and from public verdicts.
+    """
+
+    def __init__(self, runner: SimulationRunner, seed: int) -> None:
+        self.cfg = runner.config.state
+        self.rng = random.Random(f"state-{seed}")
+        self.beliefs: dict[str, dict[str, list[float]]] = {}
+        self.active: dict[str, set[str]] = {}
+        self.fear: dict[str, float] = {}
+        self.stats = self._empty_stats()
+        for firm in runner._firms():
+            self._new_beliefs(firm.id)
+
+    @staticmethod
+    def _empty_stats() -> dict[str, float]:
+        return {"taxes": 0.0, "offences": 0, "offences_detected": 0, "fines": 0.0, "poisonings": 0,
+                "takeovers": 0, "takeovers_blocked": 0, "breakups": 0}
+
+    def _new_beliefs(self, firm_id: str) -> None:
+        spread = self.cfg.belief_spread
+        self.beliefs[firm_id] = {
+            o.name: [
+                min(0.99, o.detection_probability * math.exp(self.rng.uniform(-spread, spread))),
+                o.fine_revenue_share * math.exp(self.rng.uniform(-spread, spread)),
+            ]
+            for o in self.cfg.offences
+        }
+
+    # -- start of year: decide and apply offences ----------------------
+    def apply_offences(self, runner: SimulationRunner) -> None:
+        """Called after the annual strategies are set."""
+        env = runner.env
+        self.active = {}
+        env.firm_material_factor = {}
+        for firm in runner._firms():
+            runtime = env.runtimes[firm.id]
+            if not runtime.active:
+                continue
+            if firm.id not in self.beliefs:
+                self._new_beliefs(firm.id)
+            risk = runner.strategies[firm.id].risk_tolerance if firm.id in runner.strategies else 0.5
+            last_revenue = max(1.0, runtime.last_year_revenue)
+            for offence in self.cfg.offences:
+                if offence.kind == "material" and firm.stage != "factory":
+                    continue
+                detect, fine_share = self.beliefs[firm.id][offence.name]
+                benefit = offence.benefit * self._base(offence.kind, runtime, last_revenue)
+                penalty = detect * (offence.fine_fixed + fine_share * last_revenue)
+                if benefit > penalty * (1 + self.cfg.aversion * (1 - risk)):
+                    self.active.setdefault(firm.id, set()).add(offence.name)
+                    self.stats["offences"] += 1
+                    if offence.kind == "wage":
+                        firm.wage_level *= 1 - offence.benefit
+                    elif offence.kind == "material":
+                        env.firm_material_factor[firm.id] = 1 - offence.benefit
+
+    def _base(self, kind: str, runtime, revenue: float) -> float:
+        """Last year's money the offence acts on (wages, materials or profit tax)."""
+        if kind == "wage":
+            return runtime.wage_cost_last_year
+        if kind == "material":
+            return runtime.purchase_cost_last_year
+        return max(0.0, runtime.profit_last_year) * self.cfg.profit_tax
+
+    # -- end of year: taxes, detection, poisoning ----------------------
+    def year_end(self, runner: SimulationRunner, state: RunState) -> None:
+        cfg = self.cfg
+        env = runner.env
+        year = state.year
+        day = runner.config.simulation.days_per_year
+        summaries = state.summaries[-1]
+        verdicts: dict[str, list[float]] = {}
+        for firm in runner._firms():
+            runtime = env.runtimes[firm.id]
+            rolls = [self.rng.random() for _ in cfg.offences] + [self.rng.random()]
+            if not runtime.active or firm.id not in summaries:
+                continue
+            summary = summaries[firm.id]
+            runtime.wage_cost_last_year = runtime.wage_cost - runtime.wage_cost_mark
+            runtime.purchase_cost_last_year = runtime.purchase_cost - runtime.purchase_cost_mark
+            runtime.profit_last_year = summary.profit
+            runtime.wage_cost_mark, runtime.purchase_cost_mark = runtime.wage_cost, runtime.purchase_cost
+            evading = any(o.kind == "tax" and o.name in self.active.get(firm.id, ()) for o in cfg.offences)
+            tax_offence = next((o for o in cfg.offences if o.kind == "tax"), None)
+            tax = max(0.0, summary.profit) * cfg.profit_tax
+            if evading and tax_offence is not None:
+                tax *= 1 - tax_offence.benefit
+            runtime.cash -= tax
+            self.stats["taxes"] += tax
+            for offence, roll in zip(cfg.offences, rolls):
+                if offence.name not in self.active.get(firm.id, ()):
+                    continue
+                caught = roll < offence.detection_probability
+                belief = self.beliefs[firm.id][offence.name]
+                belief[0] += cfg.learning_rate * ((1.0 if caught else 0.0) - belief[0])
+                if caught:
+                    fine = offence.fine_fixed * runner.long_run.price_index + offence.fine_revenue_share * summary.revenue
+                    runtime.cash -= fine
+                    firm.reputation = max(0.0, firm.reputation - offence.reputation_hit)
+                    self.stats["offences_detected"] += 1
+                    self.stats["fines"] += fine
+                    verdicts.setdefault(offence.name, []).append(offence.fine_revenue_share)
+                    state.events.append({"year": year, "day": day, "firm": firm.id, "event": "offence_detected",
+                                         "details": f"{offence.name}, fine {fine:,.0f}"})
+            if (any(o.kind == "material" and o.name in self.active.get(firm.id, ()) for o in cfg.offences)
+                    and rolls[-1] < cfg.poisoning_probability):
+                self._poisoning(runner, state, firm, year, day)
+        # Public verdicts: every firm hears about them and adjusts its guesses.
+        for name, shares in verdicts.items():
+            for beliefs in self.beliefs.values():
+                beliefs[name][0] += cfg.public_learning * (1.0 - beliefs[name][0]) * min(1, len(shares)) * 0.5
+                beliefs[name][1] += cfg.learning_rate * (shares[0] - beliefs[name][1])
+        for category in list(self.fear):
+            self.fear[category] *= 0.5 ** (1 / max(0.1, cfg.fear_half_life_years))
+            if self.fear[category] < 0.005:
+                del self.fear[category]
+        if env.brand_book is not None:
+            env.brand_book.fear = dict(self.fear)
+
+    def _poisoning(self, runner, state, firm, year, day) -> None:
+        """A tainted product kills consumers: the firm closes, the category loses trust."""
+        cfg = self.cfg
+        env = runner.env
+        runner.close_firm_now(firm.id, year, state, "poisoning",
+                              f"{cfg.poisoning_deaths} deaths, {cfg.poisoning_sick} sick")
+        self.stats["poisonings"] += 1
+        self.fear[firm.category] = min(0.9, self.fear.get(firm.category, 0.0) + cfg.fear_strength)
+        consumers = runner.config.consumers
+        if consumers is not None:
+            total = sum(c.persons for c in consumers.classes)
+            for cls in consumers.classes:
+                cls.persons = max(1, cls.persons - round(cfg.poisoning_deaths * cls.persons / total))
+        book = env.brand_book
+        if book is not None:
+            for brand in book.brands.values():
+                if brand.category == firm.category and brand.owner != firm.id:
+                    brand.reputation = max(0.0, brand.reputation - cfg.category_reputation_hit * (1 - brand.reputation))
+
+    # -- takeovers and antitrust ----------------------------------------
+    def takeovers(self, runner: SimulationRunner, state: RunState) -> None:
+        cfg = self.cfg
+        env = runner.env
+        year = state.year
+        day = runner.config.simulation.days_per_year
+        summaries = state.summaries[-1]
+        for stage in STAGES:
+            active = [f for f in runner.network.firms_in(stage) if env.runtimes[f.id].active and f.id in summaries]
+            revenue = sum(summaries[f.id].revenue for f in active) or 1.0
+            share = {f.id: summaries[f.id].revenue / revenue for f in active}
+            targets = sorted(
+                (f for f in active if env.runtimes[f.id].cash < -cfg.distress_fraction * env.runtimes[f.id].credit_limit
+                 or env.runtimes[f.id].consecutive_loss_years >= cfg.distress_loss_years),
+                key=lambda f: env.runtimes[f.id].cash,
+            )
+            done = 0
+            for target in targets:
+                if done >= cfg.max_takeovers_per_stage or len(active) - done <= 2:
+                    break
+                if stage == "factory" and not target.importer and sum(
+                        1 for f in active if f.category == target.category and not f.importer
+                        and env.runtimes[f.id].active) <= 1:
+                    continue
+                t_rt = env.runtimes[target.id]
+                price = max(0.0, cfg.price_per_capacity_unit * runner.long_run.price_index
+                            * env._effective_capacity(target.id) + t_rt.cash)
+                buyers = sorted(
+                    (f for f in active if f.id != target.id and summaries[f.id].profit > 0
+                     and f.category == target.category
+                     and env.runtimes[f.id].cash >= cfg.cash_cover * price),
+                    key=lambda f: (-env.runtimes[f.id].cash, f.id),
+                )
+                for buyer in buyers:
+                    combined = share[buyer.id] + share[target.id]
+                    if combined > cfg.block_share:
+                        self.stats["takeovers_blocked"] += 1
+                        state.events.append({"year": year, "day": day, "firm": buyer.id, "event": "takeover_blocked",
+                                             "details": f"{target.id}, combined share {combined:.0%}"})
+                        continue
+                    self._merge(runner, state, buyer, target, price, year, day)
+                    share[buyer.id] = combined
+                    share[target.id] = 0.0
+                    done += 1
+                    break
+            self._break_up(runner, state, stage, active, share, year, day)
+
+    def _merge(self, runner, state, buyer, target, price, year, day) -> None:
+        env = runner.env
+        b_rt, t_rt = env.runtimes[buyer.id], env.runtimes[target.id]
+        b_rt.cash -= price
+        b_rt.cash += min(0.0, t_rt.cash)  # the buyer also takes over the debt
+        buyer.capacity += target.capacity
+        buyer.machine_capacity += target.machine_capacity
+        buyer.employees += target.employees
+        b_rt.employees = buyer.employees
+        geo = env.geography
+        if geo is not None:
+            for region in geo.sites(target):
+                if region not in geo.sites(buyer):
+                    buyer.extra_regions.append(region)
+        if env.brand_book is not None:
+            for brand_id in env.brand_book.brands_of(target.id):
+                env.brand_book.brands[brand_id].owner = buyer.id
+        for brand_id, units in t_rt.stock.items():
+            b_rt.stock[brand_id] = b_rt.stock.get(brand_id, 0) + units
+        b_rt.inventory += t_rt.inventory
+        t_rt.stock = {}
+        t_rt.inventory = 0
+        t_rt.cash = 0.0
+        runner.close_firm_now(target.id, year, state, "takeover", f"bought by {buyer.id} for {price:,.0f}")
+        self.stats["takeovers"] += 1
+
+    def _break_up(self, runner, state, stage, active, share, year, day) -> None:
+        """A dominant firm must sell a site to a new competitor."""
+        cfg = self.cfg
+        env = runner.env
+        geo = env.geography
+        for firm in active:
+            if share.get(firm.id, 0.0) <= cfg.breakup_share or not env.runtimes[firm.id].active:
+                continue
+            if geo is None or not firm.extra_regions:
+                continue
+            region = firm.extra_regions.pop()
+            moved = max(1, round(firm.capacity * cfg.breakup_fraction))
+            firm.capacity = max(1, firm.capacity - moved)
+            moved_machines = round(firm.machine_capacity * cfg.breakup_fraction)
+            firm.machine_capacity -= moved_machines
+            moved_staff = max(1, round(firm.employees * cfg.breakup_fraction))
+            firm.employees = max(1, firm.employees - moved_staff)
+            env.runtimes[firm.id].employees = firm.employees
+            spin = runner.spin_off(firm, state, region, moved, moved_machines, moved_staff)
+            self.stats["breakups"] += 1
+            state.events.append({"year": year, "day": day, "firm": firm.id, "event": "breakup",
+                                 "details": f"share {share[firm.id]:.0%}, site {region} sold to {spin}"})

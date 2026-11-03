@@ -1,6 +1,7 @@
 market_entry:
   enabled: true
   base_probability: 0.08
+  shortage_capacity_ratio: 1.1
   margin_threshold: 0.05
   margin_slope: 2.0
   max_probability: 0.5
@@ -348,3 +349,31 @@ geography:
   cash_cover: 2.0
   site_fraction: 0.30
   site_coverage_gap: 0.70
+
+# Phase 6: the state. True detection rates and fines are hidden from the firms; some
+# offences pay off because the fine is smaller than the gain. Cigarettes: not built (TODO).
+state:
+  enabled: true
+  profit_tax: 0.15
+  offences:
+    - {name: lohndumping, kind: wage, benefit: 0.08, detection_probability: 0.15, fine_fixed: 2000000, fine_revenue_share: 0.005, reputation_hit: 0.08}
+    - {name: pfusch, kind: material, benefit: 0.10, detection_probability: 0.20, fine_fixed: 5000000, fine_revenue_share: 0.02, reputation_hit: 0.15}
+    - {name: steuerhinterziehung, kind: tax, benefit: 0.60, detection_probability: 0.10, fine_fixed: 1000000, fine_revenue_share: 0.003, reputation_hit: 0.05}
+  belief_spread: 1.0
+  aversion: 1.0
+  learning_rate: 0.3
+  public_learning: 0.2
+  poisoning_probability: 0.01
+  poisoning_deaths: 40
+  poisoning_sick: 1500
+  fear_strength: 0.15
+  fear_half_life_years: 1.0
+  category_reputation_hit: 0.2
+  distress_fraction: 0.6
+  distress_loss_years: 2
+  price_per_capacity_unit: 1500000
+  cash_cover: 1.5
+  max_takeovers_per_stage: 1
+  block_share: 0.35
+  breakup_share: 0.5
+  breakup_fraction: 0.3

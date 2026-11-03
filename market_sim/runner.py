@@ -9,6 +9,7 @@ from statistics import pstdev
 from typing import Callable
 
 from market_sim.longrun import LongRun
+from market_sim.state import StateActor
 from market_sim.config import MarketConfig, MarketEventTypeConfig
 from market_sim.environment import MarketEnvironment, MarketResult
 from market_sim.kpi import (
@@ -156,6 +157,7 @@ class SimulationRunner:
         self._event_rng = random.Random(f"events-{seed}")
         self.long_run = LongRun(self, seed)
         self._scale_for_categories()
+        self.state_actor = StateActor(self, seed) if config.state.enabled else None
         self._phase1_rng = random.Random(f"phase1-{seed}")
         self._entry_counters = {stage: 0 for stage in STAGES}
         self._entry_cash = {
@@ -439,6 +441,8 @@ class SimulationRunner:
             ).validate_for_config(self.config)
             self.strategies[firm.id] = strategy
             self._apply_annual(firm, strategy)
+        if self.state_actor is not None:
+            self.state_actor.apply_offences(self)
 
         for day in range(self.config.simulation.days_per_year):
             decisions = {}
@@ -596,10 +600,13 @@ class SimulationRunner:
         geo = self.env.geography
         if geo is not None:
             geo.year_end(self, state)
+        if self.state_actor is not None:
+            self.state_actor.year_end(self, state)
+            self.state_actor.takeovers(self, state)
         update = {"market_entries": state.market_entries.get(state.year, 0), "strategy_changes": changes,
                   "price_index": self.long_run.price_index, "population_index": self.long_run.population_index,
                   "trend": self.long_run.trend, "fx_rate": self.env.fx_rate,
-                  **self._geography_kpis(),
+                  **self._geography_kpis(), **self._state_kpis(),
                   **self._category_kpis(),
                   "total_profit": sum(s.profit for s in summaries[-1].values())}
         for stage in STAGES:
@@ -609,6 +616,38 @@ class SimulationRunner:
                                          if self.env.runtimes[f.id].active)
             update[f"active_firms_{stage}"] = sum(self.env.runtimes[f.id].active for f in firms)
         system_kpis[-1] = system_kpis[-1].model_copy(update=update)
+
+    def _state_kpis(self) -> dict[str, float]:
+        actor = self.state_actor
+        if actor is None:
+            return {}
+        stats = dict(actor.stats)
+        actor.stats = actor._empty_stats()
+        return {**stats, "fear": max(actor.fear.values(), default=0.0)}
+
+    def close_firm_now(self, firm_id: str, year: int, state: RunState, event: str, details: str) -> None:
+        """Phase 6: close a firm at once (poisoning, takeover), ignoring the stage minimum."""
+        runtime = self.env.runtimes[firm_id]
+        if not runtime.active:
+            return
+        runtime.active = False
+        self.env.close_firm(firm_id)
+        self.exits[firm_id] = year
+        state.events.append({"year": year, "day": self.config.simulation.days_per_year,
+                             "firm": firm_id, "event": event, "details": details})
+
+    def spin_off(self, parent: Firm, state: RunState, region: str, capacity: int, machines: int, staff: int) -> str:
+        """Phase 6: a site sold off by antitrust order becomes a new firm."""
+        self._spin_offs = getattr(self, "_spin_offs", 0) + 1
+        firm = parent.model_copy(deep=True, update={
+            "id": f"{parent.stage}_s{self._spin_offs:02d}", "name": f"{parent.name} ({region})",
+            "region": region, "extra_regions": [], "capacity": capacity, "machine_capacity": machines,
+            "employees": staff, "inventory": 0, "backlog": 0, "suppliers": [],
+            "cash": parent.cash * self.config.market_entry.start_cash_fraction,
+        })
+        self.add_firm(firm, state)
+        state.events[-1].update(event="spin_off", details=f"from {parent.id}")
+        return firm.id
 
     def _geography_kpis(self) -> dict[str, float]:
         geo = self.env.geography
@@ -647,9 +686,32 @@ class SimulationRunner:
             margin = sum(state.summaries[-1][f.id].profit for f in active) / revenue if revenue else 0.0
             probability = min(cfg.max_probability, cfg.base_probability
                               + cfg.margin_slope * max(0.0, margin - cfg.margin_threshold))
+            capacity_share = cfg.start_capacity_fraction
+            stage_capacity = sum(self.env._effective_capacity(f.id) for f in active)
+            if cfg.shortage_capacity_ratio and stage_capacity < cfg.shortage_capacity_ratio * self.demand.mean:
+                # A starved stage attracts a full-size newcomer.
+                probability, capacity_share = 1.0, 1.0
+            book = self.env.brand_book
+            if stage == "factory" and book is not None and book.categories_on:
+                # A category without any producer gets a new one at once.
+                present = {f.category for f in active}
+                if any(c not in present for c in book.base_share):
+                    probability = 1.0
             if roll >= probability or len(active) >= cfg.max_firms_per_stage[stage]:
                 continue
-            template = sorted(active, key=lambda f: (self.env.runtimes[f.id].cash, f.id))[len(active) // 2]
+            pool = active
+            book = self.env.brand_book
+            if stage == "factory" and book is not None and book.categories_on:
+                # Phase 6: a new producer enters the category with the least capacity per demand.
+                supply = {c: 0.0 for c in book.base_share}
+                for f in active:
+                    if f.category in supply:
+                        supply[f.category] += self.env._effective_capacity(f.id)
+                category = min(sorted(supply), key=lambda c: supply[c] / book.base_share[c])
+                pool = [f for f in active if f.category == category] or active
+            template = sorted(pool, key=lambda f: (self.env.runtimes[f.id].cash, f.id))[len(pool) // 2]
+            if stage == "factory" and book is not None and book.categories_on and template.category != category:
+                template = template.model_copy(update={"category": category, "importer": False})
             self._entry_counters[stage] += 1
             counter = self._entry_counters[stage]
             names = cfg.names[stage]
@@ -659,10 +721,10 @@ class SimulationRunner:
                 "id": f"{stage}_e{counter:02d}", "name": name,
                 "archetype": archetypes[int(archetype_roll * len(archetypes))],
                 "cash": cfg.start_cash_fraction * self._entry_cash[stage],
-                "capacity": max(1, round(template.capacity * cfg.start_capacity_fraction)),
-                "machine_capacity": max(1, round(template.machine_capacity * cfg.start_capacity_fraction))
+                "capacity": max(1, round(template.capacity * capacity_share)),
+                "machine_capacity": max(1, round(template.machine_capacity * capacity_share))
                     if template.machine_capacity else 0,
-                "employees": max(1, round(template.employees * cfg.start_capacity_fraction)),
+                "employees": max(1, round(template.employees * capacity_share)),
                 "reputation": cfg.start_reputation[0] + reputation_roll * (cfg.start_reputation[1] - cfg.start_reputation[0]),
                 "quality_level": template.quality_level * cfg.start_quality_fraction,
                 "inventory": 0, "backlog": 0, "suppliers": [],
@@ -916,7 +978,13 @@ class SimulationRunner:
         for _, firm_id in sorted(candidates):
             stage = self.network.firm(firm_id).stage
             active = sum(self.env.runtimes[f.id].active for f in self.network.firms_in(stage))
-            if active <= cfg.min_firms_per_stage:
+            firm = self.network.firm(firm_id)
+            same_category = sum(self.env.runtimes[f.id].active for f in self.network.firms_in(stage)
+                                if f.category == firm.category and not f.importer)
+            # Phase 6: the last domestic producer of a category is protected like a stage minimum.
+            protected = (stage == "factory" and not firm.importer and same_category <= 1
+                         and cfg.min_firms_per_stage > 0)
+            if active <= cfg.min_firms_per_stage or protected:
                 bank = self.config.bank
                 runtime = self.env.runtimes[firm_id]
                 if bank.enabled and bank.restructuring and runtime.cash < 0:

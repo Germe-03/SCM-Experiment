@@ -85,6 +85,15 @@ class SystemKPIs(BaseModel):
     new_sites: int = 0
     firms_using_service: int = 0
     fuel_index: float = 1.0
+    taxes: float = 0.0
+    offences: int = 0
+    offences_detected: int = 0
+    fines: float = 0.0
+    poisonings: int = 0
+    fear: float = 0.0
+    takeovers: int = 0
+    takeovers_blocked: int = 0
+    breakups: int = 0
     interest_cost_retailer: float = 0.0
     interest_cost_wholesaler: float = 0.0
     interest_cost_distributor: float = 0.0

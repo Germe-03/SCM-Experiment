@@ -71,9 +71,18 @@ def ten_year_results():
     for feature in (config.market_entry, config.bank, config.strategy_change):
         feature.enabled = False
     config.consumer_model = "segments"
+    config.state.enabled = False
     config.policy.max_backlog_days = None
-    return (run_simulation(years=10, seed=0, config=config.model_copy(deep=True)),
-            run_simulation(years=10, seed=0, config=config.model_copy(deep=True)))
+
+    def beer_network():
+        # The original calibration knew only the two breweries (no Phase-4 producers).
+        network = load_firms()
+        for stage in network.stages:
+            stage.firms = [f for f in stage.firms if f.category == "beer" and not f.importer]
+        return network
+
+    return (run_simulation(years=10, seed=0, config=config.model_copy(deep=True), network=beer_network()),
+            run_simulation(years=10, seed=0, config=config.model_copy(deep=True), network=beer_network()))
 
 
 def test_full_run_is_deterministic_and_strategies_stay_bounded(ten_year_results):

@@ -98,9 +98,10 @@ def test_negative_cash_years_and_stage_minimum() -> None:
     runner._apply_bankruptcy(1)
     assert runner.exits == {}  # one negative year is not enough
     runner._apply_bankruptcy(2)
-    for stage in ("retailer", "factory"):
+    # The stage minimum is protected; among producers also the last one of each category.
+    for stage, expected in (("retailer", 1), ("factory", 3)):
         active = [f for f in network.firms_in(stage) if runner.env.runtimes[f.id].active]
-        assert len(active) == 1  # the stage minimum is protected
+        assert len(active) == expected
 
 
 def test_commodity_state_survives_checkpoint_resume(tmp_path) -> None:

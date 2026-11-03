@@ -107,6 +107,8 @@ class BrandBook:
         self.global_weight = dict(self.base_share)
         self.retail_weight: dict[str, dict[str, float]] = {}
         self.export_units = 0
+        # Phase 6: fear after a poisoning scandal lowers consumption of that category.
+        self.fear: dict[str, float] = {}
         self.reset_year()
 
     # -- brand registry -------------------------------------------------
@@ -270,6 +272,13 @@ class BrandBook:
             (f for f in env.network.firms_in("retailer") if env.runtimes[f.id].active), key=lambda f: f.id
         )
         demand_by_class = largest_remainder(total_demand, self.class_volume)
+        if self.fear:
+            for name in demand_by_class:
+                cls = self.classes[name]
+                shares = self.class_shares(cls, {}) if self.categories_on else {"beer": 1.0}
+                drop = sum(shares.get(c, 0.0) * f for c, f in self.fear.items())
+                demand_by_class[name] = round(demand_by_class[name] * (1 - drop))
+            total_demand = sum(demand_by_class.values())
         requested = {f.id: 0 for f in retailers}
         sold = {f.id: 0 for f in retailers}
         if not retailers:

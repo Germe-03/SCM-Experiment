@@ -52,6 +52,12 @@ class FirmRuntime:
     incoming_brands: list[dict[str, int]] = field(default_factory=list)
     # Phase 4: wine maturing in the cellar as (release day, brand, units, vintage bonus).
     maturing: list[tuple[int, str, int, float]] = field(default_factory=list)
+    # Phase 6: last year's bases for offences and counters to measure them.
+    wage_cost_last_year: float = 0.0
+    purchase_cost_last_year: float = 0.0
+    profit_last_year: float = 0.0
+    wage_cost_mark: float = 0.0
+    purchase_cost_mark: float = 0.0
     order_history: list[int] = field(default_factory=list)
     shipment_history: list[int] = field(default_factory=list)
     orders_received_history: list[int] = field(default_factory=list)
@@ -260,6 +266,8 @@ class MarketEnvironment:
         self.capacity_windows: list[tuple[str, int, int, float]] = []
         # Phase 4: CHF per EUR, the wine weather and the domestic demand that sizes exports.
         self.fx_rate = self.config.categories.fx_start
+        # Phase 6: producers cutting corners on ingredients pay less per unit.
+        self.firm_material_factor: dict[str, float] = {}
         self._wine_rng = random.Random(f"wine-{self.seed}")
         self.domestic_daily_demand = float(self.config.demand.daily_demand_units)
         self.runtimes = {}
@@ -600,7 +608,7 @@ class MarketEnvironment:
 
     def unit_production_cost(self, firm: Firm) -> float:
         """Raw materials per unit; imports pay the foreign price, exchange rate and tariff."""
-        cost = self.material_cost_per_unit()
+        cost = self.material_cost_per_unit() * self.firm_material_factor.get(firm.id, 1.0)
         book = self.brand_book
         if book is None or not book.categories_on:
             return cost
