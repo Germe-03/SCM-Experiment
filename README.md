@@ -59,9 +59,10 @@ Referenz geprüft. Die Herleitung steht in
 - **Beschaffung:** Base-Stock-Bestellungen inkl. offener Bestellungen, mit
   Glättung und Obergrenze; Aufteilung auf mehrere Lieferanten, Auswahl nach
   Preis, Zuverlässigkeit und Reputation.
-- **Finanzen:** Umsatz, Wareneinsatz, Lager-, Backlog- und Handlingkosten,
-  Löhne und F&E in realen CHF. Firmen mit zu tiefem Cash scheiden am
-  Jahresende aus.
+- **Finanzen:** Umsatz, Wareneinsatz, Rohstoffe der Brauereien, Lager-,
+  Backlog- und Handlingkosten, Fixkosten, Löhne und F&E in realen CHF. Firmen
+  scheiden am Jahresende aus, wenn ihr Cash im Verhältnis zum Startkapital zu
+  tief liegt (siehe Abschnitt Experiment).
 - **Rückkopplungen:** Lohn → Reputation, erreichte Lieferquote →
   Zuverlässigkeit, Preissprünge → Reputation, Überlast → Qualität,
   verzögerte F&E → Qualität. Die Strategie wird jährlich anhand der
@@ -88,7 +89,7 @@ python -m pytest market_sim
 
 `run` schreibt `annual_reports.csv` (pro Firma und Jahr), `firm_ranking.csv`
 (inkl. `exit_year` für Firmen, die Konkurs gegangen sind) und
-`system_kpis.csv`. In der Konsole stehen ausgeschiedene Firmen separat von
+`system_kpis.csv` sowie das Ereignisprotokoll `events.csv`. In der Konsole stehen ausgeschiedene Firmen separat von
 Firmen, die noch aktiv sind, aber negatives Cash haben.
 
 ### Speicherstände und Szenarien
@@ -126,12 +127,131 @@ hast. Das Dashboard ist eine eigenständige HTML-Datei, in
 der man jede Firma einzeln anschauen kann. Ein 10-Jahres-Lauf dauert rund
 20 Sekunden.
 
+### Experiment
+
+Der Markt soll beobachtbar sein: echter Konkurrenzdruck, Seeds mit eigenem
+Verlauf und Szenarien mit messbarer Wirkung.
+
+```bash
+python -m market_sim.experiment --seeds 0-9 --scenarios basis,nachfrage_einbruch,brauerei_engpass,preiserhoehung_brauerei --fork-year 5 --out runs/experiment_a
+```
+
+Pro Seed läuft die Basis einmal und speichert den Speicherstand im Forkjahr
+(`<out>/checkpoints/seed_XX/year_05.pkl`). Jedes Szenario startet aus einer
+frisch geladenen Kopie davon. Die Seeds laufen in getrennten Prozessen
+(`--workers`), nichts wird geteilt, kein Szenario beeinflusst ein anderes.
+`basis` ist der Lauf ohne Änderung. Mit `--years` und `--days-per-year` lässt
+sich ein kurzer Probelauf machen. Verglichen werden die Jahre nach dem
+Forkjahr. Ausgabe:
+
+- `experiment_summary.csv`: Mittelwert, Standardabweichung, Minimum, Maximum
+  und Anzahl Seeds pro Szenario und Kennzahl.
+- `experiment_runs.csv`: die Rohwerte pro Seed und Szenario.
+- Eine Konsolenzusammenfassung mit der Differenz zur Basis.
+
+Ein normaler Lauf (`python -m market_sim.run`) schreibt zusätzlich
+`events.csv` und die neuen Spalten in `system_kpis.csv`.
+
+#### Neue Kennzahlen (`system_kpis.csv`)
+
+- `margin_<stufe>`: Gewinn geteilt durch Umsatz der aktiven Firmen einer Stufe.
+- `utilization_<stufe>`: mittlere Kapazitätsauslastung der aktiven Firmen.
+- `market_share_movement`: Summe der absoluten Änderungen der Retailer-Marktanteile
+  gegenüber dem Vorjahr (0.10 heisst 10 Prozentpunkte).
+- `firms_with_loss`, `bankruptcies`, `market_entries` (Markteintritte sind noch
+  nicht umgesetzt und bleiben 0) und `retailer_price_spread` (Standardabweichung
+  der mittleren Retailer-Preise).
+
+#### Ereignisprotokoll (`events.csv`)
+
+Eine Zeile pro Ereignis mit `year`, `day`, `firm`, `event`, `details`:
+`bankruptcy`, `price_increase` / `price_cut` (Jahresmittelpreis ändert sich um
+mehr als 5 %), `supplier_switch` (grösster Lieferant wechselt),
+`capacity_limit` (Auslastung über 95 % an mindestens 7 Tagen in Folge) und die
+Marktereignisse `heat_summer`, `harvest_failure` und `recall`. Das Protokoll
+liegt im Speicherstand; Fortsetzen ergibt dieselbe Datei wie ein Lauf ohne
+Unterbruch.
+
+#### Was kalibriert wurde (`config/market.yaml`)
+
+- `commodities`: Rohstoffkosten der Brauereien pro produzierter Einheit
+  (Malz, Hopfen, Verpackung, Energie) mit einem schwankenden Preisindex pro Komponente.
+- `costs.personnel_cost_scale` und `costs.initial_cash_scale`: Löhne, Einstellung,
+  F&E und Startkapital liegen auf derselben Geldskala wie der Umsatz.
+- `fixed_costs`: Fixkosten pro Tag und pro Kapazitätseinheit; Überkapazität kostet Geld.
+- Kapazität pro Stufe auf das 1.2- bis 1.4-Fache der Nachfrage (`firms.yaml`),
+  Mindestbelegschaft `workforce.min_employees` (vorher fest 5 Mitarbeiter, die
+  eigentliche Ursache der Überkapazität).
+- `bankruptcy`: Austritt bei Cash unter −1 × Startkapital oder nach 4 Jahren
+  in Folge mit negativem Cash. Eine Stufe behält mindestens 2 Firmen und verliert
+  höchstens 1 Firma pro Jahr (so kippt nicht die ganze Kette auf einmal).
+- `adaptive_strategy`: Preise reagieren auf den Konkurrenzpreis
+  (`competitive_pull`) und auf Marktanteilsverlust (`undercut_fraction`);
+  Preisbänder liegen um den Stufen-Basispreis.
+- `start_variation` und `events`: Startkapital, Qualität und Reputation
+  streuen pro Seed (±20 / 10 / 15 %); pro Jahr treten Hitzesommer, Ernteausfall
+  und ein Rückruf mit eigener Wahrscheinlichkeit auf. Alles ist pro Seed festgelegt.
+
+#### Vorher und nachher (Mittel über Seeds 0–4, 10 Jahre)
+
+| Kennzahl | Vorher | Nachher | Ziel |
+|---|---:|---:|---|
+| Systemgewinn / Endkundenumsatz | 48.8 % | 11.7 % | 5–15 % |
+| Marge Brauerei | 60.3 % | 8.2 % | 8–15 % |
+| Marge Distributor | 22.3 % | 4.1 % | 2–6 % |
+| Marge Wholesaler | 11.7 % | 2.7 % | 2–6 % |
+| Marge Retailer | 6.9 % | 3.3 % | 1–5 % |
+| Auslastung (Mittel aller Stufen) | 9.7 % | 71.3 % | 65–90 % |
+| Ausgeschiedene Firmen pro Lauf | 1 | 4.4 (3–6) | 1–5, höchstens 7 |
+| Firmenjahre mit Verlust (von 220) | 22 | 48 | – |
+| Marktanteilsverschiebung pro Jahr | 4.3 Pkt. | 10.7 Pkt. | über 5 Pkt. |
+| Konzentration (HHI) | 0.106 | 0.111 | – |
+| Bullwhip-Ratio | 93.8 | 101.1 | nicht explodieren |
+| Preisanstieg Jahr 1 bis 10 | +17 % | +5 % | – |
+| Verlorene Verkäufe (10 Jahre, Summe) | 2'142 | 95'754 | – |
+| Streuung des Systemgewinns zwischen Seeds | 48.7–48.8 % | 8.4–13.6 % | – |
+
+Alle Ziele aus der Aufgabe sind erreicht. Die Marge der Wholesaler liegt knapp
+am unteren Rand. Die verlorenen Verkäufe sind deutlich gestiegen: Das ist die
+Kehrseite der knappen Kapazität. Sie fallen vor allem in den Jahren 1 bis 3
+an (Service-Level dort 78–99 %), danach nur noch nach Konkursen und
+Marktereignissen. Im Mittel über 10 Jahre liefert der Markt rund 96 % der
+Nachfrage (vorher praktisch 100 %).
+
+#### Beispiel: 5 Seeds, alle Szenarien, Fork nach Jahr 5
+
+Mittelwert ± Standardabweichung über die Jahre 6 bis 10. Werte in CHF.
+
+| Szenario | Gewinn (Mrd.) | Verlorene Verkäufe | Kundenpreis | HHI | Service-Level | Konkurse |
+|---|---:|---:|---:|---:|---:|---:|
+| basis | 3.00 ± 0.48 | 26'221 ± 17'570 | 53'668 ± 800 | 0.109 | 98.6 % | 2.6 |
+| nachfrage_einbruch | 1.18 ± 0.38 | 16'558 ± 13'108 | 53'709 ± 981 | 0.109 | 99.6 % | 3.4 |
+| brauerei_engpass | −4.65 ± 1.94 | 251'024 ± 54'358 | 53'928 ± 1'230 | 0.136 | 44.8 % | 6.8 |
+| preiserhoehung_brauerei | −0.25 ± 3.00 | 129'622 ± 73'835 | 54'047 ± 517 | 0.121 | 73.0 % | 5.4 |
+
+- Der Brauerei-Engpass wirkt jetzt stark (vorher +1 Mio. CHF über 5 Jahre):
+  rund zehnmal so viele verlorene Verkäufe, Service-Level halbiert, mehr
+  Konzentration und mehr Konkurse. Der Kundenpreis steigt dabei nur um etwa 0.5 %;
+  der Engpass zeigt sich in leeren Regalen, nicht in höheren Preisen.
+- Bei der Preiserhöhung der Brauereien streuen die Seeds stark (Gewinn
+  ±3.0 Mrd. statt ±0.5 Mrd. in der Basis). Wer dort mit einem Seed rechnet,
+  zieht falsche Schlüsse.
+- Ein Nachfrageeinbruch senkt den Gewinn um rund 60 %, entlastet aber die
+  Kapazität: weniger verlorene Verkäufe, höheres Service-Level.
+
+Kalibrierungsgrenzen: Die Ökonomie ist empfindlich. Kleine Änderungen an
+Fixkosten oder Kapazität kippten in der Entwicklung einzelne Läufe in eine
+Lieferkrise (Service-Level unter 40 %). Wer Parameter ändert, sollte deshalb
+immer mehrere Seeds messen. Die Zahlen sind Modellannahmen, keine Branchendaten.
+
 ---
 
-## 3. Erste Ergebnisse
+## 3. Erste Ergebnisse (Stand vor der Kalibrierung)
 
-Stand: aktueller Code auf `main`, 10 Jahre, Seeds 0, 1 und 2.
-Alle 92 Tests laufen grün.
+Dieser Abschnitt zeigt den Stand **vor** der Kalibrierung (Seeds 0, 1 und 2,
+92 Tests). Die damaligen Zahlen sind nur noch als Vergleich gedacht: Der Markt
+war zu bequem (Systemgewinn 49 % des Umsatzes, Auslastung 10 %). Die aktuellen
+Werte stehen im Abschnitt «Experiment».
 
 ### Systemkennzahlen (Seed 0)
 
@@ -215,14 +335,18 @@ Jahre 6 bis 10.
 
 ### Offene Punkte
 
-- Bullwhip-Ratio weiter senken (Forecast-Weitergabe, stärkere Glättung).
+- Bullwhip-Ratio weiter senken (Forecast-Weitergabe, stärkere Glättung);
+  aktuell rund 100.
 - Die Ergebnisse in `runs/` stammen von älteren Ständen und sollten neu
-  gerechnet werden.
+  gerechnet werden. Alte Speicherstände sind nicht mehr kompatibel
+  (Checkpoint-Version 2).
+- Markteintritte neuer Firmen (bei dauerhaft hoher Marge einer Stufe) sind
+  noch nicht umgesetzt; die Kennzahl `market_entries` bleibt 0.
 - Die Koeffizienten für Löhne, F&E und Handlingkosten sind Schätzungen und
   noch nicht an echten Branchendaten kalibriert.
-- Brauereien haben noch unbegrenzte, kostenlose Rohstoffe. Ein Vorschlag für
-  einen börsenartigen Rohstoffmarkt (Malz, Hopfen, Verpackung, Energie)
-  liegt in `docs/commodity-market-proposal.md`.
+- Rohstoffe haben jetzt Kosten und einen schwankenden Preisindex. Ein
+  börsenartiger Rohstoffmarkt mit Lieferanten liegt weiterhin nur als
+  Vorschlag in `docs/commodity-market-proposal.md`.
 - Die Beer-Game-Agenten in `team_bundle/` nutzen noch die Mirror-Policy.
 
 ---
