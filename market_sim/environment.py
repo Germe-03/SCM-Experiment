@@ -189,6 +189,29 @@ class MarketEnvironment:
         self.backlog_history: dict[str, list[int]] = {}
         self._orders_received_this_period: dict[str, int] = {}
 
+    def close_firm(self, firm_id: str) -> None:
+        """Cancel everything still open with a firm that has left the market."""
+        runtime = self.runtimes[firm_id]
+        for customer_id, owed in self._open_units_by_customer(firm_id).items():
+            customer = self.runtimes.get(customer_id)
+            if customer is not None:
+                customer.on_order = max(0, customer.on_order - owed)
+        runtime.incoming_orders = [{} for _ in runtime.incoming_orders]
+        runtime.backlog_by_downstream = {}
+        runtime.backlog = 0
+        runtime.on_order = 0
+
+    def _open_units_by_customer(self, firm_id: str) -> dict[str, int]:
+        """Units each customer ordered from this firm that were never shipped."""
+        runtime = self.runtimes[firm_id]
+        owed: dict[str, int] = {}
+        for queue in runtime.incoming_orders:
+            for customer_id, quantity in queue.items():
+                owed[customer_id] = owed.get(customer_id, 0) + quantity
+        for customer_id, quantity in runtime.backlog_by_downstream.items():
+            owed[customer_id] = owed.get(customer_id, 0) + quantity
+        return owed
+
     def reset(self) -> None:
         self.period = 0
         self.cumulative_lost_sales = 0

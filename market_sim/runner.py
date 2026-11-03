@@ -597,6 +597,7 @@ class SimulationRunner:
                 continue
             exits_per_stage[stage] = exits_per_stage.get(stage, 0) + 1
             self.env.runtimes[firm_id].active = False
+            self.env.close_firm(firm_id)
             self.exits[firm_id] = completed_years
             if events is not None:
                 events.append({
@@ -659,19 +660,22 @@ class SimulationRunner:
                         "details": f"largest supplier {before} -> {top}",
                     })
                 state.main_supplier[firm.id] = top
-            run_start = None
-            series = utilization[firm.id] + [0.0]
-            for index, value in enumerate(series):
-                if value > 0.95 and run_start is None:
-                    run_start = index
-                elif value <= 0.95 and run_start is not None:
-                    if index - run_start >= 7:
-                        state.events.append({
-                            "year": year, "day": run_start + 1, "firm": firm.id,
-                            "event": "capacity_limit",
-                            "details": f"utilization above 95 % for {index - run_start} days",
-                        })
-                    run_start = None
+            episodes: list[list[int]] = []
+            for index, value in enumerate(utilization[firm.id]):
+                if value <= 0.95:
+                    continue
+                # Only a pause of at least 30 days below 95 % starts a new episode.
+                if episodes and index - episodes[-1][1] - 1 < 30:
+                    episodes[-1][1] = index
+                else:
+                    episodes.append([index, index])
+            for start, end in episodes:
+                if end - start + 1 >= 7:
+                    state.events.append({
+                        "year": year, "day": start + 1, "firm": firm.id,
+                        "event": "capacity_limit",
+                        "details": f"utilization above 95 % for {end - start + 1} days",
+                    })
 
     def _rival_prices(self, previous: dict[str, YearSummary]) -> dict[str, float]:
         """Average last-year selling price of the still active firms per stage."""
