@@ -48,6 +48,10 @@ class Firm(NetworkModel):
     # Phase 4: product category of a producer and whether it imports instead of brewing.
     category: str = "beer"
     importer: bool = False
+    # Phase 5: home region, further sites and how the firm ships ("own" fleet or "service").
+    region: str | None = None
+    extra_regions: list[str] = Field(default_factory=list)
+    transport_mode: str = "own"
 
     @model_validator(mode="after")
     def _capture_initial_economic_anchors(self) -> Self:

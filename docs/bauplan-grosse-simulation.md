@@ -555,3 +555,28 @@ Seed, was angepasst wurde.
   wird. Spezialisierung bleibt schwach: Premium-Läden führen nach 20 Jahren
   31–32 % Wein, Discounter 21 %, Standardläden 24 %; echte Spezialisten
   bräuchten begrenzten Regalplatz (noch nicht umgesetzt). 150 Tests bestanden.
+- **2026-11-03, Phase 5:** Acht Regionen (Bevölkerungsanteile 2023,
+  gerundet) mit Kartenposition; jede Firma hat einen Standort, Neueinsteiger
+  siedeln sich dort an, wo ihre Stufe am dünnsten ist. Transportkosten pro
+  Einheit und Kilometer (mit Treibstoffindex) trägt der Lieferant; Kunden
+  vergleichen den Lieferpreis inklusive Transport, nahe Lieferanten gelten
+  zudem als schneller (die Lieferzeit selbst bleibt 2 Tage, die Distanz
+  wirkt nur in der Lieferantenbewertung). Jede liefernde Firma wählt jährlich
+  eigene Flotte (Fixkosten 3'000 CHF pro Tag, 1 % Schadenrisiko pro
+  Lieferung, 5 % der Ware) oder Transportdienst (40 % teurer pro km, kein
+  Risiko). Ausbau (+20 % Kapazität) und neue Ladenstandorte (+30 %) mit
+  Bauzeit und Abschreibung über 10 Jahre. Erste Messungen kippten: Harte
+  Regionengrenzen liessen kleine Regionen verhungern, und die Firmen bauten
+  um die Wette Kapazität auf (Gewinn 1.9 %, 36 Konkurse pro Lauf; ohne
+  Investitionen 12 %). Angepasst: Kunden kaufen bevorzugt in der Nähe
+  (Einzugsgebiet 1 / (1 + km / 40)), gebaut wird nur, wenn die eigene Firma
+  über 95 % und die ganze Stufe über 85 % ausgelastet ist, mit doppelter
+  Kassendeckung. Ergebnis (10 Seeds, 50 Jahre): Gewinn 12.7 % des
+  Endkundenumsatzes, Service Level 96.5 % (Seed 8: 78.5 %), 24.3 Eintritte und
+  29.7 Konkurse pro Lauf, 15–35 Ausbauten und 4–16 neue Standorte, am Ende
+  nutzen 9–15 Firmen den Transportdienst, die übrigen eine eigene Flotte.
+  Händlermargen nach Region (3 Seeds, 20 Jahre): hoch in Nordwestschweiz
+  (8.1 %) und Tessin (7.9 %, wenig Konkurrenz), negativ in Zürich (−1.7 %),
+  Bern (−1.3 %) und Jura/Freiburg (−2.3 %), wo sich Neueinsteiger drängen.
+  Entscheidend ist also der Wettbewerb vor Ort, nicht die Dichte allein.
+  156 Tests bestanden.

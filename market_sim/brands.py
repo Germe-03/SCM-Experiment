@@ -276,9 +276,20 @@ class BrandBook:
             for name, units in demand_by_class.items():
                 self.class_stats[name].demand += units
             return requested, sold, total_demand
-        reference = max(1.0, total_demand / len(retailers))
-        slope = self.config.consumers.wtp_slope
         capacity = {f.id: env._effective_capacity(f.id) for f in retailers}
+        geo = getattr(env, "geography", None)
+        # Phase 5: a store's catchment (nearby population, falling with distance) scales its appeal.
+        catchment = geo.catchment(retailers) if geo is not None else None
+        reference = max(1.0, total_demand / len(retailers))
+        self._serve_group(env, retailers, demand_by_class, requested, sold, capacity, reference, catchment)
+        for name, units in demand_by_class.items():
+            self.class_stats[name].demand += units
+        return requested, sold, max(0, total_demand - sum(sold.values()))
+
+    def _serve_group(self, env, retailers, demand_by_class, requested, sold, capacity, reference,
+                     catchment=None) -> None:
+        """Serve the demand of one group of consumers from the given stores."""
+        slope = self.config.consumers.wtp_slope
         # Features per (retailer, brand): price, price score, quality, brand and store reputation, availability.
         pairs: dict[tuple[str, str], tuple] = {}
         quality = {b: self.quality(brand, env) for b, brand in self.brands.items()}
@@ -334,7 +345,9 @@ class BrandBook:
                         continue
                     score = (w.price * p_score + w.quality * q + w.brand_reputation * brand_rep
                              + w.store_reputation * store_rep + w.availability * avail)
-                    scores[key] = score * mult[key[1]] if mult else score
+                    if mult:
+                        score *= mult[key[1]]
+                    scores[key] = score * catchment[key[0]] if catchment else score
                 if not self.categories_on:
                     total_score = sum(scores.values())
                     if total_score > 0:
@@ -385,9 +398,6 @@ class BrandBook:
                      if env.runtimes[key[0]].stock.get(key[1], 0) > 0 and sold[key[0]] < capacity[key[0]]}
             if not pairs or not any(unmet.values()):
                 break
-        for name, units in demand_by_class.items():
-            self.class_stats[name].demand += units
-        return requested, sold, max(0, total_demand - sum(sold.values()))
 
     def _update_weights(self, cat_total, cat_retail, alpha: float = 0.02) -> None:
         """Slowly follow what consumers ask for, market-wide and per store."""

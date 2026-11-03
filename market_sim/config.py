@@ -484,6 +484,43 @@ class CategoriesConfig(ConfigModel):
     exports: ExportConfig = Field(default_factory=ExportConfig)
 
 
+class RegionConfig(ConfigModel):
+    name: str
+    population_share: float = Field(gt=0)
+    # Map position in km (Swiss grid, rounded).
+    x: float
+    y: float
+
+
+class GeographyConfig(ConfigModel):
+    """Phase 5: regions, transport, own fleet or transport service, expansion and sites."""
+
+    enabled: bool = False
+    regions: list[RegionConfig] = Field(default_factory=list)
+    road_factor: float = Field(default=1.25, gt=0)
+    local_km: float = Field(default=20.0, ge=0)
+    # Real CHF per sim-unit and km.
+    own_rate: float = Field(default=1.0, ge=0)
+    service_rate: float = Field(default=1.4, ge=0)
+    damage_probability: float = Field(default=0.01, ge=0, le=1)
+    damage_share: float = Field(default=0.05, ge=0, le=1)
+    risk_aversion: float = Field(default=2.0, ge=0)
+    fleet_cost_per_day: float = Field(default=3000.0, ge=0)
+    fuel_volatility: float = Field(default=0.10, ge=0)
+    km_per_lead_day: float = Field(default=100.0, gt=0)
+    # Shoppers prefer nearby stores: a region counts 1 / (1 + km / travel_km) for a store.
+    travel_km: float = Field(default=40.0, gt=0)
+    build_cost_per_capacity_unit: dict[str, float] = Field(default_factory=dict)
+    build_days: dict[str, int] = Field(default_factory=dict)
+    depreciation_years: int = Field(default=10, ge=1)
+    expand_utilization: float = Field(default=0.9, ge=0, le=1.01)
+    stage_utilization_min: float = Field(default=0.85, ge=0, le=1.01)
+    expand_fraction: float = Field(default=0.2, gt=0)
+    cash_cover: float = Field(default=1.5, ge=0)
+    site_fraction: float = Field(default=0.3, gt=0)
+    site_coverage_gap: float = Field(default=0.7, gt=0)
+
+
 class TrendConfig(ConfigModel):
     name: str
     trait: str
@@ -539,6 +576,7 @@ class MarketConfig(ConfigModel):
     brands: BrandsConfig | None = None
     long_run: LongRunConfig = Field(default_factory=LongRunConfig)
     categories: CategoriesConfig = Field(default_factory=CategoriesConfig)
+    geography: GeographyConfig = Field(default_factory=GeographyConfig)
 
     @model_validator(mode="after")
     def _validate_stage_prices(self) -> Self:

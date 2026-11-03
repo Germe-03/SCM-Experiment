@@ -313,3 +313,38 @@ categories:
     fx_elasticity: 1.5
     quality_threshold: 0.6
     world_price_factor: 1.0
+
+# Phase 5: eight regions (population shares 2023, rounded), transport by own fleet or a
+# transport service, capacity expansion and new store sites with construction time.
+geography:
+  enabled: true
+  regions:
+    - {name: genfersee, population_share: 0.195, x: 538, y: 152}
+    - {name: bern, population_share: 0.120, x: 600, y: 200}
+    - {name: jura_freiburg, population_share: 0.090, x: 561, y: 205}
+    - {name: nordwestschweiz, population_share: 0.135, x: 611, y: 267}
+    - {name: zuerich, population_share: 0.185, x: 683, y: 248}
+    - {name: ostschweiz, population_share: 0.130, x: 746, y: 254}
+    - {name: zentralschweiz, population_share: 0.100, x: 666, y: 211}
+    - {name: tessin, population_share: 0.045, x: 717, y: 96}
+  road_factor: 1.25
+  local_km: 20
+  own_rate: 1.0
+  service_rate: 1.4
+  damage_probability: 0.01
+  damage_share: 0.05
+  risk_aversion: 2.0
+  fleet_cost_per_day: 3000
+  fuel_volatility: 0.10
+  km_per_lead_day: 100
+  travel_km: 40
+  build_cost_per_capacity_unit: {retailer: 3600000, wholesaler: 3800000, distributor: 4000000, factory: 2000000}
+  build_days: {retailer: 180, wholesaler: 270, distributor: 270, factory: 540}
+  depreciation_years: 10
+  expand_utilization: 0.95
+  # The whole stage must be this busy before anyone builds.
+  stage_utilization_min: 0.85
+  expand_fraction: 0.20
+  cash_cover: 2.0
+  site_fraction: 0.30
+  site_coverage_gap: 0.70

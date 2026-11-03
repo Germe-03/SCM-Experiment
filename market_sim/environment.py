@@ -9,6 +9,7 @@ import random
 from market_sim.config import MarketConfig, load_market_config
 from market_sim.models import STAGES, Firm, SupplyNetwork
 from market_sim.selection import split_order, supplier_candidates
+from market_sim.geography import Geography
 from market_sim.brands import BrandBook, add_to_stock, largest_remainder, take_from_stock
 
 
@@ -270,6 +271,10 @@ class MarketEnvironment:
             if self.config.consumer_model == "classes" and self.consumer_demand_mode == "attractiveness_lost"
             else None
         )
+        self.geography = (
+            Geography(self.config, [f for stage in STAGES for f in self.network.firms_in(stage)], self.seed)
+            if self.brand_book is not None and self.config.geography.enabled else None
+        )
         for stage in STAGES:
             for firm in self.network.firms_in(stage):
                 inventory = firm.inventory if self.initial_inventory is None else self.initial_inventory
@@ -442,6 +447,15 @@ class MarketEnvironment:
                     if self.brand_book is not None and quantity:
                         parcel = self.brand_book.take_for(
                             self.network.firm(downstream_id), runtime.stock, quantity)
+                        if self.geography is not None:
+                            destroyed = self.geography.ship(
+                                self, self.network.firm(supplier_id), self.network.firm(downstream_id), parcel)
+                            if destroyed:
+                                # The shipper bears the loss; the customer reorders the missing units.
+                                trade_value *= (quantity - destroyed) / quantity
+                                self.runtimes[downstream_id].on_order = max(
+                                    0, self.runtimes[downstream_id].on_order - destroyed)
+                                quantity -= destroyed
                         add_to_stock(self.runtimes[downstream_id].incoming_brands[-1], parcel)
                         if self.brand_book.categories_on:
                             trade_value = self._trade_value(1, self.brand_book.parcel_value(parcel, price))
@@ -499,6 +513,9 @@ class MarketEnvironment:
                     queue = self.runtimes[supplier_id].incoming_orders[-1]
                     queue[firm.id] = queue.get(firm.id, 0) + split_quantity
 
+        if self.geography is not None:
+            self.geography.daily(self)
+
         # 6-7. Accumulate costs and advance time.
         for firm_id in sorted(self.runtimes):
             runtime = self.runtimes[firm_id]
@@ -550,11 +567,19 @@ class MarketEnvironment:
 
     def _split_order(self, firm: Firm, candidates: list[Firm], quantity: int) -> dict[str, int]:
         lead_times = {candidate.id: self.config.logistics.default_lead_time_days for candidate in candidates}
+        delivered = None
+        geo = self.geography
+        if geo is not None:
+            # Phase 5: nearby suppliers deliver faster and cheaper.
+            units = self.config.unit_scale.real_units_per_sim_unit
+            lead_times = {c.id: geo.km(c, firm) / geo.cfg.km_per_lead_day for c in candidates}
+            delivered = {c.id: c.sell_price + geo.unit_transport_cost(c, firm) / units for c in candidates}
         return split_order(
             firm, candidates, quantity, self.config.supplier_score_weights,
             lead_times, self.config.policy.concentration,
             active_firm_ids=None,
             priority_boost=self.config.policy.supplier_priority_boost,
+            delivered_prices=delivered,
         )
 
     def _split_by_category(self, firm: Firm, candidates: list[Firm], quantity: int) -> dict[str, int]:

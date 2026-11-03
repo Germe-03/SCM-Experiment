@@ -41,12 +41,15 @@ def _supplier_scores(
     weights: SupplierScoreWeights,
     lead_times: dict[str, int] | None,
     priority_boost: float = 2.0,
+    delivered_prices: dict[str, float] | None = None,
 ) -> tuple[list[Firm], dict[str, float]]:
     """Return S4-compatible normalized scores in deterministic id order."""
 
     ordered = sorted(candidates, key=lambda firm: firm.id)
     lead_times = lead_times or {firm.id: 0 for firm in ordered}
-    price = [1.0 - value for value in _minmax([f.sell_price for f in ordered])]
+    # Phase 5: compare the delivered price (sell price plus transport) when given.
+    prices = [delivered_prices.get(f.id, f.sell_price) if delivered_prices else f.sell_price for f in ordered]
+    price = [1.0 - value for value in _minmax(prices)]
     capacity = _minmax([float(f.capacity) for f in ordered])
     lead_time = [
         1.0 - value
@@ -101,6 +104,7 @@ def split_order(
     concentration: float = 4.0,
     active_firm_ids: set[str] | None = None,
     priority_boost: float = 2.0,
+    delivered_prices: dict[str, float] | None = None,
 ) -> dict[str, int]:
     """P2 fix: split an order by supplier score using largest remainders."""
 
@@ -110,7 +114,7 @@ def split_order(
     if not candidates:
         return {}
     ordered, scores = _supplier_scores(
-        downstream, candidates, weights, lead_times, priority_boost
+        downstream, candidates, weights, lead_times, priority_boost, delivered_prices
     )
     quantity = max(0, int(order_qty))
     weighted = {firm.id: scores[firm.id] ** concentration for firm in ordered}

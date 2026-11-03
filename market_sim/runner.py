@@ -593,9 +593,13 @@ class SimulationRunner:
         self._enter_market(state)
         changes = self._change_strategies(state)
         self.long_run.year_end(self, state)
+        geo = self.env.geography
+        if geo is not None:
+            geo.year_end(self, state)
         update = {"market_entries": state.market_entries.get(state.year, 0), "strategy_changes": changes,
                   "price_index": self.long_run.price_index, "population_index": self.long_run.population_index,
                   "trend": self.long_run.trend, "fx_rate": self.env.fx_rate,
+                  **self._geography_kpis(),
                   **self._category_kpis(),
                   "total_profit": sum(s.profit for s in summaries[-1].values())}
         for stage in STAGES:
@@ -605,6 +609,16 @@ class SimulationRunner:
                                          if self.env.runtimes[f.id].active)
             update[f"active_firms_{stage}"] = sum(self.env.runtimes[f.id].active for f in firms)
         system_kpis[-1] = system_kpis[-1].model_copy(update=update)
+
+    def _geography_kpis(self) -> dict[str, float]:
+        geo = self.env.geography
+        if geo is None:
+            return {}
+        stats = dict(geo.stats)
+        geo.stats = {key: type(value)() for key, value in geo.stats.items()}
+        active = [f for f in self._firms() if self.env.runtimes[f.id].active and f.stage != "retailer"]
+        return {**stats, "firms_using_service": sum(f.transport_mode == "service" for f in active),
+                "fuel_index": geo.fuel_index}
 
     def _category_kpis(self) -> dict[str, float]:
         """Export volume and consumer shares per category of the finished year."""
@@ -652,6 +666,8 @@ class SimulationRunner:
                 "reputation": cfg.start_reputation[0] + reputation_roll * (cfg.start_reputation[1] - cfg.start_reputation[0]),
                 "quality_level": template.quality_level * cfg.start_quality_fraction,
                 "inventory": 0, "backlog": 0, "suppliers": [],
+                "region": self.env.geography.entrant_region(self, stage) if self.env.geography else template.region,
+                "extra_regions": [], "transport_mode": "own",
             })
             self.add_firm(firm, state)
             # add_firm also supports external registration before the next year.

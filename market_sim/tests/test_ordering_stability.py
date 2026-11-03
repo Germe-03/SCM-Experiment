@@ -45,9 +45,11 @@ def test_two_year_run_has_no_runaway_inventory():
     )
     result = runner.run(years=2)
 
+    # Wineries keep a full year's vintage in the cellar by design (Phase 4).
     peak_inventory = max(
         max(series["inventory"])
-        for series in result.daily_series.values()
+        for firm_id, series in result.daily_series.items()
+        if network.firm(firm_id).category != "wine" or network.firm(firm_id).importer
     )
     assert peak_inventory < 50 * config.demand.daily_demand_units
 

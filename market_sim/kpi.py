@@ -79,6 +79,12 @@ class SystemKPIs(BaseModel):
     share_beer: float = 0.0
     share_wine: float = 0.0
     share_spirits: float = 0.0
+    transport_cost: float = 0.0
+    damaged_units: int = 0
+    expansions: int = 0
+    new_sites: int = 0
+    firms_using_service: int = 0
+    fuel_index: float = 1.0
     interest_cost_retailer: float = 0.0
     interest_cost_wholesaler: float = 0.0
     interest_cost_distributor: float = 0.0
