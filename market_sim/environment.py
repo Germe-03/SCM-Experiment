@@ -160,6 +160,8 @@ class MarketEnvironment:
         self.network = network
         self.seed = seed
         self.commodity_log_index: dict[str, float] = {}
+        # Market events (e.g. a failed harvest) scale raw-material prices.
+        self.material_cost_multiplier = 1.0
         self._commodity_rng = random.Random(f"commodities-{seed}")
         self.config = config or load_market_config()
         self.initial_inventory = initial_inventory
@@ -193,6 +195,7 @@ class MarketEnvironment:
         self.runtimes = {}
         self._commodity_rng = random.Random(f"commodities-{self.seed}")
         self.commodity_log_index = {name: 0.0 for name in self.config.commodities.components}
+        self.material_cost_multiplier = 1.0
         for stage in STAGES:
             for firm in self.network.firms_in(stage):
                 inventory = firm.inventory if self.initial_inventory is None else self.initial_inventory
@@ -653,7 +656,7 @@ class MarketEnvironment:
 
     def material_cost_per_unit(self) -> float:
         """Current raw-material cost of one produced sim-unit in real CHF."""
-        return sum(
+        return self.material_cost_multiplier * sum(
             cost * exp(self.commodity_log_index.get(name, 0.0))
             for name, cost in self.config.commodities.components.items()
         )

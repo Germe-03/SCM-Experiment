@@ -100,9 +100,15 @@ def test_adaptation_preserves_market_health_and_diversity(ten_year_results):
     # calibrated market still keeps at least 19 of 22 firms profitable.
     assert sum(value > 0 for value in cumulative.values()) >= 12
     assert max(prices) - min(prices) >= 0.5
-    # Exits are relative to each firm's starting capital. A stage's last two
-    # firms are protected, so the deepest tolerated debt is three times that capital.
+    # Exits are relative to each firm's starting capital. A firm deeper in
+    # debt than that must have left, unless it is among its stage's last
+    # protected firms or its (one per stage and year) exit is still pending.
     config = load_market_config()
     for firm_id, item in result.final_result.firm_results.items():
-        initial = config.costs.initial_cash_scale * result.network.firm(firm_id).cash
-        assert item.cash > -3 * config.bankruptcy.cash_floor_fraction * initial
+        firm = result.network.firm(firm_id)
+        limit = config.bankruptcy.cash_floor_fraction * config.costs.initial_cash_scale * firm.cash
+        if item.cash < -limit and firm_id not in result.exits:
+            stage_active = [
+                f for f in result.network.firms_in(firm.stage) if f.id not in result.exits
+            ]
+            assert len(stage_active) <= config.bankruptcy.min_firms_per_stage + 1

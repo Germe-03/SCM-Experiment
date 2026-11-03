@@ -88,6 +88,29 @@ class BankruptcyConfig(ConfigModel):
     min_years_before_exit: int = Field(default=1, ge=0)
 
 
+class StartVariationConfig(ConfigModel):
+    """Seeded relative spread (+/-) of the starting values of every firm."""
+
+    cash_spread: float = Field(default=0.0, ge=0, lt=1)
+    quality_spread: float = Field(default=0.0, ge=0, lt=1)
+    reputation_spread: float = Field(default=0.0, ge=0, lt=1)
+
+
+class MarketEventsConfig(ConfigModel):
+    """Yearly random market events; probabilities are drawn once per year and seed."""
+
+    heat_summer_probability: float = Field(default=0.0, ge=0, le=1)
+    heat_summer_demand_factor: float = Field(default=1.15, gt=0)
+    heat_summer_days: int = Field(default=60, gt=0)
+    harvest_failure_probability: float = Field(default=0.0, ge=0, le=1)
+    harvest_failure_cost_factor: float = Field(default=1.35, gt=0)
+    recall_probability: float = Field(default=0.0, ge=0, le=1)
+    recall_quality_hit: float = Field(default=0.10, ge=0, le=1)
+    recall_reputation_hit: float = Field(default=0.15, ge=0, le=1)
+    # One-off cost in real CHF.
+    recall_cost: float = Field(default=0.0, ge=0)
+
+
 class PriceConfig(ConfigModel):
     base: float
     min: float
@@ -289,6 +312,8 @@ class MarketConfig(ConfigModel):
     demand_attractiveness_weights: AttractivenessWeights
     supplier_score_weights: SupplierScoreWeights
     bankruptcy: BankruptcyConfig = Field(default_factory=BankruptcyConfig)
+    start_variation: StartVariationConfig = Field(default_factory=StartVariationConfig)
+    events: MarketEventsConfig = Field(default_factory=MarketEventsConfig)
 
     @model_validator(mode="after")
     def _validate_stage_prices(self) -> Self:

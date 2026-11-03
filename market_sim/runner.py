@@ -47,6 +47,7 @@ class RunResult:
     days_total: int = 0
     financial_breakdown: dict[str, list[dict[str, float]]] = field(default_factory=dict)
     exits: dict[str, int] = field(default_factory=dict)
+    events: list[dict[str, object]] = field(default_factory=list)
 
 
 @dataclass
@@ -62,6 +63,7 @@ class RunState:
     financial_breakdown: dict[str, list[dict[str, float]]] = field(default_factory=dict)
     recent_demand: dict[str, list[int]] = field(default_factory=dict)
     recent_sales: dict[str, list[int]] = field(default_factory=dict)
+    events: list[dict[str, object]] = field(default_factory=list)
 
 
 class ConsumerDemandGenerator:
@@ -82,6 +84,8 @@ class ConsumerDemandGenerator:
         self.seasonal_amplitude = seasonal_amplitude
         self.seasonal_phase_days = seasonal_phase_days
         self._rng = random.Random(seed)
+        # (first global day, last global day, factor) windows from market events.
+        self.event_windows: list[tuple[int, int, float]] = []
 
     def seasonal_factor(self, global_day: int) -> float:
         factor = 1 + self.seasonal_amplitude * math.sin(
@@ -89,6 +93,13 @@ class ConsumerDemandGenerator:
             / self.days_per_year
         )
         return max(float.fromhex("0x1.0p-1022"), factor)
+
+    def event_factor(self, global_day: int) -> float:
+        factor = 1.0
+        for first, last, multiplier in self.event_windows:
+            if first <= global_day <= last:
+                factor *= multiplier
+        return factor
 
     def elasticity_multiplier(self, avg_active_retail_price: float | None) -> float:
         if avg_active_retail_price is None or avg_active_retail_price <= 0:
@@ -101,6 +112,7 @@ class ConsumerDemandGenerator:
         effective = (
             self.mean * self.seasonal_factor(global_day)
             * self.elasticity_multiplier(avg_active_retail_price) * noise
+            * self.event_factor(global_day)
         )
         return max(0, round(effective))
 
@@ -134,6 +146,8 @@ class SimulationRunner:
             enforce_capacity=True, enable_workforce=True, enable_rnd=True,
             seed=seed,
         )
+        self._event_rng = random.Random(f"events-{seed}")
+        self._apply_start_variation(random.Random(f"start-{seed}"))
         self.strategies: dict[str, AnnualStrategy] = {}
         self.applied_prices: list[tuple[str, float, float, float]] = []
         self.exits: dict[str, int] = {}
@@ -182,8 +196,63 @@ class SimulationRunner:
             system_kpis=state.system_kpis,
             daily_series=state.daily_series, days_total=state.global_day,
             financial_breakdown=state.financial_breakdown,
-            exits=dict(self.exits),
+            exits=dict(self.exits), events=list(state.events),
         )
+
+    def _apply_start_variation(self, rng: random.Random) -> None:
+        """Seeded start values: the same seed always yields the same market."""
+        spread = self.config.start_variation
+        if not (spread.cash_spread or spread.quality_spread or spread.reputation_spread):
+            return
+        for firm in self._firms():
+            firm.cash *= 1 + rng.uniform(-spread.cash_spread, spread.cash_spread)
+            firm.quality_level = self._clamp(
+                firm.quality_level * (1 + rng.uniform(-spread.quality_spread, spread.quality_spread)), 0.05, 0.98)
+            firm.reputation = self._clamp(
+                firm.reputation * (1 + rng.uniform(-spread.reputation_spread, spread.reputation_spread)), 0.05, 0.98)
+
+    def _draw_market_events(self, state: RunState) -> None:
+        """Draw this year's market events; all draws happen in a fixed order."""
+        cfg = self.config.events
+        rng = self._event_rng
+        days = self.config.simulation.days_per_year
+        year = state.year + 1
+        heat, harvest, recall = rng.random(), rng.random(), rng.random()
+        start_roll, target_roll = rng.random(), rng.random()
+        self.env.material_cost_multiplier = 1.0
+        self.demand.event_windows = [w for w in self.demand.event_windows if w[1] >= state.global_day]
+        if heat < cfg.heat_summer_probability:
+            first = round(days * 0.35 + start_roll * days * 0.2)
+            self.demand.event_windows.append((
+                state.global_day + first, state.global_day + first + cfg.heat_summer_days - 1,
+                cfg.heat_summer_demand_factor,
+            ))
+            state.events.append({
+                "year": year, "day": first + 1, "firm": "", "event": "heat_summer",
+                "details": f"demand x{cfg.heat_summer_demand_factor:g} for {cfg.heat_summer_days} days",
+            })
+        if harvest < cfg.harvest_failure_probability:
+            self.env.material_cost_multiplier = cfg.harvest_failure_cost_factor
+            state.events.append({
+                "year": year, "day": 1, "firm": "", "event": "harvest_failure",
+                "details": f"raw materials x{cfg.harvest_failure_cost_factor:g} all year",
+            })
+        if recall < cfg.recall_probability:
+            active = sorted(
+                firm_id for firm_id, runtime in self.env.runtimes.items() if runtime.active
+            )
+            if active:
+                firm_id = active[min(len(active) - 1, int(target_roll * len(active)))]
+                firm = self.network.firm(firm_id)
+                runtime = self.env.runtimes[firm_id]
+                runtime.quality_level = self._clamp(runtime.quality_level - cfg.recall_quality_hit)
+                firm.quality_level = self._clamp(firm.quality_level - cfg.recall_quality_hit)
+                firm.reputation = self._clamp(firm.reputation - cfg.recall_reputation_hit)
+                runtime.fixed_cost += cfg.recall_cost
+                state.events.append({
+                    "year": year, "day": 1, "firm": firm_id, "event": "recall",
+                    "details": f"quality -{cfg.recall_quality_hit:g}, reputation -{cfg.recall_reputation_hit:g}",
+                })
 
     def run_year(self, state: RunState) -> None:
         """Simulate one full year and append its reports to ``state``."""
@@ -216,6 +285,7 @@ class SimulationRunner:
         b2b_received = {firm.id: 0 for firm in self._firms()}
         b2b_shipped = {firm.id: 0 for firm in self._firms()}
 
+        self._draw_market_events(state)
         rival_prices = self._rival_prices(previous)
         for firm in self._firms():
             if not self.env.runtimes[firm.id].active:
