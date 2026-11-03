@@ -37,13 +37,17 @@ def test_summary_has_mean_std_min_max_per_scenario(tmp_path) -> None:
     assert list((tmp_path / "checkpoints").glob("seed_*/year_01.pkl"))
 
 
+def _without_runtime(row: dict) -> dict:
+    return {key: value for key, value in row.items() if key != "runtime_seconds"}
+
+
 def test_basis_matches_a_plain_run_and_runs_are_isolated(tmp_path) -> None:
-    alone = run_seed((1, ("basis",), 1, str(tmp_path / "a"), 2, 30))
-    together = run_seed((1, ("nachfrage_einbruch", "basis"), 1, str(tmp_path / "b"), 2, 30))
+    alone = [_without_runtime(r) for r in run_seed((1, ("basis",), 1, str(tmp_path / "a"), 2, 30))]
+    together = [_without_runtime(r) for r in run_seed((1, ("nachfrage_einbruch", "basis"), 1, str(tmp_path / "b"), 2, 30))]
     assert next(r for r in together if r["scenario"] == "basis") == alone[0]
     plain = run_simulation(years=2, days_per_year=30, seed=1)
     assert alone[0]["total_profit"] == pytest.approx(plain.system_kpis[1].total_profit)
-    again = run_seed((1, ("nachfrage_einbruch",), 1, str(tmp_path / "c"), 2, 30))
+    again = [_without_runtime(r) for r in run_seed((1, ("nachfrage_einbruch",), 1, str(tmp_path / "c"), 2, 30))]
     assert again[0] == next(r for r in together if r["scenario"] == "nachfrage_einbruch")
 
 

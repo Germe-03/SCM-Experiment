@@ -1,3 +1,40 @@
+market_entry:
+  enabled: true
+  base_probability: 0.08
+  margin_threshold: 0.05
+  margin_slope: 2.0
+  max_probability: 0.5
+  max_firms_per_stage: {retailer: 14, wholesaler: 9, distributor: 6, factory: 4}
+  start_cash_fraction: 0.5
+  start_capacity_fraction: 0.5
+  start_reputation: [0.40, 0.50]
+  start_quality_fraction: 0.9
+  names:
+    retailer: [Aare Laden, Rigi Markt, Limmat Shop, Emme Markt, Jura Laden, Pilatus Markt, Reuss Shop, Sihl Laden]
+    wholesaler: [Helvetia Handel, Aare Handel, Seeland Handel, Rigi Handel, Thur Handel, Linth Handel]
+    distributor: [Alpen Logistik, Mittelland Verteilung, Gotthard Vertrieb, Jura Logistik]
+    factory: [Aare Brauerei, Rigi Bräu, Emmental Bier, Säntis Brauerei]
+
+bank:
+  enabled: true
+  base_rate: 0.03
+  risk_premium_per_loss_year: 0.01
+  leverage_premium: 0.04
+  max_rate: 0.15
+  deposit_rate: 0.005
+  credit_limit_revenue_fraction: 0.25
+  credit_limit_initial_cash_fraction: 1.0
+  credit_limit_min: 0.0
+
+strategy_change:
+  enabled: true
+  bad_years_trigger: 2
+  explore_probability: 0.2
+  imitation_window_years: 3
+  lockout_years: 4
+  switch_cost_fraction_of_revenue: 0.02
+  reputation_dip: 0.05
+
 unit_scale:
   real_units_per_sim_unit: 10000
 
@@ -153,6 +190,8 @@ capacity:
 # P1 fix: safety cap for daily replenishment orders.
 policy:
   max_order_demand_multiple: 3.0
+  # Open orders older than this many days of supplier capacity are cancelled.
+  max_backlog_days: 10
   # P2 fix: exponent applied to supplier scores when splitting orders.
   concentration: 12.0
   # Multiplier for the factor named by each firm's supplier priority.

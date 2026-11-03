@@ -62,7 +62,11 @@ def test_checkpoints_do_not_change_results(baseline):
 def test_scenario_changes_only_years_after_fork(baseline, name):
     directory, straight = baseline
     fork = run_fork(checkpoint_path(directory / "checkpoints", FORK_YEAR), get_scenario(name))
-    assert _reports(fork)[:FORK_YEAR] == _reports(straight)[:FORK_YEAR]
+    # Future entrants have backfilled placeholders, not pre-fork activity.
+    def active_reports(result):
+        return [{k: v for k, v in reports.items() if v["archetype"]}
+                for reports in _reports(result)[:FORK_YEAR]]
+    assert active_reports(fork) == active_reports(straight)
     assert _reports(fork)[FORK_YEAR:] != _reports(straight)[FORK_YEAR:]
 
 

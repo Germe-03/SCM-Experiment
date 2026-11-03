@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 import math
 import random
 from statistics import pstdev
@@ -149,6 +149,12 @@ class SimulationRunner:
             seed=seed,
         )
         self._event_rng = random.Random(f"events-{seed}")
+        self._phase1_rng = random.Random(f"phase1-{seed}")
+        self._entry_counters = {stage: 0 for stage in STAGES}
+        self._entry_cash = {
+            stage: sum(f.cash for f in network.firms_in(stage)) / len(network.firms_in(stage))
+            if network.firms_in(stage) else 0.0 for stage in STAGES
+        }
         self._apply_start_variation(random.Random(f"start-{seed}"))
         self.strategies: dict[str, AnnualStrategy] = {}
         self.applied_prices: list[tuple[str, float, float, float]] = []
@@ -305,7 +311,7 @@ class SimulationRunner:
             "revenue": 0.0, "purchase_cost": 0.0, "holding_cost": 0.0,
             "backlog_cost": 0.0, "wage_cost": 0.0, "hiring_cost": 0.0,
             "rnd_cost": 0.0, "handling_cost": 0.0, "fixed_cost": 0.0,
-            "profit": 0.0, "cash": 0.0,
+            "profit": 0.0, "cash": 0.0, "interest_cost": 0.0,
         }
         state.financial_breakdown[firm.id] = [dict(empty_financial) for _ in range(state.year)]
         state.recent_demand[firm.id] = []
@@ -489,18 +495,153 @@ class SimulationRunner:
                 for key in (
                     "revenue", "purchase_cost", "holding_cost",
                     "backlog_cost", "wage_cost", "hiring_cost",
-                    "rnd_cost", "handling_cost", "fixed_cost", "profit",
+                    "rnd_cost", "handling_cost", "fixed_cost", "interest_cost", "profit",
                 )
             } | {"cash": end["cash"]})
         # P4b fix: exits are deterministic year-end events; cash freezes
         # from the following tick after the configured grace period.
         exits_before = len(self.exits)
+        for firm in self._firms():
+            runtime = self.env.runtimes[firm.id]
+            if not runtime.active:
+                continue
+            summary = summaries[-1][firm.id]
+            runtime.last_year_revenue = summary.revenue
+            runtime.consecutive_loss_years = runtime.consecutive_loss_years + 1 if summary.profit < 0 else 0
+            bank = self.config.bank
+            if bank.enabled:
+                runtime.credit_limit = max(bank.credit_limit_min,
+                    bank.credit_limit_revenue_fraction * summary.revenue
+                    + bank.credit_limit_initial_cash_fraction * runtime.initial_cash)
+            reports[firm.id] = reports[firm.id].model_copy(update={
+                "interest_cost": financial_breakdown[firm.id][-1]["interest_cost"],
+            })
         self._apply_bankruptcy(year + 1, state.events)
         system_kpis[-1] = system_kpis[-1].model_copy(update={
             "bankruptcies": len(self.exits) - exits_before,
         })
         state.global_day = global_day
         state.year = year + 1
+        self._enter_market(state)
+        changes = self._change_strategies(state)
+        update = {"market_entries": state.market_entries.get(state.year, 0), "strategy_changes": changes,
+                  "total_profit": sum(s.profit for s in summaries[-1].values())}
+        for stage in STAGES:
+            firms = self.network.firms_in(stage)
+            update[f"interest_cost_{stage}"] = sum(financial_breakdown[f.id][-1]["interest_cost"] for f in firms)
+            update[f"debt_{stage}"] = sum(max(0.0, -self.env.runtimes[f.id].cash) for f in firms
+                                         if self.env.runtimes[f.id].active)
+            update[f"active_firms_{stage}"] = sum(self.env.runtimes[f.id].active for f in firms)
+        system_kpis[-1] = system_kpis[-1].model_copy(update=update)
+
+    def _enter_market(self, state: RunState) -> None:
+        """Draw exactly three numbers per stage, including disabled/full stages."""
+        cfg = self.config.market_entry
+        archetypes = sorted(FirmPolicy._PRESETS)
+        for stage in STAGES:
+            roll, archetype_roll, reputation_roll = [self._phase1_rng.random() for _ in range(3)]
+            active = [f for f in self.network.firms_in(stage) if self.env.runtimes[f.id].active]
+            if not cfg.enabled or not active:
+                continue
+            revenue = sum(state.summaries[-1][f.id].revenue for f in active)
+            margin = sum(state.summaries[-1][f.id].profit for f in active) / revenue if revenue else 0.0
+            probability = min(cfg.max_probability, cfg.base_probability
+                              + cfg.margin_slope * max(0.0, margin - cfg.margin_threshold))
+            if roll >= probability or len(active) >= cfg.max_firms_per_stage[stage]:
+                continue
+            template = sorted(active, key=lambda f: (self.env.runtimes[f.id].cash, f.id))[len(active) // 2]
+            self._entry_counters[stage] += 1
+            counter = self._entry_counters[stage]
+            names = cfg.names[stage]
+            cycle, index = divmod(counter - 1, len(names))
+            name = names[index] + (" " + "I" * (cycle + 1) if cycle else "")
+            firm = template.model_copy(deep=True, update={
+                "id": f"{stage}_e{counter:02d}", "name": name,
+                "archetype": archetypes[int(archetype_roll * len(archetypes))],
+                "cash": cfg.start_cash_fraction * self._entry_cash[stage],
+                "capacity": max(1, round(template.capacity * cfg.start_capacity_fraction)),
+                "machine_capacity": max(1, round(template.machine_capacity * cfg.start_capacity_fraction))
+                    if template.machine_capacity else 0,
+                "employees": max(1, round(template.employees * cfg.start_capacity_fraction)),
+                "reputation": cfg.start_reputation[0] + reputation_roll * (cfg.start_reputation[1] - cfg.start_reputation[0]),
+                "quality_level": template.quality_level * cfg.start_quality_fraction,
+                "inventory": 0, "backlog": 0, "suppliers": [],
+            })
+            self.add_firm(firm, state)
+            # add_firm also supports external registration before the next year.
+            state.market_entries[state.year + 1] -= 1
+            state.market_entries[state.year] = state.market_entries.get(state.year, 0) + 1
+            state.events[-1].update(year=state.year, day=self.config.simulation.days_per_year,
+                                    details=f"archetype {firm.archetype}")
+
+    def _change_strategies(self, state: RunState) -> int:
+        """Use a simultaneous ranking and two unconditional draws per firm."""
+        cfg = self.config.strategy_change
+        bottom = set()
+        rankings = {}
+        mean_returns: dict[str, dict[str, float]] = {}
+        for stage in STAGES:
+            active = [f for f in self.network.firms_in(stage)
+                      if self.env.runtimes[f.id].active and state.annual_reports[-1][f.id].archetype]
+            ordered = sorted(active, key=lambda f: (
+                state.summaries[-1][f.id].profit / max(1.0, state.summaries[-1][f.id].revenue), f.id))
+            bottom.update(f.id for f in ordered[:len(ordered) // 3])
+            returns: dict[str, list[float]] = {}
+            for reports in state.annual_reports[-cfg.imitation_window_years:]:
+                for f in active:
+                    report = reports[f.id]
+                    if report.archetype and report.revenue > 0:
+                        returns.setdefault(report.archetype, []).append(report.profit / report.revenue)
+            rankings[stage] = sorted(returns, key=lambda a: (-sum(returns[a]) / len(returns[a]), a))
+            mean_returns[stage] = {a: sum(v) / len(v) for a, v in returns.items()}
+        changes = 0
+        for firm in self._firms():
+            roll, choice_roll = self._phase1_rng.random(), self._phase1_rng.random()
+            runtime = self.env.runtimes[firm.id]
+            if (not cfg.enabled or not runtime.active or firm.stage not in cfg.stages
+                    or not state.annual_reports[-1][firm.id].archetype):
+                continue
+            summary = state.summaries[-1][firm.id]
+            bad = summary.profit < 0 or (cfg.count_bottom_third and firm.id in bottom)
+            runtime.consecutive_bad_years = runtime.consecutive_bad_years + 1 if bad else 0
+            if runtime.consecutive_bad_years < cfg.bad_years_trigger or (
+                runtime.last_strategy_change_year is not None
+                and state.year - runtime.last_strategy_change_year < cfg.lockout_years
+            ):
+                continue
+            old = firm.archetype
+            reason = "explore" if roll < cfg.explore_probability else "imitate"
+            options = sorted(a for a in FirmPolicy._PRESETS if a != old) if reason == "explore" else [
+                a for a in rankings[firm.stage] if a != old]
+            if reason == "imitate" and options:
+                returns = mean_returns[firm.stage]
+                own = returns.get(old, float("-inf"))
+                if returns[options[0]] - own < cfg.min_return_gap:
+                    options = []
+            if not options:
+                continue
+            new = options[int(choice_roll * len(options))] if reason == "explore" else options[0]
+            firm.archetype = new
+            cost = cfg.switch_cost_fraction_of_revenue * summary.revenue
+            runtime.fixed_cost += cost
+            runtime.cash -= cost
+            firm.reputation = self._clamp(firm.reputation - cfg.reputation_dip)
+            runtime.consecutive_bad_years = 0
+            runtime.last_strategy_change_year = state.year
+            state.summaries[-1][firm.id] = replace(summary, profit=summary.profit - cost, cash=runtime.cash)
+            report = state.annual_reports[-1][firm.id]
+            state.annual_reports[-1][firm.id] = report.model_copy(update={
+                "profit": report.profit - cost, "reputation": firm.reputation,
+            })
+            financial = state.financial_breakdown[firm.id][-1]
+            financial["fixed_cost"] += cost
+            financial["profit"] -= cost
+            financial["cash"] = runtime.cash
+            state.events.append({"year": state.year, "day": self.config.simulation.days_per_year,
+                                 "firm": firm.id, "event": "strategy_change",
+                                 "details": f"{old} -> {new}, reason {reason}"})
+            changes += 1
+        return changes
 
     def _build_reports(
         self, year, summaries, prices, served, lost, stockouts, utilization,
@@ -545,6 +686,7 @@ class SimulationRunner:
             if summary.profit < 0:
                 problems.append("Losing money")
             reports[firm.id] = AnnualReport(
+                archetype=firm.archetype,
                 year=year, firm_id=firm.id, revenue=summary.revenue,
                 profit=summary.profit, market_share=retailer_shares.get(firm.id, 0.0),
                 average_sell_price=(
@@ -663,6 +805,8 @@ class SimulationRunner:
                     and runtime.negative_cash_years >= cfg.negative_cash_years)
                 or (cfg.cash_threshold is not None and runtime.cash < cfg.cash_threshold)
             )
+            if self.config.bank.enabled:
+                insolvent = runtime.cash < -runtime.credit_limit
             if insolvent:
                 candidates.append((runtime.cash, firm_id))
         # The weakest firm leaves first; a stage keeps its minimum number of firms.
@@ -682,7 +826,9 @@ class SimulationRunner:
                 events.append({
                     "year": completed_years, "day": self.config.simulation.days_per_year,
                     "firm": firm_id, "event": "bankruptcy",
-                    "details": f"cash {self.env.runtimes[firm_id].cash:,.0f}",
+                    "details": (f"bank cancelled credit, cash {self.env.runtimes[firm_id].cash:,.0f}, "
+                                f"limit {self.env.runtimes[firm_id].credit_limit:,.0f}"
+                                if self.config.bank.enabled else f"cash {self.env.runtimes[firm_id].cash:,.0f}"),
                 })
 
     def _add_experiment_kpis(self, kpis, reports, previous_reports, summaries):
@@ -784,6 +930,7 @@ class SimulationRunner:
                 "rnd_cost": float(getattr(runtime, "rnd_spend", 0.0)),
                 "handling_cost": float(getattr(runtime, "handling_cost", 0.0)),
                 "fixed_cost": float(getattr(runtime, "fixed_cost", 0.0)),
+                "interest_cost": runtime.interest_cost,
                 "profit": float(getattr(runtime, "profit", 0.0)),
                 "cash": float(getattr(runtime, "cash", 0.0)),
             }

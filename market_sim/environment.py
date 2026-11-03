@@ -71,6 +71,12 @@ class FirmRuntime:
     # P4b fix: inactive runtimes are shut down and financially frozen.
     active: bool = True
     negative_cash_years: int = 0
+    interest_cost: float = 0.0
+    last_year_revenue: float = 0.0
+    consecutive_loss_years: int = 0
+    credit_limit: float = 0.0
+    consecutive_bad_years: int = 0
+    last_strategy_change_year: int | None = None
 
     @property
     def cumulative_cost(self) -> float:
@@ -83,7 +89,7 @@ class FirmRuntime:
             self.purchase_cost + self.cumulative_holding_cost
             + self.cumulative_backlog_cost + self.wage_cost
             + self.hiring_cost + self.rnd_spend
-            + self.handling_cost + self.fixed_cost
+            + self.handling_cost + self.fixed_cost + self.interest_cost
         )
 
     def receive_shipment(self) -> int:
@@ -130,6 +136,7 @@ class FirmResult:
     profit: float = 0.0
     cash: float = 0.0
     fixed_cost: float = 0.0
+    interest_cost: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -184,6 +191,7 @@ class MarketEnvironment:
         # implemented here. Existing B2B firm-spec prices remain unchanged.
         self.period = 0
         self.cumulative_lost_sales = 0
+        self.cancelled_units = 0
         self.runtimes: dict[str, FirmRuntime] = {}
         self.inventory_history: dict[str, list[int]] = {}
         self.backlog_history: dict[str, list[int]] = {}
@@ -236,6 +244,7 @@ class MarketEnvironment:
     def reset(self) -> None:
         self.period = 0
         self.cumulative_lost_sales = 0
+        self.cancelled_units = 0
         self.runtimes = {}
         self._commodity_rng = random.Random(f"commodities-{self.seed}")
         self.commodity_log_index = {name: 0.0 for name in self.config.commodities.components}
@@ -280,6 +289,8 @@ class MarketEnvironment:
             backlog_by_downstream=backlog_map,
             holding_cost=self.holding_cost, backlog_cost=self.backlog_cost,
             initial_cash=scaled_cash, cash=scaled_cash,
+            credit_limit=max(self.config.bank.credit_limit_min,
+                             self.config.bank.credit_limit_initial_cash_fraction * scaled_cash),
             employees=firm.employees, wage_level=firm.wage_level,
             quality_level=firm.quality_level,
         )
@@ -368,6 +379,7 @@ class MarketEnvironment:
                 for key in requested if requested[key] - allocations.get(key, 0) > 0
             }
             runtime.backlog = sum(runtime.backlog_by_downstream.values())
+            self._cancel_stale_backlog(supplier_id, market_mode)
             runtime.shipment_history.append(shipped)
             runtime.handling_cost += shipped * self.config.costs.handling_cost_per_unit
             shipped_this_period[supplier_id] = allocations
@@ -445,6 +457,7 @@ class MarketEnvironment:
             if self.enable_rnd:
                 self._apply_rnd(firm_id)
             runtime.calculate_period_cost(daily_wage)
+            self._apply_interest(runtime)
         self.period += 1
         firm_financials = {
             firm_id: self._financial_snapshot(runtime)
@@ -469,6 +482,24 @@ class MarketEnvironment:
             "total_cash": sum(r.cash for r in self.runtimes.values()),
         }
         return self.period >= self.horizon, info
+
+    def _cancel_stale_backlog(self, supplier_id: str, market_mode: bool) -> None:
+        """Cancel open orders a slow supplier cannot serve within the limit."""
+        days = self.config.policy.max_backlog_days
+        runtime = self.runtimes[supplier_id]
+        if not market_mode or days is None or not runtime.backlog_by_downstream:
+            return
+        limit = int(days * max(1, self._effective_capacity(supplier_id)))
+        if runtime.backlog <= limit:
+            return
+        keep = proportional_integer_allocation(limit, runtime.backlog_by_downstream)
+        for customer_id, owed in runtime.backlog_by_downstream.items():
+            customer = self.runtimes.get(customer_id)
+            if customer is not None:
+                customer.on_order = max(0, customer.on_order - (owed - keep.get(customer_id, 0)))
+        self.cancelled_units += runtime.backlog - limit
+        runtime.backlog_by_downstream = {key: value for key, value in keep.items() if value > 0}
+        runtime.backlog = sum(runtime.backlog_by_downstream.values())
 
     def _allocate_consumer_demand(self, total_demand: int) -> dict[str, int]:
         """Classic equal split used only by equal_backlog mode."""
@@ -621,7 +652,7 @@ class MarketEnvironment:
                 runtime.revenue, runtime.purchase_cost, runtime.wage_cost,
                 runtime.hiring_cost, runtime.rnd_spend, runtime.handling_cost,
                 runtime.cumulative_holding_cost, runtime.cumulative_backlog_cost,
-                runtime.profit, runtime.cash, runtime.fixed_cost,
+                runtime.profit, runtime.cash, runtime.fixed_cost, runtime.interest_cost,
             )
             for firm_id, runtime in self.runtimes.items()
         }
@@ -631,6 +662,19 @@ class MarketEnvironment:
             sum(result.profit for result in results.values()),
             sum(result.cash for result in results.values()),
         )
+
+    def _apply_interest(self, runtime: FirmRuntime) -> None:
+        """Book one day's net borrowing cost or deposit income."""
+        cfg = self.config.bank
+        if not cfg.enabled:
+            return
+        debt = max(0.0, -runtime.cash)
+        rate = min(cfg.max_rate, cfg.base_rate
+                   + cfg.risk_premium_per_loss_year * runtime.consecutive_loss_years
+                   + cfg.leverage_premium * min(1.0, debt / max(1.0, runtime.last_year_revenue)))
+        cost = debt * rate / 365 if debt else -runtime.cash * cfg.deposit_rate / 365
+        runtime.interest_cost += cost
+        runtime.cash -= cost
 
     @staticmethod
     def _financial_snapshot(runtime: FirmRuntime) -> dict[str, float]:
@@ -642,6 +686,7 @@ class MarketEnvironment:
             "rnd_spend": runtime.rnd_spend,
             "handling_cost": runtime.handling_cost,
             "fixed_cost": runtime.fixed_cost,
+            "interest_cost": runtime.interest_cost,
             "holding": runtime.cumulative_holding_cost,
             "backlog": runtime.cumulative_backlog_cost,
             "profit": runtime.profit,

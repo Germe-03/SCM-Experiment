@@ -30,6 +30,7 @@ def test_new_kpis_are_filled_and_plausible(short_run) -> None:
 
 def test_bankruptcies_are_counted_and_logged(tmp_path) -> None:
     config = load_market_config()
+    config.bank.enabled = False
     config = config.model_copy(update={"bankruptcy": config.bankruptcy.model_copy(update={
         "cash_threshold": 1e15, "min_firms_per_stage": 0, "max_exits_per_stage_per_year": 0,
     })})

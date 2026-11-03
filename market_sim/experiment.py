@@ -20,9 +20,10 @@ import os
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from statistics import mean, pstdev
+from time import perf_counter
 
 from market_sim.checkpoint import checkpoint_path, save_checkpoint
-from market_sim.run import build_runner
+from market_sim.run import build_runner, write_outputs
 from market_sim.runner import RunResult, SimulationRunner, RunState
 from market_sim.scenario import get_scenario, run_fork
 
@@ -40,6 +41,11 @@ METRICS: dict[str, tuple[str, str]] = {
     "firms_with_loss": ("firms_with_loss", "mean"),
     "retailer_price_spread": ("retailer_price_spread", "mean"),
     "bankruptcies": ("bankruptcies", "sum"),
+    "market_entries": ("market_entries", "sum"),
+    "strategy_changes": ("strategy_changes", "sum"),
+    **{f"interest_cost_{stage}": (f"interest_cost_{stage}", "sum") for stage in STAGE_NAMES},
+    **{f"debt_{stage}": (f"debt_{stage}", "mean") for stage in STAGE_NAMES},
+    **{f"active_firms_{stage}": (f"active_firms_{stage}", "mean") for stage in STAGE_NAMES},
     **{f"margin_{stage}": (f"margin_{stage}", "mean") for stage in STAGE_NAMES},
     **{f"utilization_{stage}": (f"utilization_{stage}", "mean") for stage in STAGE_NAMES},
 }
@@ -80,6 +86,7 @@ def run_metrics(result: RunResult, after_year: int) -> dict[str, float]:
 def run_seed(task: tuple[int, tuple[str, ...], int, str, int | None, int | None]) -> list[dict[str, object]]:
     """Run the baseline and all scenarios of one seed; return one row per scenario."""
     seed, scenarios, fork_year, out, run_years, days = task
+    started = perf_counter()
     runner, years = build_runner(run_years, seed, days)
     path = checkpoint_path(Path(out) / "checkpoints" / f"seed_{seed:02d}", fork_year)
 
@@ -88,11 +95,14 @@ def run_seed(task: tuple[int, tuple[str, ...], int, str, int | None, int | None]
             save_checkpoint(sim, state, path)
 
     baseline = runner.continue_run(runner.start(), years, on_year_end=save_at_fork_year)
+    elapsed = perf_counter() - started
     rows = []
     for name in scenarios:
         result = baseline if name == BASELINE else run_fork(path, get_scenario(name))
+        write_outputs(result, Path(out) / f"seed_{seed:02d}" / name)
         rows.append({
             "scenario": name, "seed": seed, "exits": len(result.exits),
+            "runtime_seconds": elapsed,
             **run_metrics(result, fork_year),
         })
     return rows

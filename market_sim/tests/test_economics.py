@@ -63,6 +63,7 @@ def test_relative_bankruptcy_rule_scales_with_starting_capital() -> None:
     network = load_firms()
     firms = [firm for stage in network.stages for firm in stage.firms]
     config = load_market_config()
+    config.bank.enabled = False
     config = config.model_copy(update={"bankruptcy": config.bankruptcy.model_copy(update={
         "min_firms_per_stage": 0, "max_exits_per_stage_per_year": 0,
         "negative_cash_years": 0, "cash_floor_fraction": 1.0,
@@ -82,6 +83,7 @@ def test_negative_cash_years_and_stage_minimum() -> None:
     network = load_firms()
     firms = [firm for stage in network.stages for firm in stage.firms]
     config = load_market_config()
+    config.bank.enabled = False
     config = config.model_copy(update={"bankruptcy": config.bankruptcy.model_copy(update={
         "cash_floor_fraction": None, "negative_cash_years": 2,
         "min_firms_per_stage": 1, "max_exits_per_stage_per_year": 0,

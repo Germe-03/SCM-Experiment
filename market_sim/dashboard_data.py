@@ -42,6 +42,7 @@ def build_dashboard_data(
             **next(item for item in identities if item["id"] == firm.id),
             "yearly": yearly,
             "daily": result.daily_series[firm.id],
+            "events": [event for event in result.events if event["firm"] == firm.id],
         }
 
     final_reports = result.annual_reports[-1] if result.annual_reports else {}

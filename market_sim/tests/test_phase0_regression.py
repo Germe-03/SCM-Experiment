@@ -1,10 +1,15 @@
 """Seed-0 reference values captured before the Phase-0 refactor."""
 
 from market_sim.run import run_simulation
+from market_sim.config import load_market_config
 
 
 def test_seed_zero_ten_year_reference_is_exact() -> None:
-    result = run_simulation(years=10, seed=0)
+    config = load_market_config()
+    for feature in (config.market_entry, config.bank, config.strategy_change):
+        feature.enabled = False
+    config.policy.max_backlog_days = None
+    result = run_simulation(years=10, seed=0, config=config)
     market_events = [
         (event["year"], event["day"], event["firm"], event["event"])
         for event in result.events

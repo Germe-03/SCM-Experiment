@@ -66,7 +66,12 @@ def test_attributes_gate_premium_and_discount_adaptation():
 
 @pytest.fixture(scope="module")
 def ten_year_results():
-    return run_simulation(years=10, seed=0), run_simulation(years=10, seed=0)
+    # Preserve this calibration check for the original adaptive policy.
+    config = load_market_config()
+    for feature in (config.market_entry, config.bank, config.strategy_change):
+        feature.enabled = False
+    return (run_simulation(years=10, seed=0, config=config.model_copy(deep=True)),
+            run_simulation(years=10, seed=0, config=config.model_copy(deep=True)))
 
 
 def test_full_run_is_deterministic_and_strategies_stay_bounded(ten_year_results):

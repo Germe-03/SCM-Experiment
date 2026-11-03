@@ -20,7 +20,7 @@ def test_run_simulation_tiny_horizon():
 
 def test_write_outputs(tmp_path):
     result = run_simulation(years=2, days_per_year=15, seed=0)
-    firm_count = sum(len(stage.firms) for stage in load_firms().stages)
+    firm_count = sum(len(stage.firms) for stage in result.network.stages)
     paths = write_outputs(result, tmp_path)
     expected_rows = {
         "annual_reports.csv": 2 * firm_count,
@@ -47,6 +47,8 @@ def test_run_simulation_is_deterministic():
 def test_bankruptcy_exits_in_result_and_outputs(tmp_path, capsys, enabled):
     config = load_market_config()
     config = config.model_copy(update={
+        "bank": config.bank.model_copy(update={"enabled": False}),
+        "market_entry": config.market_entry.model_copy(update={"enabled": False}),
         "bankruptcy": config.bankruptcy.model_copy(update={
             "enabled": enabled, "cash_threshold": 1e15, "min_years_before_exit": 1,
             "min_firms_per_stage": 0, "max_exits_per_stage_per_year": 0,

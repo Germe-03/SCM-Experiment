@@ -23,7 +23,7 @@ def test_dashboard_data_is_complete_and_json_serializable():
     data = _data()
     json.dumps(data)
     assert {"meta", "firms", "system", "ranking"} <= data.keys()
-    assert len(data["ranking"]) == sum(len(stage.firms) for stage in load_firms().stages)
+    assert len(data["ranking"]) == len(data["firms"])
     for firm in data["firms"].values():
         assert len(firm["yearly"]) == 2
         assert firm["daily"]

@@ -454,3 +454,26 @@ Seed, was angepasst wurde.
   angepasst, weil Phase 0 die bestehende Seed-0-Rechnung exakt erhalten muss;
   die Zielgrösse Systemgewinn zu Endkundenumsatz bleibt damit unverändert bei
   den im README kalibrierten 11.7 % für Seeds 0 bis 4.
+- **2026-11-03, Phase 1:** Neueintritte, Bank mit Zins und Kreditlimite,
+  Strategiewechsel. Messung mit eigenem Skript (10 Seeds parallel, je
+  30 Jahre, `run_simulation`). Erster Lauf mit allen drei Funktionen: 6 von
+  10 Seeds brachen zusammen (Gewinn −91 % des Umsatzes, Service Level 60 %).
+  Einzeln abgeschaltet zeigte sich: Die Bank allein ist harmlos (10.2 %,
+  97.3 %), Neueintritte (−0.5 %, 89.6 %) und Strategiewechsel (1.3 %,
+  79.7 %) lösten den Zusammenbruch aus. Ursache war ein alter Modellfehler:
+  Bestellungen blieben bei einem langsamen Lieferanten unbegrenzt in der
+  Warteschlange (z. B. 3'265 Einheiten Rückstand bei einer Brauerei mit
+  88 Einheiten Tageskapazität, während die andere Brauerei 920 Einheiten an
+  Lager hatte). Die Kunden zählten diese Bestellungen als «unterwegs» und
+  bestellten nie anderswo. Behoben mit `policy.max_backlog_days: 10`: Was
+  über 10 Tageskapazitäten des Lieferanten hinaus offen ist, wird storniert.
+  Ergebnis mit allen Funktionen (30 Jahre, 10 Seeds): Gewinn 7.8 % des
+  Endkundenumsatzes (5.8–10.2 %), Service Level 97.8 % (tiefstes Jahr 76 %),
+  im Mittel 14.5 Neueintritte und 17.3 Konkurse pro Lauf, 0.49
+  Strategiewechsel pro Firma und 10 Jahre. Jede Stufe hatte Eintritte, die
+  Firmenzahl pendelt (Retailer 6–12, Wholesaler 3–9, Distributoren 2–6,
+  Brauereien 2–4). Seed 6 bricht nicht mehr zusammen. Ohne die drei neuen
+  Funktionen, nur mit Stornierung: 13.1 % und 98.4 %. Laufzeit rund 110 s pro
+  Seed über 30 Jahre bei 10 parallelen Läufen. 127 Tests bestanden. Neue
+  Stellschrauben im Strategiewechsel (`count_bottom_third`,
+  `min_return_gap`, `stages`) sind vorhanden, aber auf den Standardwerten.

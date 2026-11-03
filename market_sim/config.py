@@ -262,6 +262,9 @@ class PolicyConfig(ConfigModel):
     max_order_demand_multiple: float = Field(default=6.0, ge=0)
     concentration: float = Field(default=4.0, ge=0)
     supplier_priority_boost: float = Field(default=2.0, ge=0)
+    # Open orders beyond this many days of supplier capacity are cancelled so
+    # customers can reorder elsewhere; None keeps orders queued forever.
+    max_backlog_days: float | None = Field(default=None, gt=0)
 
 
 class AdaptiveStrategyConfig(ConfigModel):
@@ -312,6 +315,59 @@ class SupplierScoreWeights(ConfigModel):
         return self
 
 
+class MarketEntryConfig(ConfigModel):
+    enabled: bool = False
+    base_probability: float = Field(default=0.08, ge=0, le=1)
+    margin_threshold: float = 0.05
+    margin_slope: float = Field(default=2.0, ge=0)
+    max_probability: float = Field(default=0.5, ge=0, le=1)
+    max_firms_per_stage: dict[str, int] = Field(default_factory=dict)
+    start_cash_fraction: float = Field(default=0.5, ge=0)
+    start_capacity_fraction: float = Field(default=0.5, gt=0, le=1)
+    start_reputation: tuple[float, float] = (0.4, 0.5)
+    start_quality_fraction: float = Field(default=0.9, ge=0, le=1)
+    names: dict[str, list[str]] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _entry_bounds(self) -> Self:
+        if not 0 <= self.start_reputation[0] <= self.start_reputation[1] <= 1:
+            raise ValueError("start_reputation must be ordered within [0, 1]")
+        if self.enabled:
+            stages = {"retailer", "wholesaler", "distributor", "factory"}
+            if set(self.names) != stages or set(self.max_firms_per_stage) != stages:
+                raise ValueError("entry names and limits must cover all stages")
+            if any(n < 1 for n in self.max_firms_per_stage.values()) or any(not n for n in self.names.values()):
+                raise ValueError("entry limits and name lists must be nonempty")
+        return self
+
+
+class BankConfig(ConfigModel):
+    enabled: bool = False
+    base_rate: float = Field(default=0.03, ge=0)
+    risk_premium_per_loss_year: float = Field(default=0.01, ge=0)
+    leverage_premium: float = Field(default=0.04, ge=0)
+    max_rate: float = Field(default=0.15, ge=0)
+    deposit_rate: float = Field(default=0.005, ge=0)
+    credit_limit_revenue_fraction: float = Field(default=0.25, ge=0)
+    credit_limit_initial_cash_fraction: float = Field(default=1.0, ge=0)
+    credit_limit_min: float = Field(default=0.0, ge=0)
+
+
+class StrategyChangeConfig(ConfigModel):
+    enabled: bool = False
+    bad_years_trigger: int = Field(default=2, ge=1)
+    explore_probability: float = Field(default=0.2, ge=0, le=1)
+    imitation_window_years: int = Field(default=3, ge=1)
+    lockout_years: int = Field(default=4, ge=0)
+    switch_cost_fraction_of_revenue: float = Field(default=0.02, ge=0)
+    reputation_dip: float = Field(default=0.05, ge=0, le=1)
+    # A year in the bottom third of the stage also counts as bad, not only a loss.
+    count_bottom_third: bool = True
+    # Imitate only when the best archetype beats the own one by this return gap.
+    min_return_gap: float = Field(default=0.0, ge=0)
+    stages: list[str] = Field(default_factory=lambda: ["retailer", "wholesaler", "distributor", "factory"])
+
+
 class MarketConfig(ConfigModel):
     unit_scale: UnitScaleConfig
     demand: DemandConfig
@@ -335,6 +391,9 @@ class MarketConfig(ConfigModel):
     start_variation: StartVariationConfig = Field(default_factory=StartVariationConfig)
     events: MarketEventsConfig = Field(default_factory=MarketEventsConfig)
     supplier_discovery: SupplierDiscoveryConfig = Field(default_factory=SupplierDiscoveryConfig)
+    market_entry: MarketEntryConfig = Field(default_factory=MarketEntryConfig)
+    bank: BankConfig = Field(default_factory=BankConfig)
+    strategy_change: StrategyChangeConfig = Field(default_factory=StrategyChangeConfig)
 
     @model_validator(mode="after")
     def _validate_stage_prices(self) -> Self:

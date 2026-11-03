@@ -28,6 +28,8 @@ def service_level(served: int, demand: int) -> float:
 
 
 class AnnualReport(BaseModel):
+    archetype: str = ""
+    interest_cost: float = 0.0
     year: int
     firm_id: str
     revenue: float
@@ -68,4 +70,17 @@ class SystemKPIs(BaseModel):
     firms_with_loss: int = 0
     bankruptcies: int = 0
     market_entries: int = 0
+    strategy_changes: int = 0
+    interest_cost_retailer: float = 0.0
+    interest_cost_wholesaler: float = 0.0
+    interest_cost_distributor: float = 0.0
+    interest_cost_factory: float = 0.0
+    debt_retailer: float = 0.0
+    debt_wholesaler: float = 0.0
+    debt_distributor: float = 0.0
+    debt_factory: float = 0.0
+    active_firms_retailer: int = 0
+    active_firms_wholesaler: int = 0
+    active_firms_distributor: int = 0
+    active_firms_factory: int = 0
     retailer_price_spread: float = 0.0

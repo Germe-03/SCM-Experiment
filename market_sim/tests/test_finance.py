@@ -28,7 +28,7 @@ def test_cash_identity_and_result_totals() -> None:
             runtime.initial_cash + runtime.revenue - runtime.purchase_cost
             - runtime.cumulative_holding_cost - runtime.cumulative_backlog_cost
             - runtime.wage_cost - runtime.hiring_cost - runtime.rnd_spend
-            - runtime.handling_cost - runtime.fixed_cost
+            - runtime.handling_cost - runtime.fixed_cost - runtime.interest_cost
         )
         assert runtime.initial_cash == firm.cash * market.config.costs.initial_cash_scale
         assert runtime.cash == pytest.approx(expected)
