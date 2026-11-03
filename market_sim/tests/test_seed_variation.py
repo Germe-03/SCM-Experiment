@@ -36,9 +36,9 @@ def test_events_are_logged_and_deterministic() -> None:
     one = first.continue_run(first.start(), years)
     two = second.continue_run(second.start(), years)
     assert one.events == two.events
-    kinds = {event["event"] for event in one.events}
-    assert kinds == {"heat_summer", "harvest_failure", "recall"}
-    assert len(one.events) == 3 * years
+    market = [e for e in one.events if e["event"] in {"heat_summer", "harvest_failure", "recall"}]
+    assert {e["event"] for e in market} == {"heat_summer", "harvest_failure", "recall"}
+    assert len(market) == 3 * years
     recall = next(e for e in one.events if e["event"] == "recall")
     assert recall["firm"] and recall["year"] == 1
     assert set(recall) == {"year", "day", "firm", "event", "details"}

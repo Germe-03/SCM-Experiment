@@ -26,6 +26,7 @@ def test_write_outputs(tmp_path):
         "annual_reports.csv": 2 * firm_count,
         "system_kpis.csv": 2,
         "firm_ranking.csv": firm_count,
+        "events.csv": len(result.events),
     }
     assert {path.name for path in paths} == set(expected_rows)
     for path in paths:
@@ -75,7 +76,7 @@ def test_bankruptcy_exits_in_result_and_outputs(tmp_path, capsys, enabled):
 def test_main_writes_to_requested_directory(tmp_path):
     main(["--years", "1", "--days-per-year", "10", "--out", str(tmp_path)])
     assert {path.name for path in tmp_path.iterdir()} == {
-        "annual_reports.csv", "system_kpis.csv", "firm_ranking.csv",
+        "annual_reports.csv", "system_kpis.csv", "firm_ranking.csv", "events.csv",
     }
 
 

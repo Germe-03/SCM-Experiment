@@ -14,6 +14,9 @@ from market_sim.policies import policies_for_network
 from market_sim.runner import RunResult, SimulationRunner
 
 
+EVENT_FIELDS = ["year", "day", "firm", "event", "details"]
+
+
 def run_simulation(
     years: int | None = None,
     seed: int = 0,
@@ -97,6 +100,7 @@ def write_outputs(result: RunResult, out_dir: str | Path) -> list[Path]:
     annual_path = directory / "annual_reports.csv"
     system_path = directory / "system_kpis.csv"
     ranking_path = directory / "firm_ranking.csv"
+    events_path = directory / "events.csv"
 
     annual_fields = list(AnnualReport.model_fields)
     with annual_path.open("w", newline="", encoding="utf-8") as output:
@@ -126,7 +130,11 @@ def write_outputs(result: RunResult, out_dir: str | Path) -> list[Path]:
         ])
         writer.writeheader()
         writer.writerows(ranking_rows)
-    return [annual_path, system_path, ranking_path]
+    with events_path.open("w", newline="", encoding="utf-8") as output:
+        writer = csv.DictWriter(output, fieldnames=EVENT_FIELDS)
+        writer.writeheader()
+        writer.writerows(sorted(result.events, key=lambda event: (event["year"], event["day"])))
+    return [annual_path, system_path, ranking_path, events_path]
 
 
 def print_summary(result: RunResult) -> None:

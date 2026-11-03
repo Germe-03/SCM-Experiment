@@ -64,6 +64,7 @@ class RunState:
     recent_demand: dict[str, list[int]] = field(default_factory=dict)
     recent_sales: dict[str, list[int]] = field(default_factory=dict)
     events: list[dict[str, object]] = field(default_factory=list)
+    main_supplier: dict[str, str] = field(default_factory=dict)
 
 
 class ConsumerDemandGenerator:
@@ -394,6 +395,10 @@ class SimulationRunner:
             factory_order_series,
             b2b_received, b2b_shipped, daily_prices,
         )
+        kpis = self._add_experiment_kpis(kpis, reports, annual_reports[-1] if annual_reports else None, summaries[-1])
+        self._log_year_events(
+            state, year + 1, summaries[-1], previous, utilization, shipped_edges,
+        )
         annual_reports.append(reports)
         system_kpis.append(kpis)
         financial_ends = self._financial_snapshot_all()
@@ -410,7 +415,11 @@ class SimulationRunner:
             } | {"cash": end["cash"]})
         # P4b fix: exits are deterministic year-end events; cash freezes
         # from the following tick after the configured grace period.
-        self._apply_bankruptcy(year + 1)
+        exits_before = len(self.exits)
+        self._apply_bankruptcy(year + 1, state.events)
+        system_kpis[-1] = system_kpis[-1].model_copy(update={
+            "bankruptcies": len(self.exits) - exits_before,
+        })
         state.global_day = global_day
         state.year = year + 1
 
@@ -556,7 +565,9 @@ class SimulationRunner:
         runtime.wage_level = firm.wage_level
         runtime.employees = firm.employees
 
-    def _apply_bankruptcy(self, completed_years: int) -> None:
+    def _apply_bankruptcy(
+        self, completed_years: int, events: list[dict[str, object]] | None = None,
+    ) -> None:
         """P4b fix: close insolvent firms at year-end after the grace period."""
         cfg = self.config.bankruptcy
         if not cfg.enabled or completed_years < cfg.min_years_before_exit:
@@ -587,6 +598,80 @@ class SimulationRunner:
             exits_per_stage[stage] = exits_per_stage.get(stage, 0) + 1
             self.env.runtimes[firm_id].active = False
             self.exits[firm_id] = completed_years
+            if events is not None:
+                events.append({
+                    "year": completed_years, "day": self.config.simulation.days_per_year,
+                    "firm": firm_id, "event": "bankruptcy",
+                    "details": f"cash {self.env.runtimes[firm_id].cash:,.0f}",
+                })
+
+    def _add_experiment_kpis(self, kpis, reports, previous_reports, summaries):
+        update: dict[str, float | int] = {}
+        for stage in STAGES:
+            active = [f for f in self.network.firms_in(stage) if self.env.runtimes[f.id].active]
+            revenue = sum(summaries[f.id].revenue for f in active)
+            update[f"margin_{stage}"] = (
+                sum(summaries[f.id].profit for f in active) / revenue if revenue else 0.0
+            )
+            update[f"utilization_{stage}"] = (
+                sum(reports[f.id].capacity_utilization for f in active) / len(active)
+                if active else 0.0
+            )
+        retailers = self.network.firms_in("retailer")
+        if previous_reports is not None:
+            update["market_share_movement"] = sum(
+                abs(reports[f.id].market_share - previous_reports[f.id].market_share)
+                for f in retailers
+            )
+        update["firms_with_loss"] = sum(
+            summaries[f.id].profit < 0 for f in self._firms() if self.env.runtimes[f.id].active
+        )
+        prices = [
+            reports[f.id].average_sell_price for f in retailers if self.env.runtimes[f.id].active
+        ]
+        update["retailer_price_spread"] = pstdev(prices) if len(prices) >= 2 else 0.0
+        return kpis.model_copy(update=update)
+
+    def _log_year_events(self, state, year, summaries, previous, utilization, shipped_edges) -> None:
+        """Price moves above 5 %, supplier switches and capacity ceilings."""
+        days = self.config.simulation.days_per_year
+        for firm in self._firms():
+            runtime = self.env.runtimes[firm.id]
+            if not runtime.active:
+                continue
+            old = previous.get(firm.id)
+            new_price = summaries[firm.id].avg_sell_price
+            if old is not None and old.avg_sell_price > 0:
+                change = new_price / old.avg_sell_price - 1
+                if abs(change) > 0.05:
+                    state.events.append({
+                        "year": year, "day": 1, "firm": firm.id,
+                        "event": "price_increase" if change > 0 else "price_cut",
+                        "details": f"average price {old.avg_sell_price:.2f} -> {new_price:.2f} ({change:+.1%})",
+                    })
+            shipped = shipped_edges[firm.id]
+            if shipped:
+                top = max(sorted(shipped), key=lambda supplier: shipped[supplier])
+                before = state.main_supplier.get(firm.id)
+                if before is not None and before != top:
+                    state.events.append({
+                        "year": year, "day": days, "firm": firm.id, "event": "supplier_switch",
+                        "details": f"largest supplier {before} -> {top}",
+                    })
+                state.main_supplier[firm.id] = top
+            run_start = None
+            series = utilization[firm.id] + [0.0]
+            for index, value in enumerate(series):
+                if value > 0.95 and run_start is None:
+                    run_start = index
+                elif value <= 0.95 and run_start is not None:
+                    if index - run_start >= 7:
+                        state.events.append({
+                            "year": year, "day": run_start + 1, "firm": firm.id,
+                            "event": "capacity_limit",
+                            "details": f"utilization above 95 % for {index - run_start} days",
+                        })
+                    run_start = None
 
     def _rival_prices(self, previous: dict[str, YearSummary]) -> dict[str, float]:
         """Average last-year selling price of the still active firms per stage."""

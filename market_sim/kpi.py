@@ -55,3 +55,17 @@ class SystemKPIs(BaseModel):
     market_concentration: float = Field(ge=0, le=1)
     bullwhip_ratio: float = Field(ge=0)
     service_level: float = Field(ge=0, le=1)
+    # Experiment indicators (see README, section Experiment).
+    margin_retailer: float = 0.0
+    margin_wholesaler: float = 0.0
+    margin_distributor: float = 0.0
+    margin_factory: float = 0.0
+    utilization_retailer: float = 0.0
+    utilization_wholesaler: float = 0.0
+    utilization_distributor: float = 0.0
+    utilization_factory: float = 0.0
+    market_share_movement: float = 0.0
+    firms_with_loss: int = 0
+    bankruptcies: int = 0
+    market_entries: int = 0
+    retailer_price_spread: float = 0.0
