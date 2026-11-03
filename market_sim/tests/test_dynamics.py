@@ -44,7 +44,7 @@ def test_inactive_firm_is_frozen_and_excluded_from_market_operations():
     env.reset()
     retailer = sorted(network.firms_in("retailer"), key=lambda firm: firm.id)[0]
     runtime = env.runtimes[retailer.id]
-    runtime.cash = config.bankruptcy.cash_threshold - 1
+    runtime.cash = -config.bankruptcy.cash_floor_fraction * runtime.initial_cash - 1
     runtime.active = False
     before = (
         runtime.cash, runtime.revenue, runtime.purchase_cost, runtime.wage_cost,
@@ -82,7 +82,7 @@ def test_bankruptcy_disabled_does_not_imply_exit():
     env = MarketEnvironment(network, config=config, consumer_demand_mode="attractiveness_lost")
     env.reset()
     runtime = next(iter(env.runtimes.values()))
-    runtime.cash = config.bankruptcy.cash_threshold - 1
+    runtime.cash = -config.bankruptcy.cash_floor_fraction * runtime.initial_cash - 1
     env.step(0, {})
     assert runtime.active
 
@@ -94,6 +94,7 @@ def test_runner_applies_year_end_bankruptcy_and_honors_disabled_switch():
     enabled = base.model_copy(update={
         "bankruptcy": base.bankruptcy.model_copy(update={
             "enabled": True, "cash_threshold": 10**30, "min_years_before_exit": 1,
+            "min_firms_per_stage": 0, "max_exits_per_stage_per_year": 0,
         })
     })
     runner = SimulationRunner(network, enabled, policies_for_network(firms), seed=0)

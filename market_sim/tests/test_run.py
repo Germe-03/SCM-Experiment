@@ -48,6 +48,7 @@ def test_bankruptcy_exits_in_result_and_outputs(tmp_path, capsys, enabled):
     config = config.model_copy(update={
         "bankruptcy": config.bankruptcy.model_copy(update={
             "enabled": enabled, "cash_threshold": 1e15, "min_years_before_exit": 1,
+            "min_firms_per_stage": 0, "max_exits_per_stage_per_year": 0,
         }),
     })
     result = run_simulation(years=2, days_per_year=2, seed=0, config=config)

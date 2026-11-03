@@ -70,7 +70,8 @@ def test_low_cost_retailer_holds_discount_position_under_scarcity():
         config,
     )
 
-    assert decision.sell_price <= 4.0
+    # Discount firms sit below the stage base price (working band, see policies).
+    assert decision.sell_price <= 0.95 * config.stage_prices["retailer"].base
     assert decision.sell_price < (config.stage_prices["retailer"].min + config.stage_prices["retailer"].max) / 2
 
 

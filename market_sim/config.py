@@ -72,10 +72,19 @@ class DemandConfig(ConfigModel):
 
 
 class BankruptcyConfig(ConfigModel):
-    """P4b fix: centrally configured market exit policy."""
+    """Market exit policy, relative to each firm's own starting capital."""
 
     enabled: bool = True
-    cash_threshold: float = -100_000_000.0
+    # Exit when cash falls below -fraction * initial cash (None disables).
+    cash_floor_fraction: float | None = Field(default=1.0, ge=0)
+    # Exit after this many consecutive year-ends with negative cash (0 disables).
+    negative_cash_years: int = Field(default=2, ge=0)
+    # Exits never leave fewer active firms than this on a stage.
+    min_firms_per_stage: int = Field(default=0, ge=0)
+    # 0 means unlimited.
+    max_exits_per_stage_per_year: int = Field(default=0, ge=0)
+    # Optional absolute floor in CHF, kept for tests and special scenarios.
+    cash_threshold: float | None = None
     min_years_before_exit: int = Field(default=1, ge=0)
 
 
@@ -109,6 +118,44 @@ class CostConfig(ConfigModel):
     backlog_cost_per_unit: float = Field(ge=0)
     # Demand-v2 calibration knob: real CHF charged per sim-unit handled.
     handling_cost_per_unit: float = Field(default=0.0, ge=0)
+    # One simulated employee/budget CHF stands for this many real ones, so
+    # wages, hiring and R&D live on the same money scale as revenue.
+    personnel_cost_scale: float = Field(default=1.0, gt=0)
+    # Starting capital scale, so equity matches the revenue-scaled money.
+    initial_cash_scale: float = Field(default=1.0, gt=0)
+
+
+class FixedCostConfig(ConfigModel):
+    """Rent, vehicles and machines in real CHF per day, by stage."""
+
+    base_per_day: dict[str, float] = Field(default_factory=dict)
+    per_capacity_unit_per_day: dict[str, float] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _stages_known(self) -> Self:
+        known = {"factory", "distributor", "wholesaler", "retailer"}
+        for block in (self.base_per_day, self.per_capacity_unit_per_day):
+            if set(block) - known:
+                raise ValueError(f"fixed cost stages must be within {sorted(known)}")
+            if any(value < 0 for value in block.values()):
+                raise ValueError("fixed costs must not be negative")
+        return self
+
+
+class CommodityConfig(ConfigModel):
+    """Raw materials per produced sim-unit (real CHF) with fluctuating price indices."""
+
+    # Base cost per component, e.g. malt, hops, packaging, energy.
+    components: dict[str, float] = Field(default_factory=dict)
+    index_volatility: float = Field(default=0.0, ge=0)
+    index_mean_reversion: float = Field(default=0.2, ge=0, le=1)
+    index_update_days: int = Field(default=30, gt=0)
+
+    @model_validator(mode="after")
+    def _costs_not_negative(self) -> Self:
+        if any(value < 0 for value in self.components.values()):
+            raise ValueError("commodity costs must not be negative")
+        return self
 
 
 class WorkforceConfig(ConfigModel):
@@ -123,6 +170,7 @@ class WorkforceConfig(ConfigModel):
     wage_turnover_coeff: float = Field(ge=0)
     hiring_cost_per_employee: float = Field(ge=0)
     productivity_churn_penalty: float = Field(ge=0)
+    min_employees: int = Field(default=5, ge=1)
 
 
 class RndConfig(ConfigModel):
@@ -183,6 +231,11 @@ class AdaptiveStrategyConfig(ConfigModel):
     safety_stock_min_days: int = Field(default=4, ge=0)
     safety_stock_max_days: int = Field(default=18, ge=0)
     max_hires_per_year: int = Field(default=3, ge=0)
+    # Price competition: react to the rivals' average price on the own stage.
+    competitive_pull: float = Field(default=0.0, ge=0, le=1)
+    undercut_fraction: float = Field(default=0.0, ge=0, le=0.5)
+    share_loss_trigger: float = Field(default=0.01, ge=0)
+    max_price_step_fraction: float = Field(default=0.0, ge=0, le=0.5)
 
     @model_validator(mode="after")
     def _bounds_are_ordered(self) -> Self:
@@ -224,6 +277,8 @@ class MarketConfig(ConfigModel):
     simulation: SimulationConfig
     logistics: LogisticsConfig
     costs: CostConfig
+    fixed_costs: FixedCostConfig = Field(default_factory=FixedCostConfig)
+    commodities: CommodityConfig = Field(default_factory=CommodityConfig)
     workforce: WorkforceConfig
     rnd: RndConfig
     reputation: ReputationConfig

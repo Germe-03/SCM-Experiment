@@ -25,12 +25,12 @@ def test_cash_identity_and_result_totals() -> None:
     for firm_id, runtime in market.runtimes.items():
         firm = market.network.firm(firm_id)
         expected = (
-            firm.cash + runtime.revenue - runtime.purchase_cost
+            runtime.initial_cash + runtime.revenue - runtime.purchase_cost
             - runtime.cumulative_holding_cost - runtime.cumulative_backlog_cost
             - runtime.wage_cost - runtime.hiring_cost - runtime.rnd_spend
-            - runtime.handling_cost
+            - runtime.handling_cost - runtime.fixed_cost
         )
-        assert runtime.initial_cash == firm.cash
+        assert runtime.initial_cash == firm.cash * market.config.costs.initial_cash_scale
         assert runtime.cash == pytest.approx(expected)
         assert result.firm_results[firm_id].cash == pytest.approx(expected)
     assert result.total_profit == pytest.approx(sum(r.profit for r in market.runtimes.values()))
@@ -39,7 +39,11 @@ def test_cash_identity_and_result_totals() -> None:
 
 def test_b2b_revenue_and_purchase_cost_are_symmetric() -> None:
     market = _run()
-    purchases = sum(runtime.purchase_cost for runtime in market.runtimes.values())
+    # Factories buy raw materials from outside the network, not from a supplier firm.
+    purchases = sum(
+        market.runtimes[firm.id].purchase_cost
+        for stage in STAGES[:-1] for firm in market.network.firms_in(stage)
+    )
     upstream_revenue = sum(
         market.runtimes[firm.id].revenue
         for stage in STAGES[1:]
@@ -77,4 +81,5 @@ def test_wages_accrue_daily() -> None:
     assert firm.employees > 0
     assert market.runtimes[firm.id].wage_cost == pytest.approx(
         days * firm.employees * firm.wage_level / 30
+        * market.config.costs.personnel_cost_scale
     )

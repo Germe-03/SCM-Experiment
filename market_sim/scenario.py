@@ -76,8 +76,9 @@ class PriceShiftPolicy:
 
     def decide_annual(
         self, firm: Firm, last_summary: "YearSummary | None", config: MarketConfig,
+        **context: float | None,
     ) -> AnnualStrategy:
-        strategy = self.inner.decide_annual(firm, last_summary, config)
+        strategy = self.inner.decide_annual(firm, last_summary, config, **context)
         band = config.stage_prices[firm.stage]
         low, base, high = (
             max(band.min, min(band.max, value * self.factor))

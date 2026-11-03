@@ -51,7 +51,9 @@ def test_wages_reduce_and_overtime_increases_turnover() -> None:
 def test_turnover_cost_and_churn_reduce_throughput() -> None:
     cfg = load_market_config()
     high_churn = cfg.model_copy(update={
-        "workforce": cfg.workforce.model_copy(update={"base_annual_turnover": 18.25})
+        "workforce": cfg.workforce.model_copy(update={"base_annual_turnover": 18.25}),
+        # Raw materials scale with output; drop them so cash only reflects churn cost.
+        "commodities": cfg.commodities.model_copy(update={"components": {}}),
     })
     with_churn = _environment(workforce=True, config=high_churn)
     without = _environment(workforce=False, config=high_churn)
@@ -112,5 +114,5 @@ def test_enabled_cash_identity_includes_hiring_and_rnd() -> None:
             runtime.initial_cash + runtime.revenue - runtime.purchase_cost
             - runtime.cumulative_holding_cost - runtime.cumulative_backlog_cost
             - runtime.wage_cost - runtime.hiring_cost - runtime.rnd_spend
-            - runtime.handling_cost
+            - runtime.handling_cost - runtime.fixed_cost
         )

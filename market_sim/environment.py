@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from math import floor
+from math import exp, floor
+import random
 
 from market_sim.config import MarketConfig, load_market_config
 from market_sim.models import STAGES, SupplyNetwork
@@ -61,6 +62,7 @@ class FirmRuntime:
     hiring_cost: float = 0.0
     rnd_spend: float = 0.0
     handling_cost: float = 0.0
+    fixed_cost: float = 0.0
     employees: int = 0
     wage_level: float = 0.0
     turnover_rate: float = 0.0
@@ -68,6 +70,7 @@ class FirmRuntime:
     pending_rnd_effects: list[tuple[int, float]] = field(default_factory=list)
     # P4b fix: inactive runtimes are shut down and financially frozen.
     active: bool = True
+    negative_cash_years: int = 0
 
     @property
     def cumulative_cost(self) -> float:
@@ -80,7 +83,7 @@ class FirmRuntime:
             self.purchase_cost + self.cumulative_holding_cost
             + self.cumulative_backlog_cost + self.wage_cost
             + self.hiring_cost + self.rnd_spend
-            + self.handling_cost
+            + self.handling_cost + self.fixed_cost
         )
 
     def receive_shipment(self) -> int:
@@ -126,6 +129,7 @@ class FirmResult:
     backlog_cost: float = 0.0
     profit: float = 0.0
     cash: float = 0.0
+    fixed_cost: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -151,8 +155,12 @@ class MarketEnvironment:
         enforce_capacity: bool = False,
         enable_workforce: bool = False,
         enable_rnd: bool = False,
+        seed: int = 0,
     ) -> None:
         self.network = network
+        self.seed = seed
+        self.commodity_log_index: dict[str, float] = {}
+        self._commodity_rng = random.Random(f"commodities-{seed}")
         self.config = config or load_market_config()
         self.initial_inventory = initial_inventory
         lead_time = self.config.logistics.default_lead_time_days
@@ -183,6 +191,8 @@ class MarketEnvironment:
         self.period = 0
         self.cumulative_lost_sales = 0
         self.runtimes = {}
+        self._commodity_rng = random.Random(f"commodities-{self.seed}")
+        self.commodity_log_index = {name: 0.0 for name in self.config.commodities.components}
         for stage in STAGES:
             for firm in self.network.firms_in(stage):
                 inventory = firm.inventory if self.initial_inventory is None else self.initial_inventory
@@ -203,7 +213,8 @@ class MarketEnvironment:
                     incoming_orders=[({seeded_customer: qty} if qty else {}) for qty in self.initial_orders],
                     backlog_by_downstream=backlog_map, holding_cost=self.holding_cost,
                     backlog_cost=self.backlog_cost,
-                    initial_cash=firm.cash, cash=firm.cash,
+                    initial_cash=firm.cash * self.config.costs.initial_cash_scale,
+                    cash=firm.cash * self.config.costs.initial_cash_scale,
                     employees=firm.employees, wage_level=firm.wage_level,
                     quality_level=firm.quality_level,
                 )
@@ -216,6 +227,7 @@ class MarketEnvironment:
             raise RuntimeError("Must call reset() before step()")
 
         market_mode = self.consumer_demand_mode == "attractiveness_lost"
+        self._update_commodity_index()
         active_ids = {
             firm_id for firm_id, runtime in self.runtimes.items()
             if runtime.active
@@ -324,6 +336,7 @@ class MarketEnvironment:
                     # when the optional clamp is enabled.
                     if self.enforce_capacity:
                         quantity = min(quantity, self._effective_capacity(firm.id))
+                    self.runtimes[firm.id].purchase_cost += quantity * self.material_cost_per_unit()
                     # P1 fix: a factory production start is its replenishment order.
                     self.runtimes[firm.id].on_order += quantity
                     self.runtimes[firm.id].incoming_shipments[-1] += quantity
@@ -353,18 +366,20 @@ class MarketEnvironment:
             if market_mode and not runtime.active:
                 continue
             firm = self.network.firm(firm_id)
-            daily_wage = None
+            scale = self.config.costs.personnel_cost_scale
+            daily_wage = runtime.employees * runtime.wage_level / 30 * scale
             if self.enable_workforce:
                 # S7 decision: headcount is refilled in the MVP; churn adds a
                 # temporary productivity loss and a hiring cash cost.
                 cfg = self.config.workforce
                 runtime.hiring_cost += (
                     firm.employees * runtime.turnover_rate
-                    * cfg.hiring_cost_per_employee
+                    * cfg.hiring_cost_per_employee * scale
                 )
                 daily_wage = firm.employees * firm.wage_level / cfg.days_per_month * (
                     1 + (cfg.overtime_wage_premium - 1) * firm.overtime_level
-                )
+                ) * scale
+            runtime.fixed_cost += self._daily_fixed_cost(firm)
             if self.enable_rnd:
                 self._apply_rnd(firm_id)
             runtime.calculate_period_cost(daily_wage)
@@ -544,7 +559,7 @@ class MarketEnvironment:
                 runtime.revenue, runtime.purchase_cost, runtime.wage_cost,
                 runtime.hiring_cost, runtime.rnd_spend, runtime.handling_cost,
                 runtime.cumulative_holding_cost, runtime.cumulative_backlog_cost,
-                runtime.profit, runtime.cash,
+                runtime.profit, runtime.cash, runtime.fixed_cost,
             )
             for firm_id, runtime in self.runtimes.items()
         }
@@ -564,6 +579,7 @@ class MarketEnvironment:
             "hiring_cost": runtime.hiring_cost,
             "rnd_spend": runtime.rnd_spend,
             "handling_cost": runtime.handling_cost,
+            "fixed_cost": runtime.fixed_cost,
             "holding": runtime.cumulative_holding_cost,
             "backlog": runtime.cumulative_backlog_cost,
             "profit": runtime.profit,
@@ -608,7 +624,8 @@ class MarketEnvironment:
         runtime = self.runtimes[firm_id]
         cfg = self.config.rnd
         daily_spend = firm.r_and_d_budget / 365
-        runtime.rnd_spend += daily_spend
+        # Cash cost lives on the scaled money scale; the quality effect does not.
+        runtime.rnd_spend += daily_spend * self.config.costs.personnel_cost_scale
         runtime.pending_rnd_effects.append(
             (self.period + cfg.lag_days, cfg.effect_per_chf * daily_spend)
         )
@@ -621,6 +638,32 @@ class MarketEnvironment:
         runtime.quality_level = max(
             0.0,
             min(cfg.quality_cap, runtime.quality_level - cfg.daily_quality_decay + matured),
+        )
+
+    def _update_commodity_index(self) -> None:
+        """Mean-reverting log-price shocks per raw material, every few days."""
+        cfg = self.config.commodities
+        if not cfg.components or cfg.index_volatility == 0 or self.period % cfg.index_update_days:
+            return
+        for name in sorted(self.commodity_log_index):
+            shock = self._commodity_rng.gauss(0.0, cfg.index_volatility)
+            self.commodity_log_index[name] = (
+                (1 - cfg.index_mean_reversion) * self.commodity_log_index[name] + shock
+            )
+
+    def material_cost_per_unit(self) -> float:
+        """Current raw-material cost of one produced sim-unit in real CHF."""
+        return sum(
+            cost * exp(self.commodity_log_index.get(name, 0.0))
+            for name, cost in self.config.commodities.components.items()
+        )
+
+    def _daily_fixed_cost(self, firm) -> float:
+        cfg = self.config.fixed_costs
+        base = max(firm.capacity, round(firm.employees * firm.productivity_per_employee)) + firm.machine_capacity
+        return (
+            cfg.base_per_day.get(firm.stage, 0.0)
+            + cfg.per_capacity_unit_per_day.get(firm.stage, 0.0) * base
         )
 
     def _market_price(self, price: float) -> float:

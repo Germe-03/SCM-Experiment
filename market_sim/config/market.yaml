@@ -26,7 +26,13 @@ demand:
 # P4b fix: exits are evaluated at year-end after this grace period.
 bankruptcy:
   enabled: true
-  cash_threshold: -100000000.0
+  # Relative to each firm's own starting capital.
+  cash_floor_fraction: 1.0
+  negative_cash_years: 4
+  # A stage never drops below this many active firms.
+  min_firms_per_stage: 2
+  # Insolvency proceedings take time: at most this many exits per stage and year.
+  max_exits_per_stage_per_year: 1
   min_years_before_exit: 1
 
 price:
@@ -36,10 +42,10 @@ price:
 
 # P3 fix: stage-specific bands preserve markup through the supply chain.
 stage_prices:
-  factory: {base: 2.10, min: 1.40, max: 5.00}
-  distributor: {base: 2.80, min: 1.90, max: 7.00}
-  wholesaler: {base: 3.60, min: 2.40, max: 9.00}
-  retailer: {base: 4.99, min: 2.50, max: 12.00}
+  factory: {base: 2.45, min: 1.40, max: 5.00}
+  distributor: {base: 3.20, min: 1.90, max: 7.00}
+  wholesaler: {base: 4.10, min: 2.40, max: 9.00}
+  retailer: {base: 5.20, min: 2.50, max: 12.00}
 
 simulation:
   years: 10
@@ -53,7 +59,23 @@ costs:
   holding_cost_per_unit: 27.0
   backlog_cost_per_unit: 250.0
   # Demand-v2 tunable calibration knob, real CHF per sim-unit shipped/sold.
-  handling_cost_per_unit: 8200.0
+  handling_cost_per_unit: 1500.0
+  # One simulated employee / R&D franc stands for this many real ones.
+  personnel_cost_scale: 80.0
+  # Starting capital on the same money scale as the scaled revenue.
+  initial_cash_scale: 36.0
+
+# Rent, vehicles and machines, real CHF per day; grows with capacity.
+fixed_costs:
+  base_per_day: {factory: 55000.0, distributor: 12000.0, wholesaler: 12000.0, retailer: 18000.0}
+  per_capacity_unit_per_day: {factory: 1820.0, distributor: 3700.0, wholesaler: 3900.0, retailer: 3300.0}
+
+# Raw materials per produced sim-unit (real CHF); each index fluctuates over time.
+commodities:
+  components: {malt: 6300.0, hops: 1700.0, packaging: 6000.0, energy: 1800.0}
+  index_volatility: 0.08
+  index_mean_reversion: 0.2
+  index_update_days: 30
 
 # S7 tunable guesses: calibrate these coefficients against observed firm data.
 workforce:
@@ -66,6 +88,7 @@ workforce:
   wage_turnover_coeff: 0.5
   hiring_cost_per_employee: 2500.0
   productivity_churn_penalty: 1.0
+  min_employees: 1
 
 # S7 tunable guesses: R&D effects are deliberately delayed and small.
 rnd:
@@ -94,7 +117,7 @@ capacity:
 
 # P1 fix: safety cap for daily replenishment orders.
 policy:
-  max_order_demand_multiple: 6.0
+  max_order_demand_multiple: 3.0
   # P2 fix: exponent applied to supplier scores when splitting orders.
   concentration: 12.0
   # Multiplier for the factor named by each firm's supplier priority.
@@ -103,6 +126,10 @@ policy:
 # Adaptive strategy: small deterministic year-to-year learning steps.
 adaptive_strategy:
   price_step_fraction: 0.01
+  max_price_step_fraction: 0.04
+  competitive_pull: 0.30
+  undercut_fraction: 0.05
+  share_loss_trigger: 0.01
   rnd_min_multiplier: 0.55
   rnd_max_multiplier: 1.80
   rnd_step_multiplier: 0.10

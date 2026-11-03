@@ -132,6 +132,7 @@ class SimulationRunner:
             horizon=config.simulation.days_per_year * config.simulation.years,
             consumer_demand_mode="attractiveness_lost",
             enforce_capacity=True, enable_workforce=True, enable_rnd=True,
+            seed=seed,
         )
         self.strategies: dict[str, AnnualStrategy] = {}
         self.applied_prices: list[tuple[str, float, float, float]] = []
@@ -215,11 +216,13 @@ class SimulationRunner:
         b2b_received = {firm.id: 0 for firm in self._firms()}
         b2b_shipped = {firm.id: 0 for firm in self._firms()}
 
+        rival_prices = self._rival_prices(previous)
         for firm in self._firms():
             if not self.env.runtimes[firm.id].active:
                 continue
             strategy = self.policies[firm.id].decide_annual(
-                firm, previous.get(firm.id), self.config
+                firm, previous.get(firm.id), self.config,
+                rival_price=rival_prices.get(firm.stage),
             ).validate_for_config(self.config)
             self.strategies[firm.id] = strategy
             self._apply_annual(firm, strategy)
@@ -332,7 +335,7 @@ class SimulationRunner:
                 for key in (
                     "revenue", "purchase_cost", "holding_cost",
                     "backlog_cost", "wage_cost", "hiring_cost",
-                    "rnd_cost", "handling_cost", "profit",
+                    "rnd_cost", "handling_cost", "fixed_cost", "profit",
                 )
             } | {"cash": end["cash"]})
         # P4b fix: exits are deterministic year-end events; cash freezes
@@ -478,7 +481,7 @@ class SimulationRunner:
         firm.r_and_d_budget = strategy.r_and_d_budget
         firm.overtime_level = strategy.overtime_level
         firm.supplier_priority = strategy.supplier_priority
-        firm.employees = max(5, firm.employees + strategy.hiring_plan)
+        firm.employees = max(self.config.workforce.min_employees, firm.employees + strategy.hiring_plan)
         runtime = self.env.runtimes[firm.id]
         runtime.wage_level = firm.wage_level
         runtime.employees = firm.employees
@@ -488,10 +491,44 @@ class SimulationRunner:
         cfg = self.config.bankruptcy
         if not cfg.enabled or completed_years < cfg.min_years_before_exit:
             return
+        candidates = []
         for firm_id, runtime in self.env.runtimes.items():
-            if runtime.active and runtime.cash < cfg.cash_threshold:
-                runtime.active = False
-                self.exits[firm_id] = completed_years
+            if not runtime.active:
+                continue
+            runtime.negative_cash_years = runtime.negative_cash_years + 1 if runtime.cash < 0 else 0
+            insolvent = (
+                (cfg.cash_floor_fraction is not None
+                 and runtime.cash < -cfg.cash_floor_fraction * runtime.initial_cash)
+                or (cfg.negative_cash_years > 0
+                    and runtime.negative_cash_years >= cfg.negative_cash_years)
+                or (cfg.cash_threshold is not None and runtime.cash < cfg.cash_threshold)
+            )
+            if insolvent:
+                candidates.append((runtime.cash, firm_id))
+        # The weakest firm leaves first; a stage keeps its minimum number of firms.
+        exits_per_stage: dict[str, int] = {}
+        for _, firm_id in sorted(candidates):
+            stage = self.network.firm(firm_id).stage
+            active = sum(self.env.runtimes[f.id].active for f in self.network.firms_in(stage))
+            if active <= cfg.min_firms_per_stage:
+                continue
+            if cfg.max_exits_per_stage_per_year and exits_per_stage.get(stage, 0) >= cfg.max_exits_per_stage_per_year:
+                continue
+            exits_per_stage[stage] = exits_per_stage.get(stage, 0) + 1
+            self.env.runtimes[firm_id].active = False
+            self.exits[firm_id] = completed_years
+
+    def _rival_prices(self, previous: dict[str, YearSummary]) -> dict[str, float]:
+        """Average last-year selling price of the still active firms per stage."""
+        prices: dict[str, float] = {}
+        for stage in STAGES:
+            values = [
+                previous[firm.id].avg_sell_price for firm in self.network.firms_in(stage)
+                if firm.id in previous and self.env.runtimes[firm.id].active
+            ]
+            if values:
+                prices[stage] = sum(values) / len(values)
+        return prices
 
     def _financial_starts(self) -> dict[str, tuple[float, float]]:
         return {key: (runtime.revenue, runtime.profit) for key, runtime in self.env.runtimes.items()}
@@ -508,6 +545,7 @@ class SimulationRunner:
                 "hiring_cost": float(getattr(runtime, "hiring_cost", 0.0)),
                 "rnd_cost": float(getattr(runtime, "rnd_spend", 0.0)),
                 "handling_cost": float(getattr(runtime, "handling_cost", 0.0)),
+                "fixed_cost": float(getattr(runtime, "fixed_cost", 0.0)),
                 "profit": float(getattr(runtime, "profit", 0.0)),
                 "cash": float(getattr(runtime, "cash", 0.0)),
             }

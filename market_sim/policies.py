@@ -27,23 +27,18 @@ class FirmPolicy:
     }
 
     def decide_annual(
-        self, firm: Firm, last_summary: "YearSummary | None", config: MarketConfig
+        self, firm: Firm, last_summary: "YearSummary | None", config: MarketConfig,
+        rival_price: float | None = None,
     ) -> AnnualStrategy:
         preset = self._PRESETS.get(firm.archetype, self._PRESETS["standard"])
         price_position, wage, rnd, quality, priority, stock, risk, hires, overtime = preset
         # The network has no low-cost factory. Its growth factory supplies the
         # discount chain and therefore needs a source-stage price position.
         if firm.stage == "factory" and firm.archetype == "growth":
-            price_position = 0.0
+            price_position = 0.2
         elif firm.archetype == "low_cost":
-            # Absolute targets form a viable discount margin ladder while the
-            # retailer remains near CHF 4: distributor 2.25, wholesaler 3.10,
-            # retailer 3.98.
-            price_position = {
-                "distributor": (2.25 - 1.90) / (7.00 - 1.90),
-                "wholesaler": (3.10 - 2.40) / (9.00 - 2.40),
-                "retailer": (3.98 - 2.50) / (12.00 - 2.50),
-            }.get(firm.stage, price_position)
+            # Discount firms sit about 12 % below the stage base price.
+            price_position = 0.2
         elif firm.stage == "retailer":
             # Retail positions are calibrated to comparable ten-year returns:
             # premium earns margin without dominating, while the middle
@@ -55,11 +50,15 @@ class FirmPolicy:
                 "premium": 0.58,
             }.get(firm.archetype, price_position)
         stage_band = config.stage_prices[firm.stage]
-        span = stage_band.max - stage_band.min
-        archetype_price = stage_band.min + span * price_position
+        # Firms position themselves around the stage base price, not across
+        # the full (wide) safety band.
+        band_low = max(stage_band.min, 0.8 * stage_band.base)
+        band_high = min(stage_band.max, 1.3 * stage_band.base)
+        span = band_high - band_low
+        archetype_price = band_low + span * price_position
         # P3 fix: retain a light own-price anchor inside the stage band.
-        anchor = max(stage_band.min, min(stage_band.max, firm.sell_price))
-        base = max(stage_band.min, min(stage_band.max, 0.25 * anchor + 0.75 * archetype_price))
+        anchor = max(band_low, min(band_high, firm.sell_price))
+        base = max(band_low, min(band_high, 0.25 * anchor + 0.75 * archetype_price))
         positioning = firm.archetype
         rnd_multiplier = rnd
         stock_days = stock
@@ -80,14 +79,15 @@ class FirmPolicy:
             )
 
             current = last_summary.avg_sell_price
-            if not stage_band.min <= current <= stage_band.max:
+            if not band_low <= current <= band_high:
                 current = base
             step = span * adaptive.price_step_fraction
+            cut_step = span * (adaptive.max_price_step_fraction or adaptive.price_step_fraction)
             target = archetype_price
 
             if premium_capable:
                 positioning = "premium"
-                target = stage_band.min + min(0.64, price_position + 0.04) * span
+                target = band_low + min(0.64, price_position + 0.04) * span
                 rnd_multiplier = rnd + adaptive.rnd_step_multiplier
                 if profitable and holding_share:
                     target += 0.5 * step
@@ -98,19 +98,31 @@ class FirmPolicy:
                 if not profitable:
                     # Preserve the discount position but repair an unsustainable
                     # unit margin instead of blindly cutting price again.
-                    target = min(stage_band.min + 0.22 * span, current + step)
+                    target = min(band_low + 0.22 * span, current + step)
             elif not profitable or not holding_share:
                 # A weak middle firm differentiates toward the closest credible
                 # edge instead of making a large, unsupported positioning jump.
                 if quality_signal >= 0.735:
-                    positioning, target = "premium", stage_band.min + 0.60 * span
+                    positioning, target = "premium", band_low + 0.60 * span
                     rnd_multiplier = rnd + adaptive.rnd_step_multiplier
                 else:
-                    positioning, target = "low_cost", stage_band.min + 0.20 * span
+                    positioning, target = "low_cost", band_low + 0.20 * span
                     rnd_multiplier = max(adaptive.rnd_min_multiplier, rnd - adaptive.rnd_step_multiplier)
 
-            base = current + max(-step, min(step, target - current))
-            base = max(stage_band.min, min(stage_band.max, base))
+            if adaptive.undercut_fraction:
+                lost_share = last_summary.market_share_change < -adaptive.share_loss_trigger
+                gained_share = last_summary.market_share_change > adaptive.share_loss_trigger
+                anchor_price = rival_price if rival_price is not None else current
+                if lost_share and profitable:
+                    # Fight back: go slightly below the rivals' average price.
+                    target = min(target, min(current, anchor_price) * (1 - adaptive.undercut_fraction))
+                elif gained_share and profitable:
+                    target = max(target, current * (1 + 0.5 * adaptive.undercut_fraction))
+                if adaptive.competitive_pull and rival_price is not None:
+                    target += adaptive.competitive_pull * (rival_price - target)
+
+            base = current + max(-cut_step, min(step, target - current))
+            base = max(band_low, min(band_high, base))
             if weak_service:
                 stock_days += 1
             elif last_summary.capacity_utilization < 0.40 and last_summary.avg_inventory > 0:
@@ -125,8 +137,8 @@ class FirmPolicy:
             min(adaptive.safety_stock_max_days, stock_days),
         )
         half_band = span * (0.02 if positioning == "low_cost" else 0.10)
-        low = max(stage_band.min, base - half_band)
-        high = min(stage_band.max, base + half_band)
+        low = max(band_low, base - half_band)
+        high = min(band_high, base + half_band)
         if last_summary is None:
             effective_hires = hires if firm.archetype == "growth" else 0
         elif last_summary.capacity_utilization > 0.85:

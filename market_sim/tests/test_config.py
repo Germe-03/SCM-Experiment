@@ -23,7 +23,7 @@ def test_default_config_contains_swiss_market_values(
     assert market_config.logistics.default_lead_time_days == 2
     assert market_config.costs.holding_cost_per_unit == 27.0
     assert market_config.costs.backlog_cost_per_unit == 250.0
-    assert market_config.costs.handling_cost_per_unit == 8_200.0
+    assert market_config.costs.handling_cost_per_unit == 1_500.0
     assert market_config.policy.supplier_priority_boost == 50.0
 
 

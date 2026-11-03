@@ -11,10 +11,10 @@ firms:
     quality_level: 0.72
     reputation: 0.70
     reliability: 0.82
-    capacity: 55
+    capacity: 15
     employees: 2
     wage_level: 5100
-    productivity_per_employee: 25
+    productivity_per_employee: 6.9
     r_and_d_level: 0.30
     r_and_d_budget: 12000
     supplier_priority: reliability
@@ -30,10 +30,10 @@ firms:
     quality_level: 0.59
     reputation: 0.61
     reliability: 0.75
-    capacity: 45
+    capacity: 12
     employees: 2
     wage_level: 4600
-    productivity_per_employee: 25
+    productivity_per_employee: 6.9
     r_and_d_level: 0.12
     r_and_d_budget: 5000
     supplier_priority: price
@@ -49,10 +49,10 @@ firms:
     quality_level: 0.90
     reputation: 0.84
     reliability: 0.84
-    capacity: 40
+    capacity: 11
     employees: 2
     wage_level: 5600
-    productivity_per_employee: 25
+    productivity_per_employee: 6.9
     r_and_d_level: 0.62
     r_and_d_budget: 28000
     supplier_priority: quality
@@ -68,10 +68,10 @@ firms:
     quality_level: 0.76
     reputation: 0.78
     reliability: 0.94
-    capacity: 50
+    capacity: 14
     employees: 2
     wage_level: 5400
-    productivity_per_employee: 25
+    productivity_per_employee: 6.9
     r_and_d_level: 0.34
     r_and_d_budget: 15000
     supplier_priority: reliability
@@ -87,10 +87,10 @@ firms:
     quality_level: 0.68
     reputation: 0.66
     reliability: 0.79
-    capacity: 65
+    capacity: 18
     employees: 3
     wage_level: 4900
-    productivity_per_employee: 25
+    productivity_per_employee: 6.9
     r_and_d_level: 0.24
     r_and_d_budget: 18000
     supplier_priority: capacity
@@ -106,10 +106,10 @@ firms:
     quality_level: 0.57
     reputation: 0.58
     reliability: 0.73
-    capacity: 45
+    capacity: 12
     employees: 2
     wage_level: 4620
-    productivity_per_employee: 25
+    productivity_per_employee: 6.9
     r_and_d_level: 0.10
     r_and_d_budget: 4500
     supplier_priority: price
@@ -125,10 +125,10 @@ firms:
     quality_level: 0.71
     reputation: 0.69
     reliability: 0.82
-    capacity: 60
+    capacity: 16
     employees: 2
     wage_level: 5050
-    productivity_per_employee: 25
+    productivity_per_employee: 6.9
     r_and_d_level: 0.28
     r_and_d_budget: 13000
     supplier_priority: price
@@ -144,10 +144,10 @@ firms:
     quality_level: 0.92
     reputation: 0.87
     reliability: 0.86
-    capacity: 50
+    capacity: 14
     employees: 2
     wage_level: 5580
-    productivity_per_employee: 25
+    productivity_per_employee: 6.9
     r_and_d_level: 0.66
     r_and_d_budget: 30000
     supplier_priority: quality
@@ -163,10 +163,10 @@ firms:
     quality_level: 0.75
     reputation: 0.76
     reliability: 0.95
-    capacity: 55
+    capacity: 15
     employees: 2
     wage_level: 5380
-    productivity_per_employee: 25
+    productivity_per_employee: 6.9
     r_and_d_level: 0.32
     r_and_d_budget: 14500
     supplier_priority: reliability
@@ -182,10 +182,10 @@ firms:
     quality_level: 0.66
     reputation: 0.64
     reliability: 0.78
-    capacity: 55
+    capacity: 15
     employees: 2
     wage_level: 4850
-    productivity_per_employee: 25
+    productivity_per_employee: 6.9
     r_and_d_level: 0.22
     r_and_d_budget: 16000
     supplier_priority: capacity
@@ -203,10 +203,10 @@ firms:
     quality_level: 0.76
     reputation: 0.78
     reliability: 0.95
-    capacity: 80
+    capacity: 22
     employees: 2
     wage_level: 5400
-    productivity_per_employee: 40
+    productivity_per_employee: 10.9
     r_and_d_level: 0.30
     r_and_d_budget: 22000
     supplier_priority: reliability
@@ -222,10 +222,10 @@ firms:
     quality_level: 0.59
     reputation: 0.61
     reliability: 0.74
-    capacity: 70
+    capacity: 19
     employees: 2
     wage_level: 4650
-    productivity_per_employee: 40
+    productivity_per_employee: 10.9
     r_and_d_level: 0.11
     r_and_d_budget: 8000
     supplier_priority: price
@@ -241,10 +241,10 @@ firms:
     quality_level: 0.90
     reputation: 0.85
     reliability: 0.86
-    capacity: 75
+    capacity: 20
     employees: 2
     wage_level: 5600
-    productivity_per_employee: 40
+    productivity_per_employee: 10.9
     r_and_d_level: 0.64
     r_and_d_budget: 45000
     supplier_priority: quality
@@ -260,10 +260,10 @@ firms:
     quality_level: 0.70
     reputation: 0.69
     reliability: 0.82
-    capacity: 95
+    capacity: 26
     employees: 2
     wage_level: 5050
-    productivity_per_employee: 40
+    productivity_per_employee: 10.9
     r_and_d_level: 0.26
     r_and_d_budget: 18000
     supplier_priority: price
@@ -279,10 +279,10 @@ firms:
     quality_level: 0.77
     reputation: 0.80
     reliability: 0.96
-    capacity: 85
+    capacity: 23
     employees: 2
     wage_level: 5450
-    productivity_per_employee: 40
+    productivity_per_employee: 10.9
     r_and_d_level: 0.32
     r_and_d_budget: 24000
     supplier_priority: reliability
@@ -298,10 +298,10 @@ firms:
     quality_level: 0.66
     reputation: 0.65
     reliability: 0.79
-    capacity: 115
+    capacity: 31
     employees: 3
     wage_level: 4900
-    productivity_per_employee: 40
+    productivity_per_employee: 10.9
     r_and_d_level: 0.22
     r_and_d_budget: 26000
     supplier_priority: capacity
@@ -319,10 +319,10 @@ firms:
     quality_level: 0.71
     reputation: 0.70
     reliability: 0.83
-    capacity: 125
+    capacity: 30
     employees: 2
     wage_level: 5100
-    productivity_per_employee: 70
+    productivity_per_employee: 16.2
     r_and_d_level: 0.27
     r_and_d_budget: 30000
     supplier_priority: price
@@ -338,10 +338,10 @@ firms:
     quality_level: 0.60
     reputation: 0.62
     reliability: 0.76
-    capacity: 110
+    capacity: 25
     employees: 2
     wage_level: 4680
-    productivity_per_employee: 70
+    productivity_per_employee: 16.2
     r_and_d_level: 0.13
     r_and_d_budget: 15000
     supplier_priority: price
@@ -357,10 +357,10 @@ firms:
     quality_level: 0.89
     reputation: 0.84
     reliability: 0.88
-    capacity: 130
+    capacity: 30
     employees: 2
     wage_level: 5580
-    productivity_per_employee: 70
+    productivity_per_employee: 16.2
     r_and_d_level: 0.61
     r_and_d_budget: 65000
     supplier_priority: quality
@@ -376,10 +376,10 @@ firms:
     quality_level: 0.67
     reputation: 0.66
     reliability: 0.80
-    capacity: 155
+    capacity: 35
     employees: 2
     wage_level: 4920
-    productivity_per_employee: 70
+    productivity_per_employee: 16.2
     r_and_d_level: 0.23
     r_and_d_budget: 42000
     supplier_priority: capacity
@@ -397,15 +397,15 @@ firms:
     quality_level: 0.92
     reputation: 0.87
     reliability: 0.91
-    capacity: 240
+    capacity: 44
     employees: 3
     wage_level: 5600
-    productivity_per_employee: 95
+    productivity_per_employee: 17.6
     r_and_d_level: 0.70
     r_and_d_budget: 180000
     supplier_priority: quality
     suppliers: []
-    machine_capacity: 55
+    machine_capacity: 11
   - id: factory_02
     name: "Brauwerk Tell AG"
     stage: factory
@@ -417,12 +417,12 @@ firms:
     quality_level: 0.68
     reputation: 0.69
     reliability: 0.82
-    capacity: 280
+    capacity: 53
     employees: 3
     wage_level: 4900
-    productivity_per_employee: 95
+    productivity_per_employee: 17.6
     r_and_d_level: 0.34
     r_and_d_budget: 110000
     supplier_priority: capacity
     suppliers: []
-    machine_capacity: 70
+    machine_capacity: 12
