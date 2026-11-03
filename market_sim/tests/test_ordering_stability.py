@@ -14,7 +14,9 @@ def _firms(network):
 
 def test_on_order_tracks_ordered_less_received_and_never_goes_negative():
     network = load_firms()
-    env = MarketEnvironment(network, horizon=12)
+    config = load_market_config()
+    config.geography.damage_probability = 0.0  # damaged parcels are reordered on purpose
+    env = MarketEnvironment(network, horizon=12, config=config)
     env.reset()
     cumulative_ordered = {
         firm_id: runtime.on_order for firm_id, runtime in env.runtimes.items()
@@ -29,6 +31,9 @@ def test_on_order_tracks_ordered_less_received_and_never_goes_negative():
         orders = {firm_id: 5 + day for firm_id in env.runtimes}
         env.step(40, orders)
         for firm_id, runtime in env.runtimes.items():
+            firm = network.firm(firm_id)
+            if firm.category == "wine" and not firm.importer:
+                continue  # wineries press once a year at harvest, not on daily orders
             cumulative_ordered[firm_id] += orders[firm_id]
             cumulative_received[firm_id] += received[firm_id]
             assert runtime.on_order == max(

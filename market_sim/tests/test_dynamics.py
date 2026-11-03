@@ -22,23 +22,13 @@ def test_seasonality_has_expected_peak_trough_and_stays_positive():
     assert factors.index(max(factors)) == pytest.approx(181, abs=1)
 
 
-def test_elasticity_is_monotonic_and_clamped():
-    generator = ConsumerDemandGenerator(
-        1000, 0, price_elasticity=1.2, reference_price=5.0,
-        min_mult=0.3, max_mult=2.0,
-    )
-    assert generator.elasticity_multiplier(10_000) == 0.3
-    assert generator.elasticity_multiplier(0.01) == 2.0
-    low_price = ConsumerDemandGenerator(1000, 7, price_elasticity=1.2, reference_price=5.0)
-    high_price = ConsumerDemandGenerator(1000, 7, price_elasticity=1.2, reference_price=5.0)
-    assert low_price(0, 4.0) > high_price(0, 8.0)
 
 
 def test_inactive_firm_is_frozen_and_excluded_from_market_operations():
     config = load_market_config()
     network = load_firms()
     env = MarketEnvironment(
-        network, config=config, consumer_demand_mode="attractiveness_lost",
+        network, config=config,
         enforce_capacity=True, enable_workforce=True, enable_rnd=True,
     )
     env.reset()
@@ -79,7 +69,7 @@ def test_bankruptcy_disabled_does_not_imply_exit():
         update={"bankruptcy": load_market_config().bankruptcy.model_copy(update={"enabled": False})}
     )
     network = load_firms()
-    env = MarketEnvironment(network, config=config, consumer_demand_mode="attractiveness_lost")
+    env = MarketEnvironment(network, config=config)
     env.reset()
     runtime = next(iter(env.runtimes.values()))
     runtime.cash = -config.bankruptcy.cash_floor_fraction * runtime.initial_cash - 1

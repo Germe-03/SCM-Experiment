@@ -12,7 +12,7 @@ def test_b2b_shipment_books_scaled_symmetric_trade_value() -> None:
     config = load_market_config()
     config.categories.enabled = False  # one price per unit, as before Phase 4
     market = MarketEnvironment(
-        network, config=config, horizon=1, consumer_demand_mode="attractiveness_lost"
+        network, config=config, horizon=1
     )
     market.reset()
     supplier = network.firm("wholesaler_01")
@@ -33,15 +33,18 @@ def test_b2b_shipment_books_scaled_symmetric_trade_value() -> None:
 
 def test_consumer_sale_books_scaled_retail_revenue() -> None:
     network = load_firms()
-    config = load_market_config().model_copy(update={"consumer_model": "segments"})
+    config = load_market_config()
     market = MarketEnvironment(
-        network, config=config, horizon=1, consumer_demand_mode="attractiveness_lost"
+        network, config=config, horizon=1
     )
     market.reset()
     retailer = network.firm("retailer_01")
     quantity = 2
     for candidate in network.firms_in("retailer"):
         market.runtimes[candidate.id].inventory = 0
+        market.runtimes[candidate.id].stock = {}
+    # A standard beer brand sells at the store price (brand and category factor 1).
+    market.runtimes[retailer.id].stock = {"alpen_lager": quantity}
     market.runtimes[retailer.id].inventory = quantity
 
     _, info = market.step(quantity, {})
@@ -58,7 +61,7 @@ def test_consumer_sale_books_scaled_retail_revenue() -> None:
 def test_cash_identity_holds_over_scaled_run() -> None:
     network = load_firms()
     market = MarketEnvironment(
-        network, horizon=4, consumer_demand_mode="attractiveness_lost",
+        network, horizon=4,
         enforce_capacity=True, enable_workforce=True, enable_rnd=True,
     )
     market.reset()

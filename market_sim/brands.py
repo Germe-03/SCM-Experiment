@@ -72,7 +72,7 @@ class BrandBook:
 
     def __init__(self, config: MarketConfig, firms: list[Firm]) -> None:
         if config.brands is None or config.consumers is None:
-            raise ValueError("consumer_model 'classes' needs brands.yaml and consumers.yaml")
+            raise ValueError("the market needs brands.yaml and consumers.yaml")
         self.config = config
         self.cfg = config.brands
         owners = {firm.id: firm for firm in firms}

@@ -19,7 +19,7 @@ def _supplier_with_backlog(max_days):
 def test_backlog_beyond_limit_is_cancelled_proportionally():
     env, supplier = _supplier_with_backlog(10)
     limit = 10 * env._effective_capacity("factory_01")
-    env._cancel_stale_backlog("factory_01", market_mode=True)
+    env._cancel_stale_backlog("factory_01")
     assert supplier.backlog == limit
     assert sum(supplier.backlog_by_downstream.values()) == limit
     kept_01 = supplier.backlog_by_downstream["distributor_01"]
@@ -30,6 +30,6 @@ def test_backlog_beyond_limit_is_cancelled_proportionally():
 
 def test_disabled_cancellation_keeps_orders():
     env, supplier = _supplier_with_backlog(None)
-    env._cancel_stale_backlog("factory_01", market_mode=True)
+    env._cancel_stale_backlog("factory_01")
     assert supplier.backlog == 4000
     assert env.runtimes["distributor_01"].on_order == 3000

@@ -13,7 +13,6 @@ from market_sim.geography import Geography
 from market_sim.brands import BrandBook, add_to_stock, largest_remainder, take_from_stock
 
 
-CONSUMER_ID = "__consumer__"
 INITIAL_ID = "__initial__"
 
 
@@ -173,7 +172,6 @@ class MarketEnvironment:
         initial_orders: tuple[int, ...] | None = None,
         holding_cost: float | None = None, backlog_cost: float | None = None,
         horizon: int | None = None, config: MarketConfig | None = None,
-        consumer_demand_mode: str = "equal_backlog",
         enforce_capacity: bool = False,
         enable_workforce: bool = False,
         enable_rnd: bool = False,
@@ -195,9 +193,6 @@ class MarketEnvironment:
         self.holding_cost = holding_cost if holding_cost is not None else self.config.costs.holding_cost_per_unit
         self.backlog_cost = backlog_cost if backlog_cost is not None else self.config.costs.backlog_cost_per_unit
         self.horizon = horizon if horizon is not None else self.config.total_simulation_days
-        if consumer_demand_mode not in {"equal_backlog", "attractiveness_lost"}:
-            raise ValueError(f"unknown consumer demand mode: {consumer_demand_mode!r}")
-        self.consumer_demand_mode = consumer_demand_mode
         self.enforce_capacity = enforce_capacity
         self.enable_workforce = enable_workforce
         self.enable_rnd = enable_rnd
@@ -229,7 +224,7 @@ class MarketEnvironment:
         """Register one firm and create all mutable runtime state."""
 
         self.network.add_firm(firm)
-        if self.brand_book is not None and firm.stage == "factory" and not self.brand_book.brands_of(firm.id):
+        if firm.stage == "factory" and not self.brand_book.brands_of(firm.id):
             self.brand_book.add_brand_for(firm)
         runtime = self._new_runtime(firm)
         self.runtimes[firm.id] = runtime
@@ -277,15 +272,9 @@ class MarketEnvironment:
         self._commodity_rng = random.Random(f"commodities-{self.seed}")
         self.commodity_log_index = {name: 0.0 for name in self.config.commodities.components}
         self.material_cost_multiplier = 1.0
-        self.brand_book = (
-            BrandBook(self.config, [f for stage in STAGES for f in self.network.firms_in(stage)])
-            if self.config.consumer_model == "classes" and self.consumer_demand_mode == "attractiveness_lost"
-            else None
-        )
-        self.geography = (
-            Geography(self.config, [f for stage in STAGES for f in self.network.firms_in(stage)], self.seed)
-            if self.brand_book is not None and self.config.geography.enabled else None
-        )
+        firms = [f for stage in STAGES for f in self.network.firms_in(stage)]
+        self.brand_book = BrandBook(self.config, firms)
+        self.geography = Geography(self.config, firms, self.seed) if self.config.geography.enabled else None
         for stage in STAGES:
             for firm in self.network.firms_in(stage):
                 inventory = firm.inventory if self.initial_inventory is None else self.initial_inventory
@@ -331,29 +320,27 @@ class MarketEnvironment:
             employees=firm.employees, wage_level=firm.wage_level,
             quality_level=firm.quality_level,
         )
-        if firm.importer and getattr(self, "brand_book", None) is not None and self.brand_book.categories_on:
+        if firm.importer and self.brand_book.categories_on:
             extra = self.config.categories.imports.lead_days - len(runtime.incoming_shipments)
             if extra > 0:
                 runtime.incoming_shipments = [0] * extra + runtime.incoming_shipments
-        if getattr(self, "brand_book", None) is not None:
-            runtime.stock = self.brand_book.initial_stock(firm, runtime.inventory)
-            book = self.brand_book
-            if book.categories_on and firm.category == "wine" and not firm.importer:
-                # The cellar already holds the vintages that mature in the coming years.
-                harvest = self.config.categories.harvest_day
-                for brand_id, units in book.production_mix(firm.id, runtime.inventory).items():
-                    for k in range(book.brands[brand_id].maturation_days // 365):
-                        runtime.maturing.append((self.period + harvest + 365 * k, brand_id, units, 0.0))
-            runtime.incoming_brands = [
-                self.brand_book.initial_stock(firm, qty) for qty in runtime.incoming_shipments
-            ]
+        runtime.stock = self.brand_book.initial_stock(firm, runtime.inventory)
+        book = self.brand_book
+        if book.categories_on and firm.category == "wine" and not firm.importer:
+            # The cellar already holds the vintages that mature in the coming years.
+            harvest = self.config.categories.harvest_day
+            for brand_id, units in book.production_mix(firm.id, runtime.inventory).items():
+                for k in range(book.brands[brand_id].maturation_days // 365):
+                    runtime.maturing.append((self.period + harvest + 365 * k, brand_id, units, 0.0))
+        runtime.incoming_brands = [
+            self.brand_book.initial_stock(firm, qty) for qty in runtime.incoming_shipments
+        ]
         return runtime
 
     def step(self, total_consumer_demand: int, orders: dict[str, int]) -> tuple[bool, dict]:
         if not self.runtimes:
             raise RuntimeError("Must call reset() before step()")
 
-        market_mode = self.consumer_demand_mode == "attractiveness_lost"
         self._update_commodity_index()
         active_ids = {
             firm_id for firm_id, runtime in self.runtimes.items()
@@ -361,58 +348,38 @@ class MarketEnvironment:
         }
         if self.enable_workforce:
             for firm_id in sorted(self.runtimes):
-                if not market_mode or self.runtimes[firm_id].active:
+                if self.runtimes[firm_id].active:
                     self._update_turnover_rate(firm_id)
 
-        if self.brand_book is not None and self.brand_book.categories_on:
+        if self.brand_book.categories_on:
             self._release_matured()
 
         # 1. Receive shipments.
         for runtime in self._ordered_runtimes():
-            if market_mode and not runtime.active:
+            if not runtime.active:
                 continue
             runtime.receive_shipment()
             runtime.incoming_shipments.append(0)
-            if self.brand_book is not None:
-                runtime.incoming_brands.append({})
+            runtime.incoming_brands.append({})
 
-        # 2. S5 decision: in attractiveness_lost mode consumers buy immediately
-        # after inbound shipments.  This makes the reduced retailer inventory
-        # visible to the subsequent, otherwise unchanged, B2B fulfillment step.
-        # Consumer demand never enters retailer backlog in this mode.
-        consumer_sales = {firm.id: 0 for firm in self.network.firms_in("retailer")}
-        lost_sales = 0
-        demand_shares: dict[str, int] = {}
-        if self.consumer_demand_mode == "attractiveness_lost" and self.brand_book is not None:
-            demand_shares, consumer_sales, lost_sales = self.brand_book.fulfill(self, total_consumer_demand)
-            self._last_segment_shares = {}
-            for firm_id, units in consumer_sales.items():
-                runtime = self.runtimes[firm_id]
-                runtime.consumer_units_sold = units
-                runtime.cumulative_consumer_units_sold += units
-            consumer_sales = {firm.id: consumer_sales.get(firm.id, 0) for firm in self.network.firms_in("retailer")}
-            self.cumulative_lost_sales += lost_sales
-        elif self.consumer_demand_mode == "attractiveness_lost":
-            demand_shares, consumer_sales, lost_sales = self._fulfill_consumer_demand(
-                total_consumer_demand
-            )
-            self.cumulative_lost_sales += lost_sales
-        else:
-            demand_shares = self._allocate_consumer_demand(total_consumer_demand)
+        # 2. Consumer classes buy right after inbound shipments; unmet demand is lost,
+        # it never enters a retailer backlog.
+        demand_shares, consumer_sales, lost_sales = self.brand_book.fulfill(self, total_consumer_demand)
+        for firm_id, units in consumer_sales.items():
+            runtime = self.runtimes[firm_id]
+            runtime.consumer_units_sold = units
+            runtime.cumulative_consumer_units_sold += units
+        consumer_sales = {firm.id: consumer_sales.get(firm.id, 0) for firm in self.network.firms_in("retailer")}
+        self.cumulative_lost_sales += lost_sales
 
-        # 3. Receive B2B orders.  The classic mode injects consumer demand as an
-        # external retailer order, preserving the S3 backlog/parity mechanics.
+        # 3. Receive B2B orders.
         received_by_firm: dict[str, dict[str, int]] = {}
         for firm_id in sorted(self.runtimes):
             runtime = self.runtimes[firm_id]
-            if market_mode and not runtime.active:
+            if not runtime.active:
                 received_by_firm[firm_id] = {}
                 self._orders_received_this_period[firm_id] = 0
                 continue
-            if self.consumer_demand_mode == "equal_backlog" and firm_id in demand_shares:
-                # Consumer demand is the retailer's current external order, not
-                # an addition to the seeded B2B order pipeline (S3 parity).
-                runtime.incoming_orders[0] = {CONSUMER_ID: demand_shares[firm_id]}
             received_by_firm[firm_id] = runtime.receive_orders()
             runtime.incoming_orders.append({})
             self._orders_received_this_period[firm_id] = sum(received_by_firm[firm_id].values())
@@ -421,18 +388,16 @@ class MarketEnvironment:
         shipped_this_period: dict[str, dict[str, int]] = {}
         for supplier_id in sorted(self.runtimes):
             runtime = self.runtimes[supplier_id]
-            if market_mode and not runtime.active:
+            if not runtime.active:
                 shipped_this_period[supplier_id] = {}
                 continue
             requested = {
                 downstream_id: quantity
                 for downstream_id, quantity in runtime.backlog_by_downstream.items()
-                if not market_mode
-                or downstream_id not in self.runtimes
-                or downstream_id in active_ids
+                if downstream_id not in self.runtimes or downstream_id in active_ids
             }
             for downstream_id, quantity in received_by_firm[supplier_id].items():
-                if market_mode and downstream_id in self.runtimes and downstream_id not in active_ids:
+                if downstream_id in self.runtimes and downstream_id not in active_ids:
                     continue
                 requested[downstream_id] = requested.get(downstream_id, 0) + quantity
             # S6 decision: capacity is a per-tick B2B handling/throughput limit.
@@ -447,7 +412,7 @@ class MarketEnvironment:
                 for key in requested if requested[key] - allocations.get(key, 0) > 0
             }
             runtime.backlog = sum(runtime.backlog_by_downstream.values())
-            self._cancel_stale_backlog(supplier_id, market_mode)
+            self._cancel_stale_backlog(supplier_id)
             runtime.shipment_history.append(shipped)
             runtime.handling_cost += shipped * self.config.costs.handling_cost_per_unit
             shipped_this_period[supplier_id] = allocations
@@ -455,7 +420,7 @@ class MarketEnvironment:
                 if downstream_id in self.runtimes:
                     price = self.network.firm(supplier_id).sell_price
                     trade_value = self._trade_value(quantity, price)
-                    if self.brand_book is not None and quantity:
+                    if quantity:
                         parcel = self.brand_book.take_for(
                             self.network.firm(downstream_id), runtime.stock, quantity)
                         if self.geography is not None:
@@ -477,7 +442,7 @@ class MarketEnvironment:
                     self.runtimes[downstream_id].purchase_cost += trade_value
                     self.runtimes[downstream_id].incoming_shipments[-1] += quantity
 
-        if self.brand_book is not None and self.brand_book.categories_on:
+        if self.brand_book.categories_on:
             self._export()
 
         # 4. Record post-fulfillment state.
@@ -490,7 +455,7 @@ class MarketEnvironment:
         split_orders: dict[str, dict[str, int]] = {}
         for stage in STAGES:
             for firm in sorted(self.network.firms_in(stage), key=lambda item: item.id):
-                if market_mode and not self.runtimes[firm.id].active:
+                if not self.runtimes[firm.id].active:
                     continue
                 quantity = max(0, int(orders.get(firm.id, 0)))
                 self.runtimes[firm.id].order_history.append(quantity)
@@ -505,7 +470,7 @@ class MarketEnvironment:
                     # P1 fix: a factory production start is its replenishment order.
                     self.runtimes[firm.id].on_order += quantity
                     self.runtimes[firm.id].incoming_shipments[-1] += quantity
-                    if self.brand_book is not None and quantity:
+                    if quantity:
                         add_to_stock(
                             self.runtimes[firm.id].incoming_brands[-1],
                             self.brand_book.production_mix(firm.id, quantity),
@@ -532,7 +497,7 @@ class MarketEnvironment:
         # 6-7. Accumulate costs and advance time.
         for firm_id in sorted(self.runtimes):
             runtime = self.runtimes[firm_id]
-            if market_mode and not runtime.active:
+            if not runtime.active:
                 continue
             firm = self.network.firm(firm_id)
             scale = self.config.costs.personnel_cost_scale
@@ -567,7 +532,6 @@ class MarketEnvironment:
             "selected_suppliers": selected_suppliers,
             "split_orders": split_orders,
             "consumer_demand_shares": demand_shares,
-            "consumer_segment_shares": getattr(self, "_last_segment_shares", {}),
             "consumer_units_sold": consumer_sales,
             "consumer_units_sold_total": sum(consumer_sales.values()),
             "lost_sales": lost_sales,
@@ -598,7 +562,7 @@ class MarketEnvironment:
     def _split_by_category(self, firm: Firm, candidates: list[Firm], quantity: int) -> dict[str, int]:
         """Phase 4: a distributor splits its order by category and buys each from its producers."""
         book = self.brand_book
-        if book is None or not book.categories_on or firm.stage != "distributor":
+        if not book.categories_on or firm.stage != "distributor":
             return self._split_order(firm, candidates, quantity)
         groups: dict[str, list[Firm]] = {}
         for candidate in candidates:
@@ -616,7 +580,7 @@ class MarketEnvironment:
         cost = (self.material_cost_per_unit() * self.firm_material_factor.get(firm.id, 1.0)
                 * self.process_cost_factor.get(firm.id, 1.0))
         book = self.brand_book
-        if book is None or not book.categories_on:
+        if not book.categories_on:
             return cost
         cost *= book.category_value(firm.category)
         if firm.importer:
@@ -627,7 +591,7 @@ class MarketEnvironment:
     def _harvest_producer(self, firm: Firm) -> bool:
         """Wineries press grapes once a year; the wine matures before it can be sold."""
         book = self.brand_book
-        if book is None or not book.categories_on or firm.category != "wine" or firm.importer:
+        if not book.categories_on or firm.category != "wine" or firm.importer:
             return False
         cfg = self.config.categories
         days = self.config.simulation.days_per_year
@@ -692,11 +656,11 @@ class MarketEnvironment:
                 runtime.handling_cost += book.parcel_value(parcel, self.config.costs.handling_cost_per_unit)
                 book.export_units += sent
 
-    def _cancel_stale_backlog(self, supplier_id: str, market_mode: bool) -> None:
+    def _cancel_stale_backlog(self, supplier_id: str) -> None:
         """Cancel open orders a slow supplier cannot serve within the limit."""
         days = self.config.policy.max_backlog_days
         runtime = self.runtimes[supplier_id]
-        if not market_mode or days is None or not runtime.backlog_by_downstream:
+        if days is None or not runtime.backlog_by_downstream:
             return
         limit = int(days * max(1, self._effective_capacity(supplier_id)))
         if runtime.backlog <= limit:
@@ -709,17 +673,6 @@ class MarketEnvironment:
         self.cancelled_units += runtime.backlog - limit
         runtime.backlog_by_downstream = {key: value for key, value in keep.items() if value > 0}
         runtime.backlog = sum(runtime.backlog_by_downstream.values())
-
-    def _allocate_consumer_demand(self, total_demand: int) -> dict[str, int]:
-        """Classic equal split used only by equal_backlog mode."""
-        retailers = sorted(firm.id for firm in self.network.firms_in("retailer"))
-        demand = max(0, int(total_demand))
-        base, remainder = divmod(demand, len(retailers))
-        # Equal shares have equal fractional remainders, so firm id resolves them.
-        return {
-            firm_id: base + (index < remainder)
-            for index, firm_id in enumerate(retailers)
-        }
 
     @staticmethod
     def _clamp(value: float) -> float:
@@ -735,110 +688,6 @@ class MarketEnvironment:
 
     def _consumer_availability_score(self, inventory: int, reference: float) -> float:
         return self._clamp(inventory / max(1.0, reference))
-
-    def _consumer_attractiveness(self, demand: int, weights=None) -> dict[str, float]:
-        """Return bounded S5 retailer attractiveness scores."""
-
-        # P4b fix: exited retailers receive no consumer allocation.
-        retailers = sorted(
-            (firm for firm in self.network.firms_in("retailer") if self.runtimes[firm.id].active),
-            key=lambda firm: firm.id,
-        )
-        if not retailers:
-            return {}
-        reference = max(1.0, demand / len(retailers))
-        weights = weights or self.config.demand_attractiveness_weights
-        scores: dict[str, float] = {}
-        for firm in retailers:
-            price_score = self._consumer_price_score(firm.sell_price)
-            availability = self._consumer_availability_score(
-                self.runtimes[firm.id].inventory, reference
-            )
-            scores[firm.id] = self._clamp(
-                weights.price * price_score
-                + weights.quality * self._clamp(self.runtimes[firm.id].quality_level)
-                + weights.reputation * self._clamp(firm.reputation)
-                + weights.availability * availability
-            )
-        return scores
-
-    @staticmethod
-    def _weighted_integer_allocation(total: int, weights: dict[str, float]) -> dict[str, int]:
-        """Largest-remainder allocation with deterministic id tie-breaking."""
-
-        result = {key: 0 for key in weights}
-        total = max(0, int(total))
-        weight_sum = sum(max(0.0, value) for value in weights.values())
-        if not total or not weights:
-            return result
-        effective = weights if weight_sum > 0 else {key: 1.0 for key in weights}
-        denominator = sum(effective.values())
-        quotas = {key: total * effective[key] / denominator for key in effective}
-        result.update({key: floor(quota) for key, quota in quotas.items()})
-        remainder = total - sum(result.values())
-        ranking = sorted(quotas, key=lambda key: (-(quotas[key] - floor(quotas[key])), key))
-        for key in ranking[:remainder]:
-            result[key] += 1
-        return result
-
-    def _fulfill_consumer_demand(
-        self, total_demand: int
-    ) -> tuple[dict[str, int], dict[str, int], int]:
-        """Split, serve, and spill consumer demand once; return remaining loss."""
-
-        demand = max(0, int(total_demand))
-        segments = self.config.demand.segments
-        if segments:
-            segment_totals = self._weighted_integer_allocation(
-                demand, {segment.name: segment.share for segment in segments}
-            )
-            segment_shares = {
-                segment.name: self._weighted_integer_allocation(
-                    segment_totals[segment.name],
-                    self._consumer_attractiveness(segment_totals[segment.name], segment.weights),
-                )
-                for segment in segments
-            }
-            shares = {
-                firm_id: sum(values.get(firm_id, 0) for values in segment_shares.values())
-                for firm_id in next(iter(segment_shares.values()), {})
-            }
-            attractiveness = self._consumer_attractiveness(demand)
-        else:
-            attractiveness = self._consumer_attractiveness(demand)
-            shares = self._weighted_integer_allocation(demand, attractiveness)
-            segment_shares = {}
-        self._last_segment_shares = segment_shares
-        sold = {firm_id: 0 for firm_id in shares}
-        capacities = {firm_id: self._effective_capacity(firm_id) for firm_id in shares}
-        for firm_id, share in shares.items():
-            runtime = self.runtimes[firm_id]
-            served = min(share, runtime.inventory, capacities[firm_id])
-            runtime.inventory -= served
-            sold[firm_id] += served
-
-        unmet = demand - sum(sold.values())
-        eligible = {
-            firm_id: attractiveness[firm_id]
-            for firm_id in shares
-            if self.runtimes[firm_id].inventory > 0 and sold[firm_id] < capacities[firm_id]
-        }
-        spill = self._weighted_integer_allocation(unmet, eligible)
-        for firm_id, allocation in spill.items():
-            runtime = self.runtimes[firm_id]
-            extra = min(allocation, runtime.inventory, capacities[firm_id] - sold[firm_id])
-            runtime.inventory -= extra
-            sold[firm_id] += extra
-
-        for firm_id, units in sold.items():
-            runtime = self.runtimes[firm_id]
-            runtime.consumer_units_sold = units
-            runtime.cumulative_consumer_units_sold += units
-            runtime.revenue += self._trade_value(
-                units, self._market_price(self.network.firm(firm_id).sell_price)
-            )
-            runtime.handling_cost += units * self.config.costs.handling_cost_per_unit
-        return shares, sold, demand - sum(sold.values())
 
     def _trade_value(self, quantity: int, price_per_bottle: float) -> float:
         """Return the real-CHF value of a trade expressed in sim-units."""
@@ -989,12 +838,6 @@ class MarketEnvironment:
     def _market_price(self, price: float) -> float:
         """Clamp a consumer price to the configured S6 market bounds."""
         return max(self.config.price.min, min(self.config.price.max, price))
-
-    def runtime_for_stage(self, stage: str) -> FirmRuntime:
-        firms = self.network.firms_in(stage)
-        if len(firms) != 1:
-            raise ValueError(f"stage {stage!r} has {len(firms)} firms; access runtime by firm id")
-        return self.runtimes[firms[0].id]
 
     def orders_received_this_period(self, firm_id: str) -> int:
         return self._orders_received_this_period.get(firm_id, 0)

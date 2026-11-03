@@ -624,3 +624,12 @@ Seed, was angepasst wurde.
   96 %), 36.7 Eintritte und 18.8 Konkurse pro Lauf, 108–170 Projekte pro
   Lauf, davon 52–87 erfolgreich. 166 Tests bestanden. Der Bericht mit
   lokalem LLM (7b) ist nicht gebaut und als TODO festgehalten.
+- **2026-11-03, Aufräumen:** Entfernt, was die grosse Simulation nicht mehr
+  braucht: Szenario-Abzweigungen (`scenario.py`, `scenarios.yaml`; die
+  Szenarien sind seit Phase 3 Zufallsereignisse), das alte Nachfragemodell
+  mit drei Segmenten und Preiselastizität samt Schalter `consumer_model`,
+  der Paritätsmodus zur Beer-Game-Engine (`equal_backlog`) und ungenutzte
+  Hilfsfunktionen. `market_sim.experiment` rechnet jetzt einfach mehrere
+  Seeds der ganzen Simulation (`--skip-years` für die Anlaufjahre). Die
+  Einträge oben, die Szenarien oder `consumer_model: segments` erwähnen,
+  beschreiben den damaligen Stand.

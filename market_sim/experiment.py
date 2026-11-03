@@ -1,15 +1,11 @@
-"""Experiment runner: several seeds times several scenarios, compared after the fork year.
+"""Experiment runner: the full simulation over several seeds, summarised per metric.
 
 Example::
 
-    python -m market_sim.experiment --seeds 0-9 \
-        --scenarios basis,nachfrage_einbruch,brauerei_engpass,preiserhoehung_brauerei \
-        --fork-year 5 --out runs/experiment_a
+    python -m market_sim.experiment --seeds 0-9 --out runs/experiment
 
-Every seed first runs the baseline and saves its year-end checkpoint at the fork
-year. Each scenario is then forked from a freshly loaded copy of that checkpoint,
-so no scenario and no seed can influence another one. All metrics are taken over
-the years after the fork year, where scenarios can differ.
+Every seed runs the whole market on its own process; nothing is shared. Metrics
+are taken over the years after ``--skip-years`` (the start-up phase).
 """
 
 from __future__ import annotations
@@ -22,12 +18,9 @@ from pathlib import Path
 from statistics import mean, pstdev
 from time import perf_counter
 
-from market_sim.checkpoint import checkpoint_path, save_checkpoint
 from market_sim.run import build_runner, write_outputs
-from market_sim.runner import RunResult, SimulationRunner, RunState
-from market_sim.scenario import get_scenario, run_fork
+from market_sim.runner import RunResult
 
-BASELINE = "basis"
 STAGE_NAMES = ("retailer", "wholesaler", "distributor", "factory")
 # metric -> how the yearly system KPI values are combined over the compared years
 METRICS: dict[str, tuple[str, str]] = {
@@ -43,16 +36,19 @@ METRICS: dict[str, tuple[str, str]] = {
     "bankruptcies": ("bankruptcies", "sum"),
     "market_entries": ("market_entries", "sum"),
     "strategy_changes": ("strategy_changes", "sum"),
-    **{f"interest_cost_{stage}": (f"interest_cost_{stage}", "sum") for stage in STAGE_NAMES},
+    "takeovers": ("takeovers", "sum"),
+    "offences": ("offences", "sum"),
+    "poisonings": ("poisonings", "sum"),
+    "rnd_successes": ("rnd_successes", "sum"),
     **{f"debt_{stage}": (f"debt_{stage}", "mean") for stage in STAGE_NAMES},
     **{f"active_firms_{stage}": (f"active_firms_{stage}", "mean") for stage in STAGE_NAMES},
     **{f"margin_{stage}": (f"margin_{stage}", "mean") for stage in STAGE_NAMES},
     **{f"utilization_{stage}": (f"utilization_{stage}", "mean") for stage in STAGE_NAMES},
 }
 HEADLINE = {
-    "total_profit": "profit", "total_lost_sales": "lost sales",
-    "average_customer_price": "price", "market_concentration": "HHI",
-    "service_level": "service level", "bankruptcies": "bankruptcies",
+    "total_profit": "profit", "service_level": "service level",
+    "market_concentration": "HHI", "bankruptcies": "bankruptcies",
+    "market_entries": "entries", "takeovers": "takeovers",
 }
 
 
@@ -83,43 +79,27 @@ def run_metrics(result: RunResult, after_year: int) -> dict[str, float]:
     return values
 
 
-def run_seed(task: tuple[int, tuple[str, ...], int, str, int | None, int | None]) -> list[dict[str, object]]:
-    """Run the baseline and all scenarios of one seed; return one row per scenario."""
-    seed, scenarios, fork_year, out, run_years, days = task
+def run_seed(task: tuple[int, int, str, int | None, int | None]) -> dict[str, object]:
+    """Run one seed of the full simulation and return its metrics."""
+    seed, skip_years, out, run_years, days = task
     started = perf_counter()
     runner, years = build_runner(run_years, seed, days)
-    path = checkpoint_path(Path(out) / "checkpoints" / f"seed_{seed:02d}", fork_year)
-
-    def save_at_fork_year(sim: SimulationRunner, state: RunState) -> None:
-        if state.year == fork_year:
-            save_checkpoint(sim, state, path)
-
-    baseline = runner.continue_run(runner.start(), years, on_year_end=save_at_fork_year)
-    elapsed = perf_counter() - started
-    rows = []
-    for name in scenarios:
-        result = baseline if name == BASELINE else run_fork(path, get_scenario(name))
-        write_outputs(result, Path(out) / f"seed_{seed:02d}" / name)
-        rows.append({
-            "scenario": name, "seed": seed, "exits": len(result.exits),
-            "runtime_seconds": elapsed,
-            **run_metrics(result, fork_year),
-        })
-    return rows
+    result = runner.continue_run(runner.start(), years)
+    write_outputs(result, Path(out) / f"seed_{seed:02d}")
+    return {"seed": seed, "exits": len(result.exits), "runtime_seconds": perf_counter() - started,
+            **run_metrics(result, skip_years)}
 
 
-def summarize(rows: list[dict[str, object]], scenarios: list[str]) -> list[dict[str, object]]:
-    """Mean, standard deviation, minimum and maximum of every metric per scenario."""
+def summarize(rows: list[dict[str, object]]) -> list[dict[str, object]]:
+    """Mean, standard deviation, minimum and maximum of every metric over the seeds."""
     summary = []
-    for name in scenarios:
-        scoped = [row for row in rows if row["scenario"] == name]
-        for metric in (*METRICS, "exits"):
-            values = [float(row[metric]) for row in scoped]
-            summary.append({
-                "scenario": name, "metric": metric, "n": len(values),
-                "mean": mean(values), "std": pstdev(values) if len(values) > 1 else 0.0,
-                "min": min(values), "max": max(values),
-            })
+    for metric in (*METRICS, "exits"):
+        values = [float(row[metric]) for row in rows]
+        summary.append({
+            "metric": metric, "n": len(values),
+            "mean": mean(values), "std": pstdev(values) if len(values) > 1 else 0.0,
+            "min": min(values), "max": max(values),
+        })
     return summary
 
 
@@ -136,69 +116,45 @@ def write_experiment(out: Path, rows: list[dict[str, object]], summary: list[dic
     return paths
 
 
-def print_summary(summary: list[dict[str, object]], scenarios: list[str], seeds: list[int], fork_year: int) -> None:
-    print(f"\nExperiment: {len(seeds)} seeds, fork after year {fork_year} (values: years {fork_year + 1}+)")
-    lookup = {(row["scenario"], row["metric"]): row for row in summary}
-    print(f"{'scenario':<26}" + "".join(f"{label:>20}" for label in HEADLINE.values()))
-    for name in scenarios:
-        cells = []
-        for metric in HEADLINE:
-            row = lookup[(name, metric)]
-            cells.append(f"{row['mean']:>11,.4g} ±{row['std']:<7,.3g}")
-        print(f"{name:<26}" + "".join(f"{cell:>20}" for cell in cells))
-    if BASELINE in scenarios:
-        print(f"\nDifference to '{BASELINE}' (mean)")
-        for name in scenarios:
-            if name == BASELINE:
-                continue
-            diffs = ", ".join(
-                f"{metric} {lookup[(name, metric)]['mean'] - lookup[(BASELINE, metric)]['mean']:+,.4g}"
-                for metric in HEADLINE
-            )
-            print(f"  {name}: {diffs}")
+def print_summary(summary: list[dict[str, object]], seeds: list[int], skip_years: int) -> None:
+    print(f"\nExperiment: {len(seeds)} seeds, values from year {skip_years + 1} on")
+    lookup = {row["metric"]: row for row in summary}
+    for metric, label in HEADLINE.items():
+        row = lookup[metric]
+        print(f"  {label:<14} {row['mean']:>14,.4g} ± {row['std']:<10,.3g} (min {row['min']:,.4g}, max {row['max']:,.4g})")
 
 
 def run_experiment(
-    seeds: list[int], scenarios: list[str], fork_year: int, out: str | Path,
-    workers: int = 1, years: int | None = None, days_per_year: int | None = None,
+    seeds: list[int], out: str | Path, skip_years: int = 0, workers: int = 1,
+    years: int | None = None, days_per_year: int | None = None,
 ) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
-    for name in scenarios:
-        if name != BASELINE:
-            get_scenario(name)  # fail early on unknown names
     _, total_years = build_runner(years, seeds[0], days_per_year)
-    if not 1 <= fork_year < total_years:
-        raise ValueError(f"fork year must lie between 1 and {total_years - 1}")
-    tasks = [(seed, tuple(scenarios), fork_year, str(out), years, days_per_year) for seed in seeds]
+    if not 0 <= skip_years < total_years:
+        raise ValueError(f"skip years must lie between 0 and {total_years - 1}")
+    tasks = [(seed, skip_years, str(out), years, days_per_year) for seed in seeds]
     if workers > 1 and len(tasks) > 1:
         with ProcessPoolExecutor(max_workers=min(workers, len(tasks))) as pool:
-            chunks = list(pool.map(run_seed, tasks))
+            rows = list(pool.map(run_seed, tasks))
     else:
-        chunks = [run_seed(task) for task in tasks]
-    rows = [row for chunk in chunks for row in chunk]
-    summary = summarize(rows, scenarios)
+        rows = [run_seed(task) for task in tasks]
+    summary = summarize(rows)
     write_experiment(Path(out), rows, summary)
     return rows, summary
 
 
 def main(argv: list[str] | None = None) -> list[dict[str, object]]:
-    parser = argparse.ArgumentParser(description="Run several seeds and what-if scenarios")
+    parser = argparse.ArgumentParser(description="Run the full simulation over several seeds")
     parser.add_argument("--seeds", default="0-4", help="e.g. 0-9 or 0,2,5")
-    parser.add_argument("--scenarios", default=BASELINE, help="comma separated; 'basis' is the baseline")
-    parser.add_argument("--fork-year", type=int, default=5)
+    parser.add_argument("--skip-years", type=int, default=0, help="start-up years left out of the metrics")
     parser.add_argument("--years", type=int, default=None, help="simulation years (default: config)")
     parser.add_argument("--days-per-year", type=int, default=None)
     parser.add_argument("--out", default="runs/experiment")
     parser.add_argument("--workers", type=int, default=max(1, (os.cpu_count() or 2) - 1),
-                        help="parallel processes (one task per seed)")
+                        help="parallel processes (one per seed)")
     args = parser.parse_args(argv)
     seeds = parse_seeds(args.seeds)
-    scenarios = [name.strip() for name in args.scenarios.split(",") if name.strip()]
-    if not scenarios:
-        raise SystemExit("no scenarios given")
-    _, summary = run_experiment(
-        seeds, scenarios, args.fork_year, args.out, args.workers, args.years, args.days_per_year,
-    )
-    print_summary(summary, scenarios, seeds, args.fork_year)
+    _, summary = run_experiment(seeds, args.out, args.skip_years, args.workers, args.years, args.days_per_year)
+    print_summary(summary, seeds, args.skip_years)
     print(f"\nWritten to {Path(args.out) / 'experiment_summary.csv'}")
     return summary
 

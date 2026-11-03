@@ -13,7 +13,7 @@ def _run(days: int = 6) -> MarketEnvironment:
     config = load_market_config()
     config.categories.enabled = False
     market = MarketEnvironment(
-        network, config=config, horizon=days, consumer_demand_mode="attractiveness_lost",
+        network, config=config, horizon=days,
         enforce_capacity=True,
     )
     market.reset()
@@ -63,7 +63,7 @@ def test_capacity_flag_gates_b2b_shipping() -> None:
 
     def shipped(enforce: bool) -> int:
         market = MarketEnvironment(
-            network, horizon=1, consumer_demand_mode="attractiveness_lost",
+            network, horizon=1,
             enforce_capacity=enforce,
         )
         market.reset()

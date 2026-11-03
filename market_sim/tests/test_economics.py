@@ -13,8 +13,7 @@ from market_sim.runner import SimulationRunner
 
 def _env(config=None, days: int = 70) -> MarketEnvironment:
     env = MarketEnvironment(
-        load_firms(), config=config, horizon=days, enforce_capacity=True,
-        consumer_demand_mode="attractiveness_lost", enable_workforce=True, seed=3,
+        load_firms(), config=config, horizon=days, enforce_capacity=True, enable_workforce=True, seed=3,
     )
     env.reset()
     return env

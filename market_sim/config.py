@@ -20,55 +20,12 @@ class UnitScaleConfig(ConfigModel):
     real_units_per_sim_unit: int = Field(gt=0)
 
 
-class AttractivenessWeights(ConfigModel):
-    price: float
-    quality: float
-    reputation: float
-    availability: float
-
-    @model_validator(mode="after")
-    def _weights_must_sum_to_one(self) -> Self:
-        total = self.price + self.quality + self.reputation + self.availability
-        if not isclose(total, 1.0, abs_tol=1e-6):
-            raise ValueError(
-                "demand attractiveness weights must sum to 1.0 "
-                f"(got {total})"
-            )
-        return self
-
-
-class DemandSegment(ConfigModel):
-    """Demand-v2 customer segment with independently weighted priorities."""
-
-    name: str = Field(min_length=1)
-    share: float = Field(gt=0, le=1)
-    weights: AttractivenessWeights
-
-
 class DemandConfig(ConfigModel):
     annual_demand_units: int = Field(ge=0)
     daily_demand_units: int = Field(ge=0)
-    # P4b fix: market size responds to price and the annual demand cycle.
-    price_elasticity: float = Field(default=1.2, ge=0)
-    reference_price: float = Field(default=4.99, gt=0)
-    elasticity_min_mult: float = Field(default=0.3, gt=0)
-    elasticity_max_mult: float = Field(default=2.0, gt=0)
+    # Summer seasonality of total demand.
     seasonal_amplitude: float = Field(default=0.25, ge=0, lt=1)
     seasonal_phase_days: float = 90.0
-    segments: list[DemandSegment] = Field(default_factory=list)
-
-    @model_validator(mode="after")
-    def _elasticity_bounds_must_be_ordered(self) -> Self:
-        if self.elasticity_min_mult > self.elasticity_max_mult:
-            raise ValueError("elasticity_min_mult must not exceed elasticity_max_mult")
-        if self.segments:
-            total = sum(segment.share for segment in self.segments)
-            if not isclose(total, 1.0, abs_tol=1e-6):
-                raise ValueError(f"demand segment shares must sum to 1.0 (got {total})")
-            names = [segment.name for segment in self.segments]
-            if len(names) != len(set(names)):
-                raise ValueError("demand segment names must be unique")
-        return self
 
 
 class BankruptcyConfig(ConfigModel):
@@ -624,7 +581,6 @@ class MarketConfig(ConfigModel):
     capacity: CapacityConfig = Field(default_factory=CapacityConfig)
     policy: PolicyConfig = Field(default_factory=PolicyConfig)
     adaptive_strategy: AdaptiveStrategyConfig = Field(default_factory=AdaptiveStrategyConfig)
-    demand_attractiveness_weights: AttractivenessWeights
     supplier_score_weights: SupplierScoreWeights
     bankruptcy: BankruptcyConfig = Field(default_factory=BankruptcyConfig)
     start_variation: StartVariationConfig = Field(default_factory=StartVariationConfig)
@@ -633,8 +589,6 @@ class MarketConfig(ConfigModel):
     market_entry: MarketEntryConfig = Field(default_factory=MarketEntryConfig)
     bank: BankConfig = Field(default_factory=BankConfig)
     strategy_change: StrategyChangeConfig = Field(default_factory=StrategyChangeConfig)
-    # Phase 2: "classes" uses consumers.yaml and brands.yaml, "segments" the old model.
-    consumer_model: Literal["classes", "segments"] = "segments"
     consumers: ConsumersConfig | None = None
     brands: BrandsConfig | None = None
     long_run: LongRunConfig = Field(default_factory=LongRunConfig)

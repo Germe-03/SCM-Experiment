@@ -41,31 +41,12 @@ strategy_change:
 unit_scale:
   real_units_per_sim_unit: 10000
 
-# Phase 2: classes = 30 consumer classes and brands (consumers.yaml, brands.yaml);
-# segments = the earlier three-segment model with price elasticity.
-consumer_model: classes
-
 demand:
   annual_demand_units: 94400
   daily_demand_units: 259
-  # P4b fix: price-sensitive market size and summer seasonality.
-  price_elasticity: 1.8
-  reference_price: 4.99
-  elasticity_min_mult: 0.3
-  elasticity_max_mult: 2.5
+  # Summer seasonality; consumer classes (consumers.yaml) decide who buys what.
   seasonal_amplitude: 0.25
   seasonal_phase_days: 90
-  # Demand-v2: each segment allocates its own slice using distinct priorities.
-  segments:
-    - name: bargain
-      share: 0.55
-      weights: {price: 0.85, quality: 0.05, reputation: 0.05, availability: 0.05}
-    - name: mainstream
-      share: 0.30
-      weights: {price: 0.40, quality: 0.20, reputation: 0.20, availability: 0.20}
-    - name: premium
-      share: 0.15
-      weights: {price: 0.05, quality: 0.50, reputation: 0.30, availability: 0.15}
 
 # P4b fix: exits are evaluated at year-end after this grace period.
 bankruptcy:
@@ -244,12 +225,6 @@ adaptive_strategy:
   safety_stock_min_days: 4
   safety_stock_max_days: 18
   max_hires_per_year: 3
-
-demand_attractiveness_weights:
-  price: 0.35
-  quality: 0.25
-  reputation: 0.25
-  availability: 0.15
 
 supplier_score_weights:
   price: 0.30

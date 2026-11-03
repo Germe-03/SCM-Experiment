@@ -78,20 +78,14 @@ class RunState:
 
 
 class ConsumerDemandGenerator:
-    """P4b fix: seeded demand with price elasticity and annual seasonality."""
+    """Seeded total demand with annual seasonality; classes then decide who buys."""
 
     def __init__(
         self, mean: int, seed: int, *, days_per_year: int = 365,
-        price_elasticity: float = 0.0, reference_price: float = 4.99,
-        min_mult: float = 0.3, max_mult: float = 2.0,
         seasonal_amplitude: float = 0.0, seasonal_phase_days: float = 90.0,
     ) -> None:
         self.mean = max(0, int(mean))
         self.days_per_year = max(1, int(days_per_year))
-        self.price_elasticity = max(0.0, price_elasticity)
-        self.reference_price = reference_price
-        self.min_mult = min_mult
-        self.max_mult = max_mult
         self.seasonal_amplitude = seasonal_amplitude
         self.seasonal_phase_days = seasonal_phase_days
         self._rng = random.Random(seed)
@@ -112,19 +106,9 @@ class ConsumerDemandGenerator:
                 factor *= multiplier
         return factor
 
-    def elasticity_multiplier(self, avg_active_retail_price: float | None) -> float:
-        if avg_active_retail_price is None or avg_active_retail_price <= 0:
-            return 1.0
-        raw = (self.reference_price / avg_active_retail_price) ** self.price_elasticity
-        return max(self.min_mult, min(self.max_mult, raw))
-
-    def __call__(self, global_day: int, avg_active_retail_price: float | None = None) -> int:
+    def __call__(self, global_day: int) -> int:
         noise = self._rng.uniform(0.9, 1.1)
-        effective = (
-            self.mean * self.seasonal_factor(global_day)
-            * self.elasticity_multiplier(avg_active_retail_price) * noise
-            * self.event_factor(global_day)
-        )
+        effective = self.mean * self.seasonal_factor(global_day) * noise * self.event_factor(global_day)
         return max(0, round(effective))
 
 
@@ -143,17 +127,12 @@ class SimulationRunner:
         self.demand = ConsumerDemandGenerator(
             demand.daily_demand_units, seed,
             days_per_year=config.simulation.days_per_year,
-            price_elasticity=demand.price_elasticity,
-            reference_price=demand.reference_price,
-            min_mult=demand.elasticity_min_mult,
-            max_mult=demand.elasticity_max_mult,
             seasonal_amplitude=demand.seasonal_amplitude,
             seasonal_phase_days=demand.seasonal_phase_days,
         )
         self.env = MarketEnvironment(
             network, config=config,
             horizon=config.simulation.days_per_year * config.simulation.years,
-            consumer_demand_mode="attractiveness_lost",
             enforce_capacity=True, enable_workforce=True, enable_rnd=True,
             seed=seed,
         )
@@ -226,7 +205,7 @@ class SimulationRunner:
     def _scale_for_categories(self) -> None:
         """Phase 4: wine and spirits add volume; trade stages and demand grow with it."""
         cats = self.config.categories
-        if not (cats.enabled and cats.categories and self.config.consumer_model == "classes"):
+        if not (cats.enabled and cats.categories):
             return
         beer = next((c.relative_volume for c in cats.categories if c.name == "beer"), 1.0)
         self.demand.mean *= sum(c.relative_volume for c in cats.categories) / beer
@@ -478,18 +457,7 @@ class SimulationRunner:
                 daily_prices[firm.id].append(firm.sell_price)
                 band = self.strategies[firm.id]
                 self.applied_prices.append((firm.id, firm.sell_price, band.min_price, band.max_price))
-            active_retail_prices = [
-                firm.sell_price for firm in self.network.firms_in("retailer")
-                if self.env.runtimes[firm.id].active
-            ]
-            average_price = (
-                sum(active_retail_prices) / len(active_retail_prices)
-                if active_retail_prices else None
-            )
-            # Phase 2: consumer classes replace price elasticity by their maximum prices.
-            if self.env.brand_book is not None:
-                average_price = None
-            total_demand = self.demand(global_day, average_price)
+            total_demand = self.demand(global_day)
             _, info = self.env.step(total_demand, {key: value.order_qty for key, value in decisions.items()})
             demand_series.append(total_demand)
             factory_order_series.append(sum(

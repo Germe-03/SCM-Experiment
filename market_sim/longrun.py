@@ -60,7 +60,6 @@ class LongRun:
             band.base *= factor
             band.min *= factor
             band.max *= factor
-        config.demand.reference_price *= factor
         costs = config.costs
         costs.holding_cost_per_unit *= factor
         costs.backlog_cost_per_unit *= factor

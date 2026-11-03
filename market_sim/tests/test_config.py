@@ -28,22 +28,9 @@ def test_default_config_contains_swiss_market_values(
 
 
 def test_weight_groups_sum_to_one(market_config: MarketConfig) -> None:
-    attractiveness = market_config.demand_attractiveness_weights
     supplier = market_config.supplier_score_weights
-    assert sum(segment.share for segment in market_config.demand.segments) == pytest.approx(1.0)
-    assert all(
-        segment.weights.price + segment.weights.quality
-        + segment.weights.reputation + segment.weights.availability
-        == pytest.approx(1.0)
-        for segment in market_config.demand.segments
-    )
-
-    assert (
-        attractiveness.price
-        + attractiveness.quality
-        + attractiveness.reputation
-        + attractiveness.availability
-    ) == pytest.approx(1.0)
+    for cls in market_config.consumers.classes:
+        assert sum(cls.weights.model_dump().values()) == pytest.approx(1.0, abs=1e-3)
     assert (
         supplier.price
         + supplier.reliability

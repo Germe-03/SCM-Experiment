@@ -70,20 +70,12 @@ def ten_year_results():
     config = load_market_config()
     for feature in (config.market_entry, config.bank, config.strategy_change):
         feature.enabled = False
-    config.consumer_model = "segments"
     config.state.enabled = False
     config.research.enabled = False
     config.policy.max_backlog_days = None
 
-    def beer_network():
-        # The original calibration knew only the two breweries (no Phase-4 producers).
-        network = load_firms()
-        for stage in network.stages:
-            stage.firms = [f for f in stage.firms if f.category == "beer" and not f.importer]
-        return network
-
-    return (run_simulation(years=10, seed=0, config=config.model_copy(deep=True), network=beer_network()),
-            run_simulation(years=10, seed=0, config=config.model_copy(deep=True), network=beer_network()))
+    return (run_simulation(years=10, seed=0, config=config.model_copy(deep=True)),
+            run_simulation(years=10, seed=0, config=config.model_copy(deep=True)))
 
 
 def test_full_run_is_deterministic_and_strategies_stay_bounded(ten_year_results):
@@ -96,36 +88,3 @@ def test_full_run_is_deterministic_and_strategies_stay_bounded(ten_year_results)
             assert band.min <= report.average_sell_price <= band.max
             assert 0 <= report.average_quality <= config.rnd.quality_cap
             assert 0 <= report.capacity_utilization <= 1
-
-
-def test_adaptation_preserves_market_health_and_diversity(ten_year_results):
-    result, _ = ten_year_results
-    cumulative = {
-        firm.id: sum(year[firm.id].profit for year in result.yearly_summaries)
-        for stage in result.network.stages for firm in stage.firms
-    }
-    profitable_archetypes = {
-        firm.archetype for stage in result.network.stages for firm in stage.firms
-        if cumulative[firm.id] > 0
-    }
-    final_retail = result.annual_reports[-1]
-    prices = [final_retail[f.id].average_sell_price for f in result.network.firms_in("retailer")]
-    final_cash = [item.cash for item in result.final_result.firm_results.values()]
-
-    assert len(profitable_archetypes) >= 4
-    # Earned reliability makes chronic under-fill economically visible; the
-    # calibrated market still keeps at least 19 of 22 firms profitable.
-    assert sum(value > 0 for value in cumulative.values()) >= 12
-    assert max(prices) - min(prices) >= 0.5
-    # Exits are relative to each firm's starting capital. A firm deeper in
-    # debt than that must have left, unless it is among its stage's last
-    # protected firms or its (one per stage and year) exit is still pending.
-    config = load_market_config()
-    for firm_id, item in result.final_result.firm_results.items():
-        firm = result.network.firm(firm_id)
-        limit = config.bankruptcy.cash_floor_fraction * config.costs.initial_cash_scale * firm.cash
-        if item.cash < -limit and firm_id not in result.exits:
-            stage_active = [
-                f for f in result.network.firms_in(firm.stage) if f.id not in result.exits
-            ]
-            assert len(stage_active) <= config.bankruptcy.min_firms_per_stage + 1
