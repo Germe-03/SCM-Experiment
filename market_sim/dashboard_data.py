@@ -16,10 +16,11 @@ def _weekly(values: list[float]) -> list[float]:
 
 
 def _stock_weekly(rows: list[dict[str, Any]]) -> dict[str, Any]:
-    """Keep weekly closes and the final day, with gaps around listings."""
-    selected = list(range(6, len(rows), 7))
-    if rows and (not selected or selected[-1] != len(rows) - 1):
-        selected.append(len(rows) - 1)
+    """Keep weekly and year-end closes, with gaps around listings."""
+    selected = sorted(set(range(6, len(rows), 7)) | {
+        i for i, row in enumerate(rows)
+        if i == len(rows) - 1 or row["year"] != rows[i + 1]["year"]
+    })
     closes = [rows[i] for i in selected]
     ids = sorted({key for row in rows for key in row} - {"global_day", "year", "day", "index"})
     rounded = lambda value: round(value, 2) if value is not None else None
@@ -27,7 +28,9 @@ def _stock_weekly(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "days": [row["global_day"] for row in closes],
         "years": [row["year"] for row in closes],
         "index": [rounded(row.get("index")) for row in closes],
-        "prices": {fid: [rounded(row.get(fid)) for row in closes] for fid in ids},
+        # Small nominal prices must retain precision for rebased comparisons.
+        "prices": {fid: [round(row[fid], 6) if row.get(fid) is not None else None
+                         for row in closes] for fid in ids},
     }
 
 
@@ -78,11 +81,20 @@ def build_dashboard_data(
             ),
         })
     ranking.sort(key=lambda item: (-item["cumulative_profit"], item["firm_id"]))
+    bank_names = {row.bank_id: row.name for row in result.bank_history}
+    bank_events = []
+    for event in result.events:
+        for bank_id, name in bank_names.items():
+            direct = event["event"] in {"bank_failed", "bank_entry", "bank_payout"} and event["firm"] == bank_id
+            indirect = event["event"] in {"credit_rejected", "account_opened", "bank_switched"} and name in event.get("details", "")
+            if direct or indirect:
+                bank_events.append({**event, "bank_id": bank_id})
     return {
         "meta": {
             "years": result.years,
             "days_per_year": config.simulation.days_per_year,
             "days_total": result.days_total,
+            "shares_per_firm": config.stock_market.shares_per_firm,
             "seed": seed,
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "firms": identities,
@@ -90,6 +102,7 @@ def build_dashboard_data(
         "firms": firm_data,
         "system": [item.model_dump(mode="json") for item in result.system_kpis],
         "banks": [item.model_dump(mode="json") for item in result.bank_history],
+        "bank_events": bank_events,
         "stocks": _stock_weekly(result.stock_daily),
         "events": list(result.events),
         "ranking": ranking,

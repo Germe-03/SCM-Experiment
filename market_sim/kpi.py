@@ -50,6 +50,14 @@ class AnnualReport(BaseModel):
 
 
 class BankAnnualReport(BaseModel):
+    customer_ids: list[str] = Field(default_factory=list)
+    house_customer_ids: list[str] = Field(default_factory=list)
+    house_customers: int = 0
+    deposit_share: float = 0.0
+    loan_share: float = 0.0
+    revenue: float = 0.0
+    founded_year: int = 1
+    margin: float = 0.0
     credit_rejections: int = 0
     fee_income: float = 0.0
     year: int

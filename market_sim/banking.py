@@ -330,7 +330,17 @@ class BankingSystem:
         self.enter_bank(runtimes, price_index, year, day, events)
         self.open_second_accounts(runtimes, bank_config, price_index, year, day, events)
         self.aggregate(runtimes)
+        total_deposits = sum(b.deposits for b in self.banks.values() if b.active)
+        total_loans = sum(b.loans for b in self.banks.values() if b.active)
         reports = [BankAnnualReport(
+            customer_ids=sorted(fid for fid, accounts in self.accounts.items() if b.id in accounts),
+            house_customer_ids=sorted(fid for fid, accounts in self.accounts.items()
+                                      if next(iter(accounts), None) == b.id),
+            house_customers=sum(next(iter(a), None) == b.id for a in self.accounts.values()),
+            deposit_share=b.deposits / total_deposits if b.active and total_deposits else 0.0,
+            loan_share=b.loans / total_loans if b.active and total_loans else 0.0,
+            revenue=b.interest_income + b.fee_income,
+            founded_year=b.founded_year, margin=b.margin,
             year=year, bank_id=b.id, name=b.name, equity=b.equity, loans=b.loans,
             deposits=b.deposits, capital_ratio=b.capital_ratio, profit=b.year_profit,
             interest_income=b.interest_income, interest_expense=b.interest_expense,

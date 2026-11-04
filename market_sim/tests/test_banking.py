@@ -18,6 +18,43 @@ def runtimes(count=10):
             last_year_revenue=0, active=True) for i in range(count)}
 
 
+def test_year_end_customer_roles_revenue_and_market_shares():
+    firms = runtimes(4)
+    banking = BankingSystem(BankingConfig(enabled=True, entry_enabled=False,
+                            second_account_enabled=False, payout_ratio=0), 42, firms)
+    ids = list(banking.banks)
+    banking.accounts = {
+        'firm_00': {ids[0]: 0.3, ids[1]: 0.7},
+        'firm_01': {ids[1]: 1.0},
+        'firm_02': {ids[0]: 1.0},
+        'firm_03': {ids[1]: 0.5, ids[0]: 0.5},
+    }
+    firms['firm_02'].cash = -100
+    firms['firm_03'].cash = -300
+    banking.banks[ids[0]].interest_income = 20
+    banking.banks[ids[0]].fee_income = 5
+    reports = banking.year_end(firms, BankConfig(), 1, 1, 365, [])
+    by_id = {r.bank_id: r for r in reports}
+    first, second = by_id[ids[0]], by_id[ids[1]]
+    assert first.customer_ids == ['firm_00', 'firm_02', 'firm_03']
+    assert first.customers == 3
+    assert first.house_customer_ids == ['firm_00', 'firm_02']
+    assert first.house_customers == 2
+    assert second.house_customer_ids == ['firm_01', 'firm_03']
+    assert second.house_customers == 2
+    assert first.deposit_share == pytest.approx(300 / 2000)
+    assert second.deposit_share == pytest.approx(1700 / 2000)
+    assert first.loan_share == pytest.approx(0.25)
+    assert second.loan_share == pytest.approx(0.75)
+    assert first.revenue == 25
+    assert sum(r.deposit_share for r in reports if r.active) == pytest.approx(1)
+    assert sum(r.loan_share for r in reports if r.active) == pytest.approx(1)
+    for rt in firms.values():
+        rt.cash = 0
+    empty_reports = banking.year_end(firms, BankConfig(), 1, 2, 365, [])
+    assert all(r.deposit_share == r.loan_share == 0 for r in empty_reports)
+
+
 def test_assignment_balanced_deterministic_and_initial_equity():
     cfg = BankingConfig(enabled=True)
     firms = runtimes()
@@ -242,6 +279,7 @@ def test_short_run_csv_and_checkpoint(tmp_path):
         rows = list(csv.DictReader(source))
     assert len(rows) == 6
     assert set(rows[0]) == set(a.bank_history[0].model_dump())
+    assert rows[0]['customer_ids'] == ';'.join(a.bank_history[0].customer_ids)
 
 
 @pytest.mark.parametrize("values", [{"banks": []}, {"max_accounts": 3}, {"second_account_share": 1},

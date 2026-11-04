@@ -46,7 +46,7 @@ def test_write_dashboard_html(tmp_path):
     assert "Aare Markt AG" in content
     assert CHART_JS_URL in content
     assert 'id="actor-selector"' in content
-    for tab in ("overview", "market", "map", "people", "firms", "compare", "structure", "chain", "finance", "state", "rnd", "events", "chronicle"):
+    for tab in ("overview", "market", "map", "people", "firms", "compare", "structure", "chain", "finance", "stocks", "state", "rnd", "events", "chronicle"):
         assert f'data-tab="{tab}"' in content
         assert f'id="tab-{tab}"' in content
     assert 'id="cp-relative"' in content
@@ -56,6 +56,15 @@ def test_write_dashboard_html(tmp_path):
     for chart_id in ("fi-policy", "fi-bank-equity", "fi-bank-balances", "fi-banks", "fi-stocks"):
         assert f'id="{chart_id}"' in content
     assert "Hat es sich gelohnt?" in content
+    finance = content.split('id="tab-finance"')[1].split('</section>')[0]
+    stocks = content.split('id="tab-stocks"')[1].split('</section>')[0]
+    assert 'fi-stock-firms' not in content
+    assert 'fi-stocks' not in finance
+    assert 'id="sx-search"' in stocks and '<datalist' in stocks
+    assert 'id="sx-top"' in stocks and 'Top 10' in stocks
+    assert "'bank'];const fmGroup" in content
+    assert 'function renderBankDetail' in content
+    assert 'bd-income' in content and 'bd-customer-list' in content
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node is optional for Python-only installations")
@@ -76,11 +85,11 @@ def test_stock_weekly_closes(length, days):
     assert stocks["years"] == [1 if day <= 7 else 2 for day in days]
     assert stocks["index"] == [day + 0.12 for day in days]
     if length:
-        assert stocks["prices"]["early"] == [2.35 if day <= 7 else None for day in days]
+        assert stocks["prices"]["early"] == [2.3456 if day <= 7 else None for day in days]
     else:
         assert stocks == {"days": [], "years": [], "index": [], "prices": {}}
     if length > 7:
-        assert stocks["prices"]["late"] == [None if day <= 7 else 4.57 for day in days]
+        assert stocks["prices"]["late"] == [None if day <= 7 else 4.5678 for day in days]
 
 
 def test_banking_and_stock_dashboard(tmp_path):
@@ -96,12 +105,34 @@ def test_banking_and_stock_dashboard(tmp_path):
     data = build_dashboard_data(result, network, config, 0)
     assert data["banks"] == [b.model_dump(mode="json") for b in result.bank_history]
     assert data["banks"] and data["stocks"]["prices"]
+    assert all(isinstance(b['customer_ids'], list) for b in data['banks'])
+    for year in (1, 2):
+        active = [b for b in data['banks'] if b['year'] == year and b['active']]
+        for amount, share in [('deposits', 'deposit_share'), ('loans', 'loan_share')]:
+            assert sum(b[share] for b in active) == pytest.approx(1 if sum(b[amount] for b in active) else 0)
+    assert set(data['firms']).isdisjoint(b['bank_id'] for b in data['banks'])
+    bank = data['banks'][0]
+    result.events.extend([
+        {'year': 1, 'day': 1, 'firm': bank['bank_id'], 'event': 'bank_failed', 'details': 'Test'},
+        {'year': 1, 'day': 1, 'firm': 'retailer_01', 'event': 'account_opened', 'details': bank['name']},
+    ])
+    projected = build_dashboard_data(result, network, config, 0)
+    assert any(e['event'] == 'bank_failed' and e['bank_id'] == bank['bank_id'] for e in projected['bank_events'])
+    assert any(e['event'] == 'account_opened' and e['firm'] == 'retailer_01' and e['bank_id'] == bank['bank_id'] for e in projected['bank_events'])
     assert data["stocks"]["days"][-1] == result.stock_daily[-1]["global_day"]
     assert len(data["stocks"]["days"]) == 6
     path = write_dashboard_html(data, tmp_path / "banking.html")
     if shutil.which("node"):
         subprocess.run(["node", str(Path(__file__).with_name("dashboard_phase19_check.cjs")), str(path)],
                        check=True, capture_output=True, text=True)
+
+
+def test_stock_projection_preserves_year_end_and_small_prices():
+    rows = [{'global_day': day, 'year': 1 if day <= 10 else 2,
+             'index': 100, 'tiny': 0.000123} for day in range(1, 21)]
+    stocks = _stock_weekly(rows)
+    assert stocks['days'] == [7, 10, 14, 20]
+    assert stocks['prices']['tiny'] == [0.000123] * 4
 
 
 def test_disabled_banking_and_stocks():

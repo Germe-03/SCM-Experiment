@@ -5,33 +5,74 @@ const D = JSON.parse(html.match(/<script id="dashboard-data" type="application\/
 const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => m[1]);
 scripts.forEach(s => new vm.Script(s));
 const source = scripts[0], nodes = new Map(), charts = new Map();
-const $ = id => {if (!nodes.has(id)) nodes.set(id, {}); return nodes.get(id)};
-const range = {from: 1, to: 2}, S = {};
-const context = {D, S, range, $, $$: () => [],
+const $ = id => {if (!nodes.has(id)) nodes.set(id, {value:'',querySelectorAll:()=>[],scrollIntoView(){}}); return nodes.get(id)};
+const range = {from: 1, to: 2}, S = {fmStage:new Set(['bank']),fmStatus:'all',fmSort:['profit',-1],tab:'firms'};
+const periods=['week','month'].map(period=>({dataset:{period},setAttribute(){}}));
+const context = {D, S, range, $, $$: selector => selector==='#sx-period button'?periods:[],
   inRange: y => y >= range.from && y <= range.to,
   sys: () => D.system.filter(x => x.year >= range.from && x.year <= range.to),
   firm: id => D.firms[id], fname: id => D.firms[id]?.name || id,
   esc: v => String(v ?? '').replaceAll('<', '&lt;'),
+  pretty:String, EVENT:{}, REGION:{}, ARCH:{},
+  FM_GROUPS:['retailer','restaurant','wholesaler','distributor','factory','bank'],
+  fmGroup:f=>f?.channel==='restaurant'?'restaurant':f?.stage, fmGroupLabel:g=>g==='bank'?'Banken':g, catLabel:()=> '–',
+  stageColor:()=>({}), kpi:(label,value)=>label+': '+value, sumBy:(a,k)=>a.reduce((n,r)=>n+(r[k]||0),0),
+  renderFirmDetail:()=>{}, wireFirmLinks:()=>{}, openTab:tab=>{S.tab=tab},
   nf: String, chf: String, pct: String, empty: String, fmtAxis: () => ({}),
   pal: () => ['red','blue','green','orange','purple','cyan','pink','black'],
   chart: (id, cfg) => charts.set(id, cfg), lines: (id, series) => charts.set(id, series),
   render: () => vm.runInContext('renderStocks()', context)};
 vm.createContext(context);
+vm.runInContext(source.slice(source.indexOf('function bankActors()'), source.indexOf('const DEC_GROUP=')), context);
 vm.runInContext(source.slice(source.indexOf('function renderBanks()'), source.indexOf('function renderFinance()')), context);
 vm.runInContext('renderBanks();renderStocks()', context);
 assert.match($('#fi-banks').innerHTML, /Eigenkapitalquote/);
 assert.equal(charts.get('fi-stocks').data.labels.length, 6);
-const ids = Object.keys(D.stocks.prices).slice(0, 2);
-S.stockFirms = ids;
-$('#fi-stock-period').onchange({target: {value: 'month'}});
-assert.equal(charts.get('fi-stocks').data.labels.length, 2);
-assert.equal(charts.get('fi-stocks').data.datasets.length, 3);
+assert.equal(charts.get('fi-stocks').data.datasets.length, 2);
+assert.equal(charts.get('fi-stocks').data.datasets[1].yAxisID, 'y2');
+assert.equal(charts.get('fi-stocks').options.scales.x.ticks.callback(0,0), 'Jahr 1');
+assert.equal(charts.get('fi-stocks').options.plugins.tooltip.callbacks.title([{dataIndex:0}]), 'Jahr 1, Woche 1');
+vm.runInContext('renderFirms()', context);
+assert.match($('#fm-table').innerHTML, /bank:B1/);
+assert.match($('#fm-stage').innerHTML, /Banken/);
+assert.doesNotMatch($('#fm-table').innerHTML, /data-actor="retailer/);
+assert.equal(($('#sx-top').innerHTML.match(/data-stock-add=/g)||[]).length, 10);
+assert.equal(charts.get('sx-stages').data.datasets.length, 5);
+const ids = Object.keys(D.stocks.prices).slice(0, 6);
+ids.forEach(id=>vm.runInContext(`addStock(${JSON.stringify(id)})`,context));
+assert.equal(S.stockFirms.length, 5);
+assert.match($('#sx-selection-hint').textContent, /Entferne zuerst/);
+assert.equal(charts.get('sx-compare').data.datasets.length, 6);
+assert.equal(charts.get('sx-compare').data.datasets[0].data[0], 100);
+periods[1].onclick();
+assert.ok(charts.get('fi-stocks').data.labels.every(s=>s.includes('Monat')));
+assert.equal(charts.get('sx-compare').data.datasets.length,6);
 range.from = 2;
 vm.runInContext('renderBanks();renderStocks()', context);
 assert.equal($('#fi-bank-year').textContent, 'Stand: Jahr 2');
 assert.ok(charts.get('fi-stocks').data.labels.every(s => s.startsWith('Jahr 2')));
-vm.runInContext(`renderStockChart('fd-price', [${JSON.stringify(ids[0])}], false, 'week', 'fd-stock-empty')`, context);
-assert.equal(charts.get('fd-price').data.datasets.length, 1);
+vm.runInContext(`renderStockChart('fd-price', [${JSON.stringify(ids[0])}], true, 'week', 'fd-stock-empty')`, context);
+assert.equal(charts.get('fd-price').data.datasets.length, 2);
+assert.equal(charts.get('fd-price').data.datasets[1].data[0],100);
+assert.equal(vm.runInContext('bankRatio({equity:20,loans:80,deposits:80})',context),0.2);
+vm.runInContext("renderBankDetail('B1')",context);
+assert.match($('#fm-detail').innerHTML,/Zinsmarge/);
+assert.match($('#fm-detail').innerHTML,/Marktanteil Einlagen/);
+assert.match($('#bd-customer-list').innerHTML,/data-firm=/);
+const bankEnd=D.banks.find(b=>b.bank_id==='B1'&&b.year===2);
+['interest_expense','refinancing_cost','operating_cost','write_offs'].forEach((key,i)=>
+  assert.equal(charts.get('bd-income').data.datasets[i+2].data[0],-(bankEnd[key]||0)));
+const customer=D.banks.find(b=>b.bank_id==='B1'&&b.year===2).customer_ids[0];
+assert.match(vm.runInContext(`firmBankLine(${JSON.stringify(customer)})`,context),/data-bank=/);
+const link={dataset:{bank:'B1'}};
+context.linkRoot={querySelectorAll:()=>[link]};
+vm.runInContext('wireBankLinks(linkRoot)',context);
+link.onclick({preventDefault(){},stopPropagation(){}});
+assert.equal(S.fmFirm,'bank:B1'); assert.equal(S.tab,'firms');
+const count=Object.keys(D.firms).length;
+D.firms.B1={...D.firms[ids[0]],id:'B1'};
+assert.equal(vm.runInContext("bankActors()['bank:B1'].stage",context),'bank');
+assert.equal(Object.keys(D.firms).length,count+1);
 // A failure before the selected range still identifies the first failed year.
 D.banks.push({...D.banks[0], bank_id: 'failed', name: '<Failed>', year: 1, active: false},
              {...D.banks[0], bank_id: 'failed', name: '<Failed>', year: 2, active: false});
@@ -46,6 +87,15 @@ D.stocks.prices[ids[0]][0] = null;
 vm.runInContext(`renderStockChart('fd-price', [${JSON.stringify(ids[0])}], false)`, context);
 assert.equal(charts.get('fd-price').data.datasets[0].data[0], null);
 assert.equal(charts.get('fd-price').data.datasets[0].spanGaps, false);
+// Controlled prices verify monthly closes, rankings and price-weighted returns.
+D.meta.days_per_year=365;
+D.stocks={days:[7,14,28,35,364],years:[1,1,1,1,1],index:[100,110,120,130,140],prices:{
+  [ids[0]]:[1,2,3,4,5],[ids[1]]:[3,3,3,3,3]}};
+D.firms[ids[0]].stage=D.firms[ids[1]].stage='factory';
+vm.runInContext('renderStocks()',context);
+assert.deepEqual(Array.from(vm.runInContext("stockPoints('month')",context)),[2,3,4]);
+assert.equal(vm.runInContext("stockStageSeries('factory')[1]",context),125);
+assert.ok($('#sx-top').innerHTML.indexOf(`data-stock-add="${ids[0]}"`)<$('#sx-top').innerHTML.indexOf(`data-stock-add="${ids[1]}"`));
 D.stocks = {days: [], years: [], index: [], prices: {}}; D.banks = [];
 vm.runInContext('renderBanks();renderStocks()', context);
 assert.match($('#fi-banks').innerHTML, /Keine Bankberichte/);
@@ -59,4 +109,4 @@ assert.equal(groups.bank.out[0].info, 'Verlust bei Bankpleite (nur 30 % gesicher
 assert.equal(groups.bank.in[0].v, 20);
 assert.equal(groups.beteiligungen.out.length, 0);
 assert.equal(groups.betrieb.out[0].v, 5);
-console.log('Phase 19 syntax, finance charts, filters, listing gaps and bank flows passed.');
+console.log('Dashboard syntax, stocks, bank details, filters, navigation and bank flows passed.');

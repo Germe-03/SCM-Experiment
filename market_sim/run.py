@@ -141,7 +141,11 @@ def write_outputs(result: RunResult, out_dir: str | Path) -> list[Path]:
         with bank_path.open("w", newline="", encoding="utf-8") as output:
             writer = csv.DictWriter(output, fieldnames=list(BankAnnualReport.model_fields))
             writer.writeheader()
-            writer.writerows(report.model_dump() for report in result.bank_history)
+            for report in result.bank_history:
+                row = report.model_dump()
+                row['customer_ids'] = ';'.join(report.customer_ids)
+                row['house_customer_ids'] = ';'.join(report.house_customer_ids)
+                writer.writerow(row)
         paths.append(bank_path)
     if result.stock_daily:
         # Daily prices wide (one column per firm), weekly closes long for the dashboard.
