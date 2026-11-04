@@ -1,5 +1,8 @@
 """Year-end entry rules and deterministic draws."""
 
+import pytest
+
+from market_sim.config import MarketEntryConfig
 from market_sim.run import build_runner
 from market_sim.models import STAGES
 from market_sim.checkpoint import save_checkpoint, load_checkpoint
@@ -70,3 +73,43 @@ def test_entry_template_cash_and_name_cycle():
     assert runner.env.runtimes[first.id].initial_cash == first.cash * runner.config.costs.initial_cash_scale
     runner.run_year(state)
     assert runner.network.firm("retailer_e02").name == "Aare 2"
+
+
+def test_founding_enters_without_margin_or_shortage():
+    runner, _ = build_runner(days_per_year=2)
+    cfg = runner.config.market_entry
+    cfg.base_probability = 0.0
+    cfg.max_probability = 0.0
+    cfg.margin_slope = 0.0
+    cfg.shortage_capacity_ratio = 0.0
+    cfg.founding_probability = {"wholesaler": 1.0}
+    cfg.max_firms_per_stage = {s: 99 for s in STAGES}
+    runner.config.strategy_change.enabled = False
+    state = runner.start()
+    runner.run_year(state)
+    assert state.system_kpis[-1].market_entries == 1
+    firm = runner.network.firm("wholesaler_e01")
+    assert firm.stage == "wholesaler"
+    assert 1 <= firm.capacity
+
+
+def test_founding_respects_stage_cap():
+    runner, _ = build_runner(days_per_year=2)
+    cfg = runner.config.market_entry
+    cfg.base_probability = 0.0
+    cfg.max_probability = 0.0
+    cfg.margin_slope = 0.0
+    cfg.shortage_capacity_ratio = 0.0
+    cfg.founding_probability = {s: 1.0 for s in STAGES}
+    cfg.max_firms_per_stage = {s: len(runner.network.firms_in(s)) for s in STAGES}
+    runner.config.strategy_change.enabled = False
+    state = runner.start()
+    runner.run_year(state)
+    assert state.system_kpis[-1].market_entries == 0
+
+
+def test_founding_probability_validation():
+    with pytest.raises(ValueError):
+        MarketEntryConfig(founding_probability={"bakery": 0.5})
+    with pytest.raises(ValueError):
+        MarketEntryConfig(founding_probability={"retailer": 1.5})

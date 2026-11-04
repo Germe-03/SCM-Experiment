@@ -10,20 +10,23 @@ market_entry:
   margin_threshold: 0.05
   margin_slope: 2.0
   max_probability: 0.5
-  max_firms_per_stage: {retailer: 18, wholesaler: 9, distributor: 6, factory: 9}
+  # Gründungen ohne Anlass: jährliche Chance pro Stufe, unabhängig von Marge und Kapazität.
+  founding_probability: {retailer: 0.7, wholesaler: 0.25, distributor: 0.2, factory: 0.35}
+  restaurant_founding_share: 0.5
+  max_firms_per_stage: {retailer: 30, wholesaler: 12, distributor: 9, factory: 14}
   start_cash_fraction: 0.5
   start_capacity_fraction: 0.5
   start_reputation: [0.40, 0.50]
   start_quality_fraction: 0.9
   names:
-    factory_wine: [Lavaux Vins, Rebenhof, Valais Wein, Seeland Kellerei]
-    factory_spirits: [Alpen Destillerie, Jura Brennerei, Säntis Spirituosen, Ticino Distillati]
-    factory_import: [Helvetia Import, Mondial Getränke, Global Vins, Alpina Import]
-    restaurant: [Gasthof Sonne, Bar Centrale, Wirtschaft zum Hirschen, Café du Pont, Osteria Bellavista, Brauerei-Stübli]
-    retailer: [Aare Laden, Rigi Markt, Limmat Shop, Emme Markt, Jura Laden, Pilatus Markt, Reuss Shop, Sihl Laden]
-    wholesaler: [Helvetia Handel, Aare Handel, Seeland Handel, Rigi Handel, Thur Handel, Linth Handel]
-    distributor: [Alpen Logistik, Mittelland Verteilung, Gotthard Vertrieb, Jura Logistik]
-    factory: [Aare Brauerei, Rigi Bräu, Emmental Bier, Säntis Brauerei]
+    factory_wine: [Lavaux Vins, Rebenhof, Valais Wein, Seeland Kellerei, Chablais Vins, Bündner Herrschaft, Tessiner Weingut, Bielersee Kellerei]
+    factory_spirits: [Alpen Destillerie, Jura Brennerei, Säntis Spirituosen, Ticino Distillati, Emmentaler Brennerei, Zuger Kirsch, Appenzeller Destillerie, Rigi Spirituosen]
+    factory_import: [Helvetia Import, Mondial Getränke, Global Vins, Alpina Import, Rhein Import, Atlas Getränke, Euro Vins, Iberia Import]
+    restaurant: [Gasthof Sonne, Bar Centrale, Wirtschaft zum Hirschen, Café du Pont, Osteria Bellavista, Brauerei-Stübli, Restaurant Rössli, Zum Goldenen Löwen, Bistro Bahnhof, Pizzeria Da Gino, Bar Rhypark, Gasthaus Linde, Café Bärengraben, Beizli zum Ochsen]
+    retailer: [Aare Laden, Rigi Markt, Limmat Shop, Emme Markt, Jura Laden, Pilatus Markt, Reuss Shop, Sihl Laden, Thur Markt, Linth Laden, Saane Shop, Birs Markt, Glatt Laden, Albis Markt, Töss Shop, Kander Laden]
+    wholesaler: [Helvetia Handel, Aare Handel, Seeland Handel, Rigi Handel, Thur Handel, Linth Handel, Reuss Handel, Saane Handel, Birs Handel, Glatt Handel]
+    distributor: [Alpen Logistik, Mittelland Verteilung, Gotthard Vertrieb, Jura Logistik, Rhein Logistik, Simplon Vertrieb, Bodensee Verteilung, Léman Logistik]
+    factory: [Aare Brauerei, Rigi Bräu, Emmental Bier, Säntis Brauerei, Gotthard Bräu, Jura Bierwerk, Ticino Birra, Bodensee Brauerei]
 
 # Phase 13: year-end policy for the following year.
 central_bank:

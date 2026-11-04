@@ -633,3 +633,14 @@ Seed, was angepasst wurde.
   Seeds der ganzen Simulation (`--skip-years` für die Anlaufjahre). Die
   Einträge oben, die Szenarien oder `consumer_model: segments` erwähnen,
   beschreiben den damaligen Stand.
+- **2026-11-04, Gründungen ohne Anlass:** Bisher kamen neue Firmen fast nur
+  als Ersatz nach einem Konkurs (Kapazitätsmangel) oder bei guter Marge.
+  Neu hat jede Stufe eine feste jährliche Gründungschance
+  (`market_entry.founding_probability`: Detailhandel 0.7, Grosshandel 0.25,
+  Verteilung 0.2, Hersteller 0.35), unabhängig von Marge und Kapazität. So
+  eine Gründung startet klein (`start_capacity_fraction`); im Detailhandel
+  wird es je zur Hälfte ein Laden oder ein Restaurant
+  (`restaurant_founding_share`). Die Obergrenzen pro Stufe sind auf 30 / 12 /
+  9 / 14 gestiegen, die Namenslisten länger. Ergebnis Seed 0, 50 Jahre:
+  103 statt 24 Eintritte, 81 statt 30 Konkurse; aktiv am Ende 11 / 2 / 5 / 8
+  statt 6 / 2 / 2 / 4 Firmen. 198 Tests bestanden.
