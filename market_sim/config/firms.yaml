@@ -190,6 +190,94 @@ firms:
     supplier_priority: capacity
     suppliers: []
 
+  - id: restaurant_01
+    name: "Zunfthaus zur Linde"
+    stage: retailer
+    archetype: premium
+    cash: 600000
+    inventory: 40
+    backlog: 0
+    sell_price: 5.4
+    quality_level: 0.84
+    reputation: 0.8
+    reliability: 0.82
+    capacity: 9
+    employees: 6
+    wage_level: 4800
+    productivity_per_employee: 1.4
+    r_and_d_level: 0.10
+    r_and_d_budget: 4000
+    supplier_priority: quality
+    suppliers: []
+    channel: restaurant
+    region: zuerich
+
+  - id: restaurant_02
+    name: "Brasserie du Lac"
+    stage: retailer
+    archetype: standard
+    cash: 600000
+    inventory: 40
+    backlog: 0
+    sell_price: 5.1
+    quality_level: 0.74
+    reputation: 0.72
+    reliability: 0.82
+    capacity: 9
+    employees: 6
+    wage_level: 4800
+    productivity_per_employee: 1.4
+    r_and_d_level: 0.10
+    r_and_d_budget: 4000
+    supplier_priority: quality
+    suppliers: []
+    channel: restaurant
+    region: genfersee
+
+  - id: restaurant_03
+    name: "Bärengraben Bar"
+    stage: retailer
+    archetype: growth
+    cash: 600000
+    inventory: 40
+    backlog: 0
+    sell_price: 4.9
+    quality_level: 0.7
+    reputation: 0.68
+    reliability: 0.82
+    capacity: 9
+    employees: 6
+    wage_level: 4800
+    productivity_per_employee: 1.4
+    r_and_d_level: 0.10
+    r_and_d_budget: 4000
+    supplier_priority: quality
+    suppliers: []
+    channel: restaurant
+    region: bern
+
+  - id: restaurant_04
+    name: "Grotto Ticino"
+    stage: retailer
+    archetype: reliable
+    cash: 600000
+    inventory: 40
+    backlog: 0
+    sell_price: 5.0
+    quality_level: 0.76
+    reputation: 0.75
+    reliability: 0.82
+    capacity: 8
+    employees: 5
+    wage_level: 4800
+    productivity_per_employee: 1.4
+    r_and_d_level: 0.10
+    r_and_d_budget: 4000
+    supplier_priority: quality
+    suppliers: []
+    channel: restaurant
+    region: tessin
+
   # Wholesale: 520 units/day total capacity.
   - id: wholesaler_01
     name: "Helvetia Grosshandel AG"

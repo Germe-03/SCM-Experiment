@@ -103,6 +103,15 @@ class SystemKPIs(BaseModel):
     takeovers: int = 0
     takeovers_blocked: int = 0
     breakups: int = 0
+    restaurant_revenue_share: float = 0.0
+    restaurant_unit_share: float = 0.0
+    active_restaurants: int = 0
+    marketing_spend: float = 0.0
+    dividends: float = 0.0
+    stakes_bought: int = 0
+    stakes_sold: int = 0
+    stakes_held: int = 0
+    laws_enacted: int = 0
     rnd_started: int = 0
     rnd_successes: int = 0
     rnd_failures: int = 0

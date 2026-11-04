@@ -257,3 +257,34 @@ Symbol einen Hinweis, wie man ihn startet.
   Prüfung der Eintrittsnamen) hat Claude gemacht. Die Ökonomie ist
   unverändert: Seed 0 über 10 Jahre ergibt vorher und nachher genau
   CHF 9'190'532'019 Gewinn, darum keine neue Kalibrierung.
+- **2026-11-04, Korrektur vor Phase 10:** Das Cash jeder Firma wurde täglich
+  als Startkapital plus Gewinn neu berechnet. Steuern, Bussen,
+  Schuldenabschreibungen bei Sanierungen und Kaufpreise bei Übernahmen
+  verschwanden darum am nächsten Tag wieder. Neu fliessen sie über ein
+  Korrekturkonto (`cash_adjustment`) dauerhaft ins Cash. Ausserdem rechnet
+  die Wettbewerbsbehörde Marktanteile der Hersteller pro Kategorie (vorher
+  wurde eine Brennerei mit «100 %» der ganzen Herstellerstufe zerschlagen),
+  und Knappheit bei Herstellern wird pro Kategorie erkannt (vorher ersetzten
+  Weingüter fehlendes Bier). Messung nur mit diesen Korrekturen (10 Seeds,
+  50 Jahre): Service Level 95.5 %, ein Seed fiel auf 74 %.
+- **2026-11-04, Phase 10:** Marketing (Budget nach Archetyp, Bekanntheit pro
+  Marke und Laden, zerfällt jedes Jahr, junge Klassen reagieren stärker),
+  Restaurants als Kanal neben den Läden (4 Restaurants zu Beginn, Aufschlag
+  ×3, Servicekosten, jede Klasse trinkt einen Teil ausser Haus, unbediente
+  Gäste kaufen teils im Laden), Beteiligungen von 10 bis 49 % mit
+  Dividenden (die Wettbewerbsbehörde zählt Anteile ab 25 % mit) und sechs
+  Gesetze, die zufällig in Kraft treten (Mindestlohn, Alkoholsteuer auf
+  Spirituosen, Werbeverbot für Spirituosen, Mehrwegpflicht, strengere
+  Kontrollen, Importzoll). Die Folgen eines Gesetzes zeigt das Dashboard erst,
+  wenn eine beobachtete Kennzahl nach mindestens 3 Jahren um mehr als das
+  Zweifache der Schwankung vor dem Gesetz abweicht. Erste Messung: Gewinn
+  nur 1.6–7.9 %, in 6 von 10 Seeds starben die Restaurants aus. Angepasst:
+  Marketingbudgets halbiert, Servicekosten 50 % statt 60 %, Fixkosten ×1.3
+  statt ×1.6, fehlen Sitzplätze für die Gäste, kommt sicher ein neues
+  Restaurant; Läden und Restaurants werden bei Knappheit getrennt gezählt,
+  Übernahmen nur innerhalb desselben Kanals, und für neue Läden gibt es eine
+  eigene Vorlage (vorher konnten Restaurants alle Läden verdrängen).
+  Ergebnis (10 Seeds, 50 Jahre, ohne die ersten 2 Jahre): Gewinn 8.7 % des
+  Endkundenumsatzes (5.8–12.5 %), Service Level 99.2 %, Restaurants am Ende
+  mit 15–22 % der Menge. Einzelne Seeds haben späte Einbrüche (Seed 1 in
+  Jahr 45 auf 7 %, erholt sich danach wieder teilweise). 185 Tests bestanden.

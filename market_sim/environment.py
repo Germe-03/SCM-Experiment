@@ -50,6 +50,10 @@ class FirmRuntime:
     stock: dict[str, int] = field(default_factory=dict)
     incoming_brands: list[dict[str, int]] = field(default_factory=list)
     # Phase 4: wine maturing in the cellar as (release day, brand, units, vintage bonus).
+    # Cash flows that are not profit; cash is recomputed daily from profit plus these.
+    cash_adjustment: float = 0.0
+    # Phase 10: marketing spending (also booked in fixed_cost).
+    marketing_cost: float = 0.0
     maturing: list[tuple[int, str, int, float]] = field(default_factory=list)
     # Phase 6: last year's bases for offences and counters to measure them.
     wage_cost_last_year: float = 0.0
@@ -130,8 +134,13 @@ class FirmRuntime:
             if daily_wage_cost is None else daily_wage_cost
         )
         # S6 decision: negative cash is recorded; bankruptcy/exit is deferred.
-        self.cash = self.initial_cash + self.profit
+        self.cash = self.initial_cash + self.profit + self.cash_adjustment
         return holding, backlog
+
+    def adjust_cash(self, delta: float) -> None:
+        """Book a cash flow outside the profit (taxes, fines, write-offs, purchase prices)."""
+        self.cash_adjustment += delta
+        self.cash += delta
 
 
 @dataclass(frozen=True)
@@ -272,6 +281,9 @@ class MarketEnvironment:
         # Phase 7: lasting savings from successful research projects.
         self.process_cost_factor: dict[str, float] = {}
         self.research = None
+        # Phase 10: marketing hook and excise taxes per category (share of unit cost).
+        self.marketing = None
+        self.excise: dict[str, float] = {}
         self._wine_rng = random.Random(f"wine-{self.seed}")
         self.domestic_daily_demand = float(self.config.demand.daily_demand_units)
         self.runtimes = {}
@@ -499,6 +511,8 @@ class MarketEnvironment:
             self.geography.daily(self)
         if self.research is not None:
             self.research.daily(self)
+        if self.marketing is not None:
+            self.marketing.daily(self)
 
         # 6-7. Accumulate costs and advance time.
         for firm_id in sorted(self.runtimes):
@@ -591,6 +605,8 @@ class MarketEnvironment:
         if firm.importer and book is not None and book.categories_on:
             imports = self.config.categories.imports
             cost *= imports.cost_factor * self.fx_rate * (1 + imports.tariff)
+        # Phase 10: excise taxes raise the unit cost of a category.
+        cost *= 1 + self.excise.get(firm.category, 0.0)
         factor = self.firm_material_factor.get(firm.id, 1.0)
         if quantity:
             self.material_savings[firm.id] = self.material_savings.get(firm.id, 0.0) + quantity * cost * (1 - factor)
@@ -844,7 +860,9 @@ class MarketEnvironment:
     def _daily_fixed_cost(self, firm) -> float:
         cfg = self.config.fixed_costs
         base = max(firm.capacity, round(firm.employees * firm.productivity_per_employee)) + firm.machine_capacity
-        return (
+        factor = self.config.restaurants.fixed_cost_factor if (
+            firm.channel == "restaurant" and self.config.restaurants.enabled) else 1.0
+        return factor * (
             cfg.base_per_day.get(firm.stage, 0.0)
             + cfg.per_capacity_unit_per_day.get(firm.stage, 0.0) * base
         )

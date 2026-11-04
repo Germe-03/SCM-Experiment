@@ -128,7 +128,7 @@ class StateActor:
             tax = max(0.0, summary.profit) * cfg.profit_tax
             if evading and tax_offence is not None:
                 tax *= 1 - tax_offence.benefit
-            runtime.cash -= tax
+            runtime.adjust_cash(-tax)
             self.stats["taxes"] += tax
             for offence, roll in zip(cfg.offences, rolls):
                 if offence.name not in self.active.get(firm.id, ()):
@@ -142,7 +142,7 @@ class StateActor:
                 belief[0] += cfg.learning_rate * ((1.0 if caught else 0.0) - belief[0])
                 if caught:
                     fine = offence.fine_fixed * runner.long_run.price_index + offence.fine_revenue_share * summary.revenue
-                    runtime.cash -= fine
+                    runtime.adjust_cash(-fine)
                     damage = offence.reputation_hit * self.previous_revenue.get(firm.id, 0.0) * cfg.reputation_value_factor
                     firm.reputation = max(0.0, firm.reputation - offence.reputation_hit)
                     self.stats["offences_detected"] += 1
@@ -197,8 +197,12 @@ class StateActor:
         summaries = state.summaries[-1]
         for stage in STAGES:
             active = [f for f in runner.network.firms_in(stage) if env.runtimes[f.id].active and f.id in summaries]
-            revenue = sum(summaries[f.id].revenue for f in active) or 1.0
-            share = {f.id: summaries[f.id].revenue / revenue for f in active}
+            # Producers compete within their category (beer, wine, spirits), not across all drinks.
+            group = (lambda f: f.category) if stage == "factory" else (lambda f: "all")
+            totals: dict[str, float] = {}
+            for f in active:
+                totals[group(f)] = totals.get(group(f), 0.0) + summaries[f.id].revenue
+            share = {f.id: summaries[f.id].revenue / (totals[group(f)] or 1.0) for f in active}
             targets = sorted(
                 (f for f in active if env.runtimes[f.id].cash < -cfg.distress_fraction * env.runtimes[f.id].credit_limit
                  or env.runtimes[f.id].consecutive_loss_years >= cfg.distress_loss_years),
@@ -217,12 +221,16 @@ class StateActor:
                             * env._effective_capacity(target.id) + t_rt.cash)
                 buyers = sorted(
                     (f for f in active if f.id != target.id and summaries[f.id].profit > 0
-                     and f.category == target.category
+                     and f.category == target.category and f.channel == target.channel
                      and env.runtimes[f.id].cash >= cfg.cash_cover * price),
                     key=lambda f: (-env.runtimes[f.id].cash, f.id),
                 )
                 for buyer in buyers:
                     combined = share[buyer.id] + share[target.id]
+                    holdings = getattr(runner, "holdings", None)
+                    if holdings is not None:
+                        # Phase 10: big stakes count like own market share.
+                        combined += sum(share.get(t, 0.0) for t in holdings.antitrust_partners(buyer.id) if t != target.id)
                     if combined > cfg.block_share:
                         self.stats["takeovers_blocked"] += 1
                         state.events.append({"year": year, "day": day, "firm": buyer.id, "event": "takeover_blocked",
@@ -238,8 +246,7 @@ class StateActor:
     def _merge(self, runner, state, buyer, target, price, year, day) -> None:
         env = runner.env
         b_rt, t_rt = env.runtimes[buyer.id], env.runtimes[target.id]
-        b_rt.cash -= price
-        b_rt.cash += min(0.0, t_rt.cash)  # the buyer also takes over the debt
+        b_rt.adjust_cash(-price + min(0.0, t_rt.cash))  # the buyer also takes over the debt
         buyer.capacity += target.capacity
         buyer.machine_capacity += target.machine_capacity
         buyer.employees += target.employees
@@ -257,7 +264,7 @@ class StateActor:
         b_rt.inventory += t_rt.inventory
         t_rt.stock = {}
         t_rt.inventory = 0
-        t_rt.cash = 0.0
+        t_rt.adjust_cash(-t_rt.cash)
         runner.close_firm_now(target.id, year, state, "takeover", f"gekauft von {buyer.id} für {chf(price)}")
         runner.decision_log.record(year, buyer.id, "takeover_bought", {"target": target.id, "price": price}, "Übernahme eines finanziell angeschlagenen Konkurrenten")
         self.stats["takeovers"] += 1

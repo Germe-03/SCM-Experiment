@@ -62,4 +62,4 @@ def test_year_end_limit_and_financial_reporting():
             cfg.credit_limit_revenue_fraction * report.revenue
             + cfg.credit_limit_initial_cash_fraction * runtime.initial_cash))
         assert report.interest_cost == state.financial_breakdown[firm.id][-1]["interest_cost"]
-        assert runtime.cash == pytest.approx(runtime.initial_cash + runtime.profit)
+        assert runtime.cash == pytest.approx(runtime.initial_cash + runtime.profit + runtime.cash_adjustment)

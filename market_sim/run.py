@@ -162,7 +162,8 @@ def write_outputs(result: RunResult, out_dir: str | Path) -> list[Path]:
             writer.writeheader()
             writer.writerows({k: json.dumps(v, ensure_ascii=False) if isinstance(v, (dict, list)) else v for k, v in row.items()} for row in rows)
         paths.append(path)
-    for name, data in (("exit_analysis.json", result.exit_analysis), ("personas.json", result.personas)):
+    for name, data in (("exit_analysis.json", result.exit_analysis), ("personas.json", result.personas),
+                       ("holdings.json", result.holdings), ("laws.json", result.laws)):
         path = directory / name
         path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
         paths.append(path)

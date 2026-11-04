@@ -111,6 +111,11 @@ class BrandBook:
         self.export_units = 0
         # Phase 6: fear after a poisoning scandal lowers consumption of that category.
         self.fear: dict[str, float] = {}
+        # Phase 10: awareness from marketing (0..1) per brand and per store.
+        self.awareness: dict[str, float] = {}
+        self.store_awareness: dict[str, float] = {}
+        self.channel_units: dict[str, int] = {"store": 0, "restaurant": 0}
+        self.channel_revenue: dict[str, float] = {"store": 0.0, "restaurant": 0.0}
         self.reset_year()
 
     # -- brand registry -------------------------------------------------
@@ -148,8 +153,22 @@ class BrandBook:
     def category_value(self, category: str) -> float:
         return self.value.get(category, 1.0) if self.value else 1.0
 
-    def retail_price(self, sell_price: float, brand: Brand) -> float:
-        return sell_price * self.cfg.price_factors.get(brand.positioning, 1.0) * self.category_value(brand.category)
+    def markup(self, firm: Firm) -> float:
+        """Restaurants charge for service on top of the store price."""
+        cfg = self.config.restaurants
+        return cfg.markup if cfg.enabled and firm.channel == "restaurant" else 1.0
+
+    def retail_price(self, sell_price: float, brand: Brand, firm: Firm | None = None) -> float:
+        markup = self.markup(firm) if firm is not None else 1.0
+        return sell_price * self.cfg.price_factors.get(brand.positioning, 1.0) * self.category_value(brand.category) * markup
+
+    def out_of_home_share(self, cls) -> float:
+        cfg = self.config.restaurants
+        if not cfg.enabled:
+            return 0.0
+        share = cfg.out_of_home_share * cfg.age_factor.get(cls.age_group or "", 1.0)
+        share *= 1 + cfg.income_step * ((cls.income_level or 3) - 3)
+        return max(0.0, min(0.9, share))
 
     def parcel_value(self, parcel: dict[str, int], price: float) -> float:
         """Units of a mixed shipment times price, weighted by each brand's category."""
@@ -244,6 +263,7 @@ class BrandBook:
                 "revenue": self.brand_revenue.get(brand_id, 0.0),
                 "market_share": self.brand_units.get(brand_id, 0) / total_units,
                 "quality": quality, "reputation": brand.reputation,
+                "awareness": self.awareness.get(brand_id, self.config.marketing.start_awareness),
             })
         floor_share = self.cfg.production_share_floor
         owners = {b.owner for b in self.brands.values()}
@@ -301,8 +321,22 @@ class BrandBook:
         geo = getattr(env, "geography", None)
         # Phase 5: a store's catchment (nearby population, falling with distance) scales its appeal.
         catchment = geo.catchment(retailers) if geo is not None else None
-        reference = max(1.0, total_demand / len(retailers))
-        self._serve_group(env, retailers, demand_by_class, requested, sold, capacity, reference, catchment)
+        restaurants = [f for f in retailers if f.channel == "restaurant"]
+        stores = [f for f in retailers if f.channel != "restaurant"] or retailers
+        home_demand = dict(demand_by_class)
+        if restaurants and self.config.restaurants.enabled:
+            # Phase 10: part of each class drinks out of home; unmet guests partly buy in stores.
+            out = {n: round(u * self.out_of_home_share(self.classes[n])) for n, u in demand_by_class.items()}
+            home_demand = {n: u - out[n] for n, u in demand_by_class.items()}
+            bought_before = {n: self.class_stats[n].bought for n in out}
+            reference = max(1.0, sum(out.values()) / len(restaurants))
+            self._serve_group(env, restaurants, out, requested, sold, capacity, reference, catchment)
+            spill = self.config.restaurants.spill_to_stores
+            for n, units in out.items():
+                missing = units - (self.class_stats[n].bought - bought_before[n])
+                home_demand[n] += round(max(0, missing) * spill)
+        reference = max(1.0, sum(home_demand.values()) / len(stores))
+        self._serve_group(env, stores, home_demand, requested, sold, capacity, reference, catchment)
         for name, units in demand_by_class.items():
             self.class_stats[name].demand += units
         return requested, sold, max(0, total_demand - sum(sold.values()))
@@ -324,9 +358,10 @@ class BrandBook:
             carried = set(offered) | {b for b, units in runtime.stock.items() if units > 0}
             for brand_id in sorted(carried):
                 brand = self.brands[brand_id]
-                price = env._market_price(self.retail_price(firm.sell_price, brand))
-                # Price score and willingness to pay compare the price per beer-equivalent.
-                norm = price / self.category_value(brand.category)
+                price = env._market_price(self.retail_price(firm.sell_price, brand, firm))
+                # Price score and willingness to pay compare the price per beer-equivalent
+                # (restaurant guests accept the service markup).
+                norm = price / (self.category_value(brand.category) * self.markup(firm))
                 pairs[(firm.id, brand_id)] = (
                     norm, env._consumer_price_score(norm), quality[brand_id],
                     brand.reputation, firm.reputation, availability, price, brand.category,
@@ -340,6 +375,17 @@ class BrandBook:
                                if trait in brand.traits and (not ages or age in ages))
                     for b, brand in self.brands.items()
                 }
+        # Phase 10: awareness from marketing, stronger for young classes.
+        aware_mult: dict[str | None, tuple[dict[str, float], dict[str, float]]] = {}
+        mk = self.config.marketing
+        if mk.enabled:
+            start = mk.start_awareness
+            for age in {self.classes[n].age_group for n in self.class_names}:
+                sens = mk.age_sensitivity.get(age or "", 1.0)
+                aware_mult[age] = (
+                    {b: 1 + sens * mk.brand_weight * (self.awareness.get(b, start) - 0.5) for b in self.brands},
+                    {f.id: 1 + sens * mk.store_weight * (self.store_awareness.get(f.id, start) - 0.5) for f in retailers},
+                )
         cat_boost: dict[str | None, dict[str, float]] = {}
         if self.categories_on:
             for age in {self.classes[n].age_group for n in self.class_names}:
@@ -360,6 +406,7 @@ class BrandBook:
                 cls = self.classes[name]
                 w = cls.weights
                 mult = trend_mult.get(cls.age_group)
+                aware = aware_mult.get(cls.age_group)
                 scores = {}
                 for key, (price, p_score, q, brand_rep, store_rep, avail, _, cat) in pairs.items():
                     if price > cls.max_price * (1 + slope * (brand_rep - 0.5)):
@@ -368,6 +415,8 @@ class BrandBook:
                              + w.store_reputation * store_rep + w.availability * avail)
                     if mult:
                         score *= mult[key[1]]
+                    if aware:
+                        score *= aware[0][key[1]] * aware[1][key[0]]
                     scores[key] = score * catchment[key[0]] if catchment else score
                 if not self.categories_on:
                     total_score = sum(scores.values())
@@ -452,18 +501,26 @@ class BrandBook:
             if sum(limited.values()) > room:
                 limited = largest_remainder(room, limited)
             runtime: FirmRuntime = env.runtimes[firm_id]
-            sell_price = env.network.firm(firm_id).sell_price
+            store = env.network.firm(firm_id)
+            sell_price = store.sell_price
+            restaurant = store.channel == "restaurant" and self.config.restaurants.enabled
             for key, units in limited.items():
                 if not units:
                     continue
                 brand = self.brands[key[1]]
-                price = env._market_price(self.retail_price(sell_price, brand))
+                price = env._market_price(self.retail_price(sell_price, brand, store))
                 runtime.stock[key[1]] -= units
                 runtime.inventory -= units
                 sold[firm_id] += units
                 value = env._trade_value(units, price)
                 runtime.revenue += value
                 runtime.handling_cost += units * env.config.costs.handling_cost_per_unit * self.value_factor(key[1])
+                if restaurant:
+                    # Service, rent and kitchen grow with what the guests pay.
+                    runtime.handling_cost += value * self.config.restaurants.service_cost_share
+                channel = "restaurant" if restaurant else "store"
+                self.channel_units[channel] += units
+                self.channel_revenue[channel] += value
                 self.brand_units[key[1]] = self.brand_units.get(key[1], 0) + units
                 self.brand_revenue[key[1]] = self.brand_revenue.get(key[1], 0.0) + value
                 served[key] = units

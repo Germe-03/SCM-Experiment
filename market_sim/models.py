@@ -52,6 +52,8 @@ class Firm(NetworkModel):
     region: str | None = None
     extra_regions: list[str] = Field(default_factory=list)
     transport_mode: str = "own"
+    # Phase 10: "store" or "restaurant" (restaurants sit next to stores at the retail tier).
+    channel: str = "store"
 
     @model_validator(mode="after")
     def _capture_initial_economic_anchors(self) -> Self:

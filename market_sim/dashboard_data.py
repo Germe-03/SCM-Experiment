@@ -26,7 +26,7 @@ def build_dashboard_data(
     ]
     identities = [
         {"id": f.id, "name": f.name, "stage": f.stage, "archetype": f.archetype,
-         "category": f.category, "importer": f.importer, "region": f.region,
+         "category": f.category, "importer": f.importer, "region": f.region, "channel": f.channel,
          "entry_year": min((int(e["year"]) for e in result.events
                             if e["firm"] == f.id and e["event"] in ("market_entry", "spin_off")), default=1),
          "exit_year": result.exits.get(f.id)}
@@ -79,6 +79,8 @@ def build_dashboard_data(
         "classes": list(result.class_reports),
         "rnd": list(result.rnd_reports),
         "offence_ledger": list(result.offence_ledger),
+        "holdings": list(result.holdings),
+        "laws": list(result.laws),
         # Yearly decisions only; the monthly order and price averages stay in decisions.csv.
         "decisions": [d for d in result.decisions if d.get("month") is None],
         "exit_analysis": result.exit_analysis,

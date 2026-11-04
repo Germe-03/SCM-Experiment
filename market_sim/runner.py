@@ -14,6 +14,9 @@ from market_sim.region_report import RegionReporter
 from market_sim.longrun import LongRun
 from market_sim.state import StateActor
 from market_sim.research import ResearchLab
+from market_sim.marketing import Marketing
+from market_sim.holdings import Holdings
+from market_sim.laws import LawBook, assess_laws
 from market_sim.config import MarketConfig, MarketEventTypeConfig
 from market_sim.environment import MarketEnvironment, MarketResult
 from market_sim.kpi import ARCHETYPE_DE, REGION_DE, STAGE_DE, chf
@@ -59,6 +62,8 @@ class RunResult:
     class_reports: list[dict[str, object]] = field(default_factory=list)
     rnd_reports: list[dict[str, object]] = field(default_factory=list)
     offence_ledger: list[dict[str, object]] = field(default_factory=list)
+    holdings: list[dict[str, object]] = field(default_factory=list)
+    laws: list[dict[str, object]] = field(default_factory=list)
     decisions: list[dict] = field(default_factory=list)
     region_reports: list[dict] = field(default_factory=list)
     firm_locations: list[dict] = field(default_factory=list)
@@ -153,6 +158,13 @@ class SimulationRunner:
         self._scale_for_categories()
         self.state_actor = StateActor(self, seed) if config.state.enabled else None
         self.lab = ResearchLab(self, seed) if config.research.enabled else None
+        self._restaurant_templates = [f.model_copy(deep=True) for f in self._firms() if f.channel == "restaurant"]
+        self._store_templates = [f.model_copy(deep=True) for f in self._firms()
+                                 if f.stage == "retailer" and f.channel != "restaurant"]
+        # Phase 10: marketing, minority stakes and new laws.
+        self.marketing = Marketing(self) if config.marketing.enabled else None
+        self.holdings = Holdings(self, seed) if config.holdings.enabled else None
+        self.laws = LawBook(self, seed) if config.laws.enabled else None
         self._phase1_rng = random.Random(f"phase1-{seed}")
         self._entry_counters = {stage: 0 for stage in STAGES}
         self._entry_cash = {
@@ -173,6 +185,7 @@ class SimulationRunner:
         """Reset the market and return the empty cross-year loop state."""
         self.env.reset()
         self.env.research = self.lab
+        self.env.marketing = self.marketing
         self.exits = {}
         return RunState(
             daily_series={
@@ -216,6 +229,9 @@ class SimulationRunner:
             exits=dict(self.exits), events=list(state.events),
             brand_reports=list(state.brand_reports), class_reports=list(state.class_reports),
             rnd_reports=list(self.lab.reports) if self.lab is not None else [],
+            holdings=list(self.holdings.history) + self.holdings.snapshot(state.year) if self.holdings is not None else [],
+            laws=assess_laws(self.laws.enacted, [k.model_dump() for k in state.system_kpis], self.config.laws)
+            if self.laws is not None else [],
             offence_ledger=list(self.state_actor.offence_ledger) if self.state_actor is not None else [],
         )
 
@@ -452,6 +468,10 @@ class SimulationRunner:
             self.decision_log.annual(year + 1, firm, strategy)
         if self.state_actor is not None:
             self.state_actor.apply_offences(self)
+        if self.laws is not None:
+            self.laws.apply_yearly(self)
+        if self.marketing is not None:
+            self.marketing.year_start(self)
 
         for day in range(self.config.simulation.days_per_year):
             decisions = {}
@@ -607,6 +627,12 @@ class SimulationRunner:
             self.state_actor.takeovers(self, state)
         if self.lab is not None:
             self.lab.year_end(self, state)
+        if self.marketing is not None:
+            self.marketing.year_end(self, state)
+        if self.holdings is not None:
+            self.holdings.year_end(self, state)
+        if self.laws is not None:
+            self.laws.year_end(self, state)
         for event in state.events[event_start:]:
             if event["event"] in ("expand_started", "site_started", "rnd_started", "strategy_change", "transport_switch"):
                 self.decision_log.record(event["year"], event["firm"], event["event"], event["details"], event["details"])
@@ -614,6 +640,7 @@ class SimulationRunner:
                   "price_index": self.long_run.price_index, "population_index": self.long_run.population_index,
                   "trend": self.long_run.trend, "fx_rate": self.env.fx_rate,
                   **self._geography_kpis(), **self._state_kpis(), **self._research_kpis(),
+                  **self._phase10_kpis(),
                   **self._category_kpis(),
                   "total_profit": sum(s.profit for s in summaries[-1].values())}
         for stage in STAGES:
@@ -624,6 +651,28 @@ class SimulationRunner:
                                          if self.env.runtimes[f.id].active)
             update[f"active_firms_{stage}"] = sum(self.env.runtimes[f.id].active for f in firms)
         system_kpis[-1] = system_kpis[-1].model_copy(update=update)
+
+    def _phase10_kpis(self) -> dict[str, float]:
+        out: dict[str, float] = {}
+        book = self.env.brand_book
+        revenue = sum(book.channel_revenue.values())
+        out["restaurant_revenue_share"] = book.channel_revenue["restaurant"] / revenue if revenue else 0.0
+        out["restaurant_unit_share"] = (book.channel_units["restaurant"] / sum(book.channel_units.values())
+                                        if sum(book.channel_units.values()) else 0.0)
+        book.channel_units = {"store": 0, "restaurant": 0}
+        book.channel_revenue = {"store": 0.0, "restaurant": 0.0}
+        out["active_restaurants"] = sum(1 for f in self.network.firms_in("retailer")
+                                        if f.channel == "restaurant" and self.env.runtimes[f.id].active)
+        if self.marketing is not None:
+            out["marketing_spend"] = self.marketing.stats["marketing_spend"]
+            self.marketing.stats = {"marketing_spend": 0.0}
+        if self.holdings is not None:
+            out.update(self.holdings.stats)
+            out["stakes_held"] = len(self.holdings.stakes)
+            self.holdings.stats = {"dividends": 0.0, "stakes_bought": 0, "stakes_sold": 0}
+        if self.laws is not None:
+            out["laws_enacted"] = len(self.laws.enacted)
+        return out
 
     def _research_kpis(self) -> dict[str, float]:
         lab = self.lab
@@ -703,11 +752,29 @@ class SimulationRunner:
             probability = min(cfg.max_probability, cfg.base_probability
                               + cfg.margin_slope * max(0.0, margin - cfg.margin_threshold))
             capacity_share = cfg.start_capacity_fraction
-            stage_capacity = sum(self.env._effective_capacity(f.id) for f in active)
-            if cfg.shortage_capacity_ratio and stage_capacity < cfg.shortage_capacity_ratio * self.demand.mean:
+            stage_capacity = sum(self.env._effective_capacity(f.id) for f in active if f.channel != "restaurant")
+            needed = self.demand.mean
+            if stage == "retailer" and self.config.restaurants.enabled:
+                # Stores serve the demand at home; restaurant seats do not count for it.
+                needed *= 1 - self.config.restaurants.out_of_home_share
+            if cfg.shortage_capacity_ratio and stage_capacity < cfg.shortage_capacity_ratio * needed:
                 # A starved stage attracts a full-size newcomer.
                 probability, capacity_share = 1.0, 1.0
             book = self.env.brand_book
+            if stage == "factory" and cfg.shortage_capacity_ratio and book.categories_on:
+                # Producers are checked per category: plenty of wine does not replace missing beer.
+                for c, share_c in book.base_share.items():
+                    cap_c = sum(self.env._effective_capacity(f.id) for f in active if f.category == c)
+                    if cap_c < cfg.shortage_capacity_ratio * self.demand.mean * share_c:
+                        probability, capacity_share = 1.0, 1.0
+            want_restaurant = False
+            if stage == "retailer" and self.config.restaurants.enabled:
+                # Phase 10: too few seats for the out-of-home demand bring a new restaurant.
+                seats = sum(self.env._effective_capacity(f.id) for f in active if f.channel == "restaurant")
+                guests = self.demand.mean * self.config.restaurants.out_of_home_share
+                stores_short = cfg.shortage_capacity_ratio and stage_capacity < cfg.shortage_capacity_ratio * needed
+                if seats < max(1.0, cfg.shortage_capacity_ratio) * guests and not stores_short:
+                    probability, capacity_share, want_restaurant = 1.0, 1.0, True
             if stage == "factory" and book is not None and book.categories_on:
                 # A category without any producer gets a new one at once.
                 present = {f.category for f in active}
@@ -716,6 +783,12 @@ class SimulationRunner:
             if roll >= probability or len(active) >= cfg.max_firms_per_stage[stage]:
                 continue
             pool = active
+            if stage == "retailer":
+                restaurants = [f for f in active if f.channel == "restaurant"]
+                if want_restaurant:
+                    pool = restaurants or self._restaurant_templates or active
+                else:
+                    pool = [f for f in active if f.channel != "restaurant"] or self._store_templates or active
             book = self.env.brand_book
             if stage == "factory" and book is not None and book.categories_on:
                 # Phase 6: a new producer enters the category with the least capacity per demand.
@@ -730,7 +803,8 @@ class SimulationRunner:
                 template = template.model_copy(update={"category": category, "importer": False})
             self._entry_counters[stage] += 1
             counter = self._entry_counters[stage]
-            name_key = ("factory_import" if template.importer else f"factory_{template.category}") if stage == "factory" else stage
+            name_key = ("factory_import" if template.importer else f"factory_{template.category}") if stage == "factory" else (
+                "restaurant" if template.channel == "restaurant" else stage)
             names = cfg.names.get(name_key, cfg.names[stage])
             cycle, index = divmod(counter - 1, len(names))
             name = names[index] + (f" {cycle + 1}" if cycle else "")
@@ -1022,7 +1096,7 @@ class SimulationRunner:
                 runtime = self.env.runtimes[firm_id]
                 if bank.enabled and bank.restructuring and runtime.cash < 0:
                     written_off = -runtime.cash
-                    runtime.cash = 0.0
+                    runtime.adjust_cash(written_off)
                     runtime.consecutive_loss_years = 0
                     firm = self.network.firm(firm_id)
                     firm.reputation = self._clamp(firm.reputation - bank.restructuring_reputation_hit)

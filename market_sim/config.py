@@ -558,6 +558,79 @@ class ResearchConfig(ConfigModel):
     preferences: dict[str, list[str]] = Field(default_factory=dict)
 
 
+class MarketingConfig(ConfigModel):
+    """Phase 10: advertising builds awareness of brands and stores, which fades again."""
+
+    enabled: bool = False
+    # Yearly budget as a share of last year's revenue, by archetype.
+    budget_share: dict[str, float] = Field(default_factory=dict)
+    # Awareness gained per real CHF spent (diminishing: 1 - exp(-spend * effect)).
+    effect_per_chf: float = Field(default=1e-8, ge=0)
+    decay_per_year: float = Field(default=0.3, ge=0, le=1)
+    start_awareness: float = Field(default=0.5, ge=0, le=1)
+    brand_weight: float = Field(default=0.4, ge=0)
+    store_weight: float = Field(default=0.3, ge=0)
+    # How strongly each age group reacts to advertising.
+    age_sensitivity: dict[str, float] = Field(default_factory=dict)
+
+
+class RestaurantConfig(ConfigModel):
+    """Phase 10: restaurants and bars as a channel next to the stores."""
+
+    enabled: bool = False
+    # Share of consumption out of home, before age and income adjustments.
+    out_of_home_share: float = Field(default=0.15, ge=0, le=1)
+    age_factor: dict[str, float] = Field(default_factory=dict)
+    income_step: float = Field(default=0.1, ge=0)
+    # Restaurant prices are store prices times this markup; guests accept it.
+    markup: float = Field(default=3.0, gt=0)
+    # Service, rent and kitchen cost as a share of restaurant revenue.
+    service_cost_share: float = Field(default=0.6, ge=0, lt=1)
+    fixed_cost_factor: float = Field(default=1.6, gt=0)
+    # Share of unmet out-of-home demand that buys in a store instead.
+    spill_to_stores: float = Field(default=0.5, ge=0, le=1)
+
+
+class HoldingsConfig(ConfigModel):
+    """Phase 10: minority stakes in other firms instead of full takeovers."""
+
+    enabled: bool = False
+    min_stake: float = Field(default=0.1, gt=0, lt=1)
+    max_stake: float = Field(default=0.49, gt=0, lt=1)
+    buy_probability: float = Field(default=0.3, ge=0, le=1)
+    # Buy only with cash above this multiple of the stake price.
+    cash_cover: float = Field(default=2.0, ge=0)
+    # Value of a firm = profit_multiple x mean profit of the last two years + positive cash.
+    profit_multiple: float = Field(default=4.0, ge=0)
+    payout_ratio: float = Field(default=0.5, ge=0, le=1)
+    sell_after_loss_years: int = Field(default=2, ge=1)
+    # Stakes from this size count for antitrust like own market share.
+    antitrust_stake: float = Field(default=0.25, ge=0, le=1)
+
+
+class LawConfig(ConfigModel):
+    name: str
+    title_de: str
+    kind: Literal["minimum_wage", "excise", "ad_ban", "packaging", "controls", "import_tariff"]
+    probability_per_year: float = Field(ge=0, le=1)
+    earliest_year: int = Field(default=5, ge=1)
+    strength: float = 0.0
+    category: str | None = None
+    # KPIs watched to judge whether the law had a clear effect.
+    watch: list[str] = Field(default_factory=list)
+
+
+class LawsConfig(ConfigModel):
+    """Phase 10: the state passes new laws; firms are not told what they do."""
+
+    enabled: bool = False
+    laws: list[LawConfig] = Field(default_factory=list)
+    min_years_after: int = Field(default=3, ge=1)
+    window_years: int = Field(default=5, ge=1)
+    # An effect counts as clear when it exceeds this many standard deviations of the years before.
+    clear_effect_sigma: float = Field(default=2.0, gt=0)
+
+
 class TrendConfig(ConfigModel):
     name: str
     trait: str
@@ -631,6 +704,10 @@ class MarketConfig(ConfigModel):
     geography: GeographyConfig = Field(default_factory=GeographyConfig)
     state: StateConfig = Field(default_factory=StateConfig)
     research: ResearchConfig = Field(default_factory=ResearchConfig)
+    marketing: MarketingConfig = Field(default_factory=MarketingConfig)
+    restaurants: RestaurantConfig = Field(default_factory=RestaurantConfig)
+    holdings: HoldingsConfig = Field(default_factory=HoldingsConfig)
+    laws: LawsConfig = Field(default_factory=LawsConfig)
 
     @model_validator(mode="after")
     def _validate_stage_prices(self) -> Self:

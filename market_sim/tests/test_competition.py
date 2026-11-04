@@ -59,5 +59,6 @@ def test_real_run_routes_orders_to_both_suppliers_at_each_upstream_tier() -> Non
         for firm_id, runtime in runner.env.runtimes.items()
     }
     for tier in ("wholesaler", "distributor", "factory"):
-        suppliers = network.firms_in(tier)
+        # Firms that entered at the last year end have not received orders yet.
+        suppliers = [firm for firm in network.firms_in(tier) if "_e" not in firm.id and "_s" not in firm.id]
         assert all(total_orders[firm.id] > 0 for firm in suppliers)

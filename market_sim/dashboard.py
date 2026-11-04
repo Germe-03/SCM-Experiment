@@ -132,6 +132,8 @@ td.num,th.num{text-align:right}tbody tr.click{cursor:pointer}tbody tr.click:hove
   <div class="card"><h3>Wechselkurs und Export</h3><div class="chart"><canvas id="mk-fx"></canvas></div></div>
   <div class="card"><h3>Kunden ohne Kauf (letztes Jahr)</h3><p class="hint">Anteil der Nachfrage, die keinen passenden Preis fand. Zeilen: Einkommen, Spalten: Alter.</p><div id="mk-heat"></div></div>
   <div class="card"><h3>Bezahlter Preis pro Einkommen (letztes Jahr)</h3><div class="chart"><canvas id="mk-price"></canvas></div></div>
+  <div class="card"><h3>Gastronomie und Läden</h3><p class="hint">Anteil der Restaurants und Bars an Menge und Umsatz.</p><div class="chart"><canvas id="mk-channel"></canvas></div></div>
+  <div class="card"><h3>Marketing und Bekanntheit</h3><p class="hint">Ausgaben aller Firmen und Bekanntheit der vier bekanntesten Marken.</p><div class="chart"><canvas id="mk-marketing"></canvas></div></div>
   <div class="card wide"><h3>Trends</h3><ul class="list" id="mk-trends"></ul></div>
  </div>
 </section>
@@ -196,6 +198,8 @@ td.num,th.num{text-align:right}tbody tr.click{cursor:pointer}tbody tr.click:hove
   <div class="card"><h3>Nettozinsen pro Stufe</h3><div class="chart"><canvas id="fi-interest"></canvas></div></div>
   <div class="card"><h3>Eintritte, Konkurse, Strategiewechsel</h3><div class="chart"><canvas id="fi-churn"></canvas></div></div>
   <div class="card"><h3>Konzentration (HHI der Händler)</h3><div class="chart"><canvas id="fi-hhi"></canvas></div></div>
+  <div class="card"><h3>Beteiligungen und Dividenden</h3><div class="chart"><canvas id="fi-stakes"></canvas></div></div>
+  <div class="card"><h3>Wer hält was (Ende des Zeitraums)</h3><div class="table-wrap"><table id="fi-holdings"></table></div></div>
  </div>
 </section>
 <section role="tabpanel" id="tab-state">
@@ -206,6 +210,7 @@ td.num,th.num{text-align:right}tbody tr.click{cursor:pointer}tbody tr.click:hove
   <div class="card"><h3>Steuern und Bussen</h3><div class="chart"><canvas id="st-money"></canvas></div></div>
   <div class="card"><h3>Vergiftungen und Angst</h3><div class="chart"><canvas id="st-fear"></canvas></div></div>
   <div class="card"><h3>Übernahmen und Wettbewerbsaufsicht</h3><div class="chart"><canvas id="st-tko"></canvas></div></div>
+  <div class="card wide"><h3>Gesetze</h3><p class="hint">Eine Folge wird erst gezeigt, wenn sie nach mindestens drei Jahren deutlich grösser ist als die normale Schwankung vor dem Gesetz.</p><div class="table-wrap"><table id="st-laws"></table></div></div>
   <div class="card wide"><h3>Urteile und Eingriffe</h3><div class="table-wrap"><table id="st-table"></table></div></div>
  </div>
 </section>
@@ -234,14 +239,15 @@ const STAGE={retailer:'Detailhandel',wholesaler:'Grosshandel',distributor:'Verte
 const STAGES=Object.keys(STAGE);
 const CAT={beer:'Bier',wine:'Wein',spirits:'Spirituosen'};
 const ARCH={low_cost:'Discount',standard:'Standard',premium:'Premium',reliable:'Zuverlässig',growth:'Wachstum'};
-const EVENT={bankruptcy:'Konkurs',market_entry:'Markteintritt',strategy_change:'Strategiewechsel',price_increase:'Preiserhöhung',price_cut:'Preissenkung',supplier_switch:'Lieferantenwechsel',capacity_limit:'Kapazitätsgrenze',heat_summer:'Hitzesommer',harvest_failure:'Ernteausfall',recall:'Rückruf',recession:'Rezession',raw_material_shortage:'Rohstoffknappheit',cost_shock:'Kostenschock',wage_push:'Lohnschub',inflation:'Teuerung',trend_change:'Trendwechsel',restructuring:'Sanierung',transport_switch:'Transportwechsel',expand_started:'Ausbau begonnen',expand_finished:'Ausbau fertig',site_started:'Standort begonnen',site_finished:'Neuer Standort',offence_detected:'Straftat entdeckt',poisoning:'Vergiftung',takeover:'Übernahme',takeover_blocked:'Übernahme verboten',breakup:'Zerschlagung',spin_off:'Abspaltung',rnd_started:'F&E-Projekt gestartet',rnd_success:'F&E-Erfolg',rnd_failure:'F&E-Fehlschlag'};
+const EVENT={law_enacted:'Neues Gesetz',stake_bought:'Beteiligung gekauft',stake_sold:'Beteiligung verkauft',stake_lost:'Beteiligung verloren',bankruptcy:'Konkurs',market_entry:'Markteintritt',strategy_change:'Strategiewechsel',price_increase:'Preiserhöhung',price_cut:'Preissenkung',supplier_switch:'Lieferantenwechsel',capacity_limit:'Kapazitätsgrenze',heat_summer:'Hitzesommer',harvest_failure:'Ernteausfall',recall:'Rückruf',recession:'Rezession',raw_material_shortage:'Rohstoffknappheit',cost_shock:'Kostenschock',wage_push:'Lohnschub',inflation:'Teuerung',trend_change:'Trendwechsel',restructuring:'Sanierung',transport_switch:'Transportwechsel',expand_started:'Ausbau begonnen',expand_finished:'Ausbau fertig',site_started:'Standort begonnen',site_finished:'Neuer Standort',offence_detected:'Straftat entdeckt',poisoning:'Vergiftung',takeover:'Übernahme',takeover_blocked:'Übernahme verboten',breakup:'Zerschlagung',spin_off:'Abspaltung',rnd_started:'F&E-Projekt gestartet',rnd_success:'F&E-Erfolg',rnd_failure:'F&E-Fehlschlag'};
 const TREND={none:'kein Trend',craft_welle:'Craft-Welle',alkoholfrei:'Alkoholfrei',sparwelle:'Sparwelle',tradition:'Tradition',wein_boom:'Wein-Boom'};
 const trendText=d=>String(d).split(/->|→/).map(x=>TREND[x.trim()]||x.trim()).join(' → ');
 const REGION={genfersee:'Genferseeregion',bern:'Bern',jura_freiburg:'Jura/Freiburg/Neuenburg',nordwestschweiz:'Nordwestschweiz',zuerich:'Zürich',ostschweiz:'Ostschweiz',zentralschweiz:'Zentralschweiz',tessin:'Tessin'};
 // Firm ids and region keys in event texts become readable names.
 const pretty=t=>String(t??'').replace(/[a-z]+(?:_[a-z0-9]+)*/g,m=>D.firms[m]?.name||REGION[m]||m);
-const KEY_EVENTS=new Set(['trend_change','recession','raw_material_shortage','cost_shock','poisoning','breakup','wage_push']);
+const KEY_EVENTS=new Set(['law_enacted','trend_change','recession','raw_material_shortage','cost_shock','poisoning','breakup','wage_push']);
 const firm=id=>D.firms[id],fname=id=>firm(id)?.name||id||'Markt';
+const stageLabel=f=>f?.channel==='restaurant'?'Gastronomie':STAGE[f?.stage]||'';
 const nf=(v,d=0)=>v==null||isNaN(v)?'—':new Intl.NumberFormat('de-CH',{maximumFractionDigits:d}).format(v);
 const pct=v=>v==null||isNaN(v)?'—':new Intl.NumberFormat('de-CH',{style:'percent',maximumFractionDigits:1}).format(v);
 const chf=v=>{if(v==null||isNaN(v))return'—';const a=Math.abs(v);return a>=1e9?nf(v/1e9,2)+' Mrd. CHF':a>=1e6?nf(v/1e6,1)+' Mio. CHF':nf(v)+' CHF'};
@@ -328,7 +334,12 @@ function renderOverview(){const s=sys(),first=s[0],last=s.at(-1);const e=evs();
  $('#ov-events').innerHTML=key.length?key.map(x=>`<li><span class="yr">Jahr ${x.year}</span><span><b>${esc(EVENT[x.event]||x.event)}</b>${x.firm?' · '+esc(fname(x.firm)):''} <span class="badge">${esc(x.event==='trend_change'?trendText(x.details):pretty(x.details))}</span></span></li>`).join(''):'<li>Im gewählten Zeitraum gab es keine grossen Ereignisse.</li>'}
 
 // --- Markt & Kunden ------------------------------------------------------
-function renderMarket(){const rows=(D.brands||[]).filter(r=>inRange(r.year));const yrs=[...new Set(rows.map(r=>r.year))];
+function renderPhase10Market(){lines('mk-channel',[{label:'Anteil Menge',get:x=>x.restaurant_unit_share},{label:'Anteil Umsatz',get:x=>x.restaurant_revenue_share}],{fmt:'pct'});
+ const rows=(D.brands||[]).filter(r=>inRange(r.year)&&r.awareness!=null);const s=sys();if(!rows.length)return;const last=Math.max(...rows.map(r=>r.year));
+ const top=rows.filter(r=>r.year===last).sort((a,b)=>b.awareness-a.awareness).slice(0,4);const yrs=s.map(x=>x.year);
+ chart('mk-marketing',{type:'bar',data:{labels:yrs,datasets:[{label:'Marketing',data:s.map(x=>x.marketing_spend),backgroundColor:pal()[3]+'88',yAxisID:'y',order:2},...top.map((t,i)=>({type:'line',label:t.name,data:yrs.map(y=>(rows.find(r=>r.year===y&&r.brand===t.brand)||{}).awareness??null),borderColor:pal()[i],pointRadius:0,yAxisID:'y2',order:1}))]},
+  options:{scales:{x:{grid:{display:false}},y:fmtAxis('chf'),y2:{position:'right',min:0,max:1,grid:{display:false},...fmtAxis('pct')}}}})}
+function renderMarket(){renderPhase10Market();const rows=(D.brands||[]).filter(r=>inRange(r.year));const yrs=[...new Set(rows.map(r=>r.year))];
  if(rows.length){const last=yrs.at(-1);const top=rows.filter(r=>r.year===last).sort((a,b)=>b.market_share-a.market_share).slice(0,8).map(r=>r.brand);const nm=id=>rows.find(r=>r.brand===id).name;
   const val=(y,id,k)=>(rows.find(r=>r.year===y&&r.brand===id)||{})[k]??null;
   const shareSets=top.map((id,i)=>({label:nm(id),data:yrs.map(y=>val(y,id,'market_share')),borderColor:pal()[i],backgroundColor:pal()[i]+'55',fill:'stack',pointRadius:0}));
@@ -358,7 +369,7 @@ function renderFirms(){
  let ids=Object.keys(D.firms).filter(id=>{const f=firm(id);return S.fmStage.has(f.stage)&&(S.fmStatus==='all'||(S.fmStatus==='active')===!f.exit_year)&&(!q||f.name.toLowerCase().includes(q)||id.includes(q))});
  const val=(id,k)=>{const f=firm(id),y=f.yearly.filter(r=>inRange(r.year)),l=y.at(-1)||{};return{name:f.name,stage:STAGES.indexOf(f.stage),category:f.category,region:f.region||'',arch:l.archetype||f.archetype,profit:firmProfit(id),cash:l.cash,share:l.market_share,status:f.exit_year||0}[k]};
  const [sk,sd]=S.fmSort;ids.sort((a,b)=>{const x=val(a,sk),y=val(b,sk);return(x>y?1:x<y?-1:0)*sd});
- $('#fm-table').innerHTML=`<thead><tr>${cols.map(([k,l,n])=>`<th class="sort ${n?'num':''} ${sk===k?(sd>0?'asc':'desc'):''}" data-k="${k}" tabindex="0">${l}</th>`).join('')}</tr></thead><tbody>${ids.length?ids.map(id=>{const f=firm(id);return`<tr class="click ${S.fmFirm===id?'current':''}" data-firm="${esc(id)}"><td><span class="dot" style="background:${stageColor()[f.stage]}"></span>${esc(f.name)}</td><td>${STAGE[f.stage]}</td><td>${esc(CAT[f.category]||f.category)}${f.importer?' (Import)':''}</td><td>${esc(REGION[f.region]||f.region||'—')}</td><td>${esc(ARCH[val(id,'arch')]||val(id,'arch'))}</td><td class="num">${chf(val(id,'profit'))}</td><td class="num">${chf(val(id,'cash'))}</td><td class="num">${pct(val(id,'share'))}</td><td>${status(f)}</td></tr>`}).join(''):`<tr><td colspan="9">${empty('Keine Firma passt zu Suche und Filter. Entferne einen Filter oder ändere die Suche.')}</td></tr>`}</tbody>`;
+ $('#fm-table').innerHTML=`<thead><tr>${cols.map(([k,l,n])=>`<th class="sort ${n?'num':''} ${sk===k?(sd>0?'asc':'desc'):''}" data-k="${k}" tabindex="0">${l}</th>`).join('')}</tr></thead><tbody>${ids.length?ids.map(id=>{const f=firm(id);return`<tr class="click ${S.fmFirm===id?'current':''}" data-firm="${esc(id)}"><td><span class="dot" style="background:${stageColor()[f.stage]}"></span>${esc(f.name)}</td><td>${stageLabel(f)}</td><td>${esc(CAT[f.category]||f.category)}${f.importer?' (Import)':''}</td><td>${esc(REGION[f.region]||f.region||'—')}</td><td>${esc(ARCH[val(id,'arch')]||val(id,'arch'))}</td><td class="num">${chf(val(id,'profit'))}</td><td class="num">${chf(val(id,'cash'))}</td><td class="num">${pct(val(id,'share'))}</td><td>${status(f)}</td></tr>`}).join(''):`<tr><td colspan="9">${empty('Keine Firma passt zu Suche und Filter. Entferne einen Filter oder ändere die Suche.')}</td></tr>`}</tbody>`;
  $$('#fm-table th.sort').forEach(th=>{const go=()=>{const k=th.dataset.k;S.fmSort=[k,S.fmSort[0]===k?-S.fmSort[1]:(['name','stage','category','region','arch'].includes(k)?1:-1)];renderFirms()};th.onclick=go;th.onkeydown=e=>{if(e.key==='Enter')go()}});
  $$('#fm-table tr[data-firm]').forEach(r=>{r.tabIndex=0;const go=()=>{S.fmFirm=r.dataset.firm;renderFirms();$('#fm-detail').scrollIntoView({block:'start'})};r.onclick=go;r.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();go()}}});
  renderFirmDetail()}
@@ -394,7 +405,7 @@ function renderExit(id){const box=$('#fd-exit'),a=(D.exit_analysis||{})[id];if(!
 function renderFirmDetail(){const root=$('#fm-detail');destroy();if(S.tab!=='firms')return;const id=S.fmFirm;
  if(!id||!firm(id)){root.innerHTML=empty('Wähle oben eine Firma, um ihre Entwicklung zu sehen.');return}
  const f=firm(id),y=f.yearly.filter(r=>inRange(r.year)),l=y.at(-1)||{};const inCmp=(S.cmp||[]).includes(id);
- root.innerHTML=`<div class="card"><div class="detail-head"><h2>${esc(f.name)}</h2><span class="badge">${STAGE[f.stage]}</span><span class="badge">${esc(CAT[f.category]||f.category)}${f.importer?' · Import':''}</span><span class="badge">${esc(REGION[f.region]||f.region||'')}</span>${status(f)}<button class="btn ${inCmp?'':'primary'}" id="fd-cmp" style="margin-left:auto">${inCmp?'Aus Vergleich entfernen':'Zum Vergleich hinzufügen'}</button></div>
+ root.innerHTML=`<div class="card"><div class="detail-head"><h2>${esc(f.name)}</h2><span class="badge">${stageLabel(f)}</span><span class="badge">${esc(CAT[f.category]||f.category)}${f.importer?' · Import':''}</span><span class="badge">${esc(REGION[f.region]||f.region||'')}</span>${status(f)}<button class="btn ${inCmp?'':'primary'}" id="fd-cmp" style="margin-left:auto">${inCmp?'Aus Vergleich entfernen':'Zum Vergleich hinzufügen'}</button></div>
  <div class="kpis">${kpi('Gewinn im Zeitraum',chf(firmProfit(id)))}${kpi('Cash am Ende',chf(l.cash))}${kpi('Reputation',pct(l.reputation))}${kpi('Qualität',pct(l.average_quality))}${kpi('Auslastung',pct(l.capacity_utilization))}${kpi('Marktanteil',pct(l.market_share))}${kpi('Lieferquote',pct(l.service_level))}</div>
  <div class="grid"><div class="card wide"><h3>Umsatz und Kosten pro Jahr</h3><p class="hint">Fahre über die Kostensäule, um die Kostenarten zu sehen.</p><div class="chart"><canvas id="fd-cost"></canvas></div></div>
  <div class="card"><h3>Cash (Wochenschnitt)</h3><div class="chart"><canvas id="fd-cash"></canvas></div></div><div class="card"><h3>Lager und Rückstand (Wochenschnitt)</h3><div class="chart"><canvas id="fd-stock"></canvas></div></div>
@@ -465,11 +476,17 @@ function renderChain(){lines('ch-margin',byStage('margin_'),{fmt:'pct'});lines('
  lines('ch-transport',[{label:'Transportkosten',get:x=>x.transport_cost,fmt:'chf'},{label:'Treibstoffindex',get:x=>x.fuel_index,axis:'y2'}],{fmt:'chf'});
  lines('ch-service',[{label:'Firmen mit Transportdienst',get:x=>x.firms_using_service},{label:'Schäden (Einheiten)',get:x=>x.damaged_units,axis:'y2'}]);
  const s=sys();chart('ch-build',{type:'bar',data:{labels:s.map(x=>x.year),datasets:[{label:'Ausbauten',data:s.map(x=>x.expansions),backgroundColor:pal()[0]+'bb'},{label:'Neue Standorte',data:s.map(x=>x.new_sites),backgroundColor:pal()[2]+'bb'}]},options:{scales:{x:{stacked:true,grid:{display:false}},y:{stacked:true}}}})}
-function renderFinance(){lines('fi-negative',byStage('negative_interest_','chf'),{fmt:'chf'});lines('fi-debt',byStage('debt_','chf'),{fmt:'chf'});lines('fi-interest',byStage('interest_cost_','chf'),{fmt:'chf'});
+function renderHoldings(){lines('fi-stakes',[{label:'Gehaltene Beteiligungen',get:x=>x.stakes_held},{label:'Dividenden',get:x=>x.dividends,axis:'y2',fmt:'chf'}]);
+ const end=(D.holdings||[]).filter(h=>h.action==null&&h.year===Math.max(...(D.holdings||[]).filter(x=>x.action==null).map(x=>x.year),0));
+ $('#fi-holdings').innerHTML='<thead><tr><th>Eigentümer</th><th>Beteiligung an</th><th class="num">Anteil</th><th class="num">Dividenden</th></tr></thead><tbody>'+(end.length?end.sort((a,b)=>b.share-a.share).map(h=>`<tr class="click" data-firm="${esc(h.owner)}"><td>${esc(fname(h.owner))}</td><td>${esc(fname(h.target))}</td><td class="num">${pct(h.share)}</td><td class="num">${chf(h.dividends)}</td></tr>`).join(''):`<tr><td colspan="4">${empty('Am Ende des Laufs hält keine Firma Anteile an einer anderen.')}</td></tr>`)+'</tbody>';wireFirmLinks($('#fi-holdings'))}
+function renderFinance(){renderHoldings();lines('fi-negative',byStage('negative_interest_','chf'),{fmt:'chf'});lines('fi-debt',byStage('debt_','chf'),{fmt:'chf'});lines('fi-interest',byStage('interest_cost_','chf'),{fmt:'chf'});
  const s=sys(),restr=y=>D.events.filter(e=>e.year===y&&e.event==='restructuring').length;
  chart('fi-churn',{type:'bar',data:{labels:s.map(x=>x.year),datasets:[{label:'Eintritte',data:s.map(x=>x.market_entries),backgroundColor:pal()[0]+'bb'},{label:'Konkurse',data:s.map(x=>x.bankruptcies),backgroundColor:css('--bad')+'bb'},{label:'Sanierungen',data:s.map(x=>restr(x.year)),backgroundColor:pal()[3]+'bb'},{type:'line',label:'Strategiewechsel',data:s.map(x=>x.strategy_changes),borderColor:pal()[4],pointRadius:0}]},options:{scales:{x:{grid:{display:false}}}}});
  lines('fi-hhi',[{label:'HHI',get:x=>x.market_concentration}])}
-function renderState(){$('#st-ledger').innerHTML=ledgerHtml();const s=sys();$('#st-kpis').innerHTML=[kpi('Steuern',chf(sumBy(s,'taxes')),'im Zeitraum'),kpi('Straftaten',nf(sumBy(s,'offences')),nf(sumBy(s,'offences_detected'))+' entdeckt'),kpi('Bussen',chf(sumBy(s,'fines'))),kpi('Vergiftungen',nf(sumBy(s,'poisonings'))),kpi('Übernahmen',nf(sumBy(s,'takeovers')),nf(sumBy(s,'takeovers_blocked'))+' verboten'),kpi('Zerschlagungen',nf(sumBy(s,'breakups')))].join('');
+function renderLaws(){const laws=(D.laws||[]).filter(l=>l.year<=range.to);
+ const badge=v=>v==='Folge erkennbar'?'<span class="badge ok">Folge erkennbar</span>':v==='keine klare Folge erkennbar'?'<span class="badge">keine klare Folge erkennbar</span>':'<span class="badge">Folgen noch unklar</span>';
+ $('#st-laws').innerHTML='<thead><tr><th class="num">Jahr</th><th>Gesetz</th><th>Beurteilung</th><th>Was sich verändert hat</th></tr></thead><tbody>'+(laws.length?laws.map(l=>`<tr><td class="num">${l.year}</td><td>${esc(l.title_de)}</td><td>${badge(l.verdict)}<br><small>${l.years_observed} Jahre beobachtet</small></td><td>${l.findings.length?l.findings.map(f=>`${esc(f.label_de)}: ${['offences','offences_detected'].includes(f.metric)?nf(f.before,1)+' → '+nf(f.after,1):pct(f.before)+' → '+pct(f.after)}`).join('<br>'):'—'}</td></tr>`).join(''):`<tr><td colspan="4">${empty('Bis zu diesem Jahr wurde kein neues Gesetz erlassen.')}</td></tr>`)+'</tbody>'}
+function renderState(){renderLaws();$('#st-ledger').innerHTML=ledgerHtml();const s=sys();$('#st-kpis').innerHTML=[kpi('Steuern',chf(sumBy(s,'taxes')),'im Zeitraum'),kpi('Straftaten',nf(sumBy(s,'offences')),nf(sumBy(s,'offences_detected'))+' entdeckt'),kpi('Bussen',chf(sumBy(s,'fines'))),kpi('Vergiftungen',nf(sumBy(s,'poisonings'))),kpi('Übernahmen',nf(sumBy(s,'takeovers')),nf(sumBy(s,'takeovers_blocked'))+' verboten'),kpi('Zerschlagungen',nf(sumBy(s,'breakups')))].join('');
  chart('st-off',{type:'bar',data:{labels:s.map(x=>x.year),datasets:[{label:'Begangen',data:s.map(x=>x.offences),backgroundColor:pal()[3]+'99'},{label:'Entdeckt',data:s.map(x=>x.offences_detected),backgroundColor:css('--bad')+'cc'}]},options:{scales:{x:{grid:{display:false}}}}});
  lines('st-money',[{label:'Steuern',get:x=>x.taxes},{label:'Bussen',get:x=>x.fines}],{fmt:'chf'});
  chart('st-fear',{type:'bar',data:{labels:s.map(x=>x.year),datasets:[{label:'Vergiftungen',data:s.map(x=>x.poisonings),backgroundColor:css('--bad')+'cc',yAxisID:'y'},{type:'line',label:'Angst (Nachfrageminus)',data:s.map(x=>x.fear),borderColor:pal()[4],pointRadius:0,yAxisID:'y2'}]},options:{scales:{x:{grid:{display:false}},y:{ticks:{precision:0}},y2:{position:'right',grid:{display:false},...fmtAxis('pct')}}}});
