@@ -19,9 +19,11 @@ def test_pools_follow_population_and_hiring_is_limited_by_free_workers():
     assert labor.pool[big] > labor.pool[small]
     for region in labor.pool:
         labor.pool[region] = 0.0001  # no free workers anywhere
-    before = {f.id: f.employees for f in runner._firms()}
+    active = [f for f in runner._firms() if runner.env.runtimes[f.id].active]
+    before = sum(f.employees for f in active)
     labor.year_start(runner)
-    assert all(f.employees <= before[f.id] for f in runner._firms() if f.id in before)
+    # Poaching may move staff between firms, but nobody new is hired.
+    assert sum(f.employees for f in active) <= before
     assert labor.stats["hires"] == 0
 
 
