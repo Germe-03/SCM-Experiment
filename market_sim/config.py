@@ -669,6 +669,24 @@ class RestaurantConfig(ConfigModel):
     loyal_share: float = Field(default=0.5, ge=0, le=1)
 
 
+class StockMarketConfig(ConfigModel):
+    enabled: bool = False
+    # Phase 17: all active firms trade from this simulation year on (IPO via a bank is a TODO).
+    tradable_from_year: int = Field(default=5, ge=1)
+    shares_per_firm: int = Field(default=1_000_000, gt=0)
+    base_multiple: float = Field(default=8.0, gt=0)
+    rate_sensitivity: float = Field(default=10.0, ge=0)
+    min_multiple: float = Field(default=3.0, gt=0)
+    max_multiple: float = Field(default=15.0, gt=0)
+    reversion: float = Field(default=0.01, ge=0, le=1)
+    volatility: float = Field(default=0.015, ge=0)
+    revalue_days: int = Field(default=91, ge=1)
+    event_shocks: dict[str, float] = Field(default_factory=lambda: {
+        "poisoning": -0.5, "firm_recall": -0.15, "recall": -0.15, "offence_detected": -0.1,
+        "rnd_success": 0.1, "restructuring": -0.3})
+    index_base: float = Field(default=1000.0, gt=0)
+
+
 class HoldingsConfig(ConfigModel):
     """Phase 10: minority stakes in other firms instead of full takeovers."""
 
@@ -814,6 +832,7 @@ class MarketConfig(ConfigModel):
     marketing: MarketingConfig = Field(default_factory=MarketingConfig)
     restaurants: RestaurantConfig = Field(default_factory=RestaurantConfig)
     holdings: HoldingsConfig = Field(default_factory=HoldingsConfig)
+    stock_market: StockMarketConfig = Field(default_factory=StockMarketConfig)
     laws: LawsConfig = Field(default_factory=LawsConfig)
     labor: LaborConfig = Field(default_factory=LaborConfig)
     ollama: OllamaConfig = Field(default_factory=OllamaConfig)

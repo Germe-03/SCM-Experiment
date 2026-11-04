@@ -16,6 +16,7 @@ from market_sim.state import StateActor
 from market_sim.research import ResearchLab
 from market_sim.marketing import Marketing
 from market_sim.holdings import Holdings
+from market_sim.stock_market import StockMarket
 from market_sim.laws import LawBook, assess_laws
 from market_sim.labor import LaborMarket
 from market_sim.config import MarketConfig, MarketEventTypeConfig
@@ -55,6 +56,7 @@ class RunResult:
     annual_reports: list[dict[str, AnnualReport]]
     system_kpis: list[SystemKPIs]
     bank_history: list[BankAnnualReport] = field(default_factory=list)
+    stock_daily: list[dict[str, float]] = field(default_factory=list)
     daily_series: dict[str, dict[str, list[float]]] = field(default_factory=dict)
     days_total: int = 0
     financial_breakdown: dict[str, list[dict[str, float]]] = field(default_factory=dict)
@@ -167,6 +169,7 @@ class SimulationRunner:
         # Phase 10: marketing, minority stakes and new laws.
         self.marketing = Marketing(self) if config.marketing.enabled else None
         self.holdings = Holdings(self, seed) if config.holdings.enabled else None
+        self.stock_market = StockMarket(self, seed) if config.stock_market.enabled else None
         self.laws = LawBook(self, seed) if config.laws.enabled else None
         self.labor = LaborMarket(self) if config.labor.enabled else None
         self._phase1_rng = random.Random(f"phase1-{seed}")
@@ -229,6 +232,7 @@ class SimulationRunner:
             final_result=self.env.get_result(), annual_reports=state.annual_reports,
             system_kpis=state.system_kpis,
             bank_history=list(state.bank_history),
+            stock_daily=list(self.stock_market.daily_rows) if self.stock_market is not None else [],
             daily_series=state.daily_series, days_total=state.global_day,
             financial_breakdown=state.financial_breakdown,
             exits=dict(self.exits), events=list(state.events),
@@ -517,6 +521,8 @@ class SimulationRunner:
                 total_demand = max(0, round(total_demand * self.env.central_bank.demand_multiplier))
             _, info = self.env.step(total_demand, {key: value.order_qty for key, value in decisions.items()})
             self.region_reporter.daily(self)
+            if self.stock_market is not None:
+                self.stock_market.daily(self, state, year + 1, day, global_day)
             demand_series.append(total_demand)
             factory_order_series.append(sum(
                 decisions[f.id].order_qty for f in self.network.firms_in("factory")
@@ -675,6 +681,8 @@ class SimulationRunner:
                 "bank_equity": sum(b.equity for b in banking.banks.values()),
                 "credit_rejections": sum(b.credit_rejections for b in state.bank_history if b.year == state.year),
             })
+        if self.stock_market is not None and self.stock_market.listed:
+            system_kpis[-1] = system_kpis[-1].model_copy(update=self.stock_market.year_end_stats())
         # Taxes, fines, dividends and takeovers are booked after the accounts close: count them in this year.
         for firm in self._firms():
             if not financial_breakdown.get(firm.id):

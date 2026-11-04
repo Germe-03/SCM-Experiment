@@ -143,6 +143,23 @@ def write_outputs(result: RunResult, out_dir: str | Path) -> list[Path]:
             writer.writeheader()
             writer.writerows(report.model_dump() for report in result.bank_history)
         paths.append(bank_path)
+    if result.stock_daily:
+        # Daily prices wide (one column per firm), weekly closes long for the dashboard.
+        daily_path, weekly_path = directory / "stock_daily.csv", directory / "stock_weekly.csv"
+        fields = list(dict.fromkeys(key for row in result.stock_daily for key in row))
+        with daily_path.open("w", newline="", encoding="utf-8") as output:
+            writer = csv.DictWriter(output, fieldnames=fields)
+            writer.writeheader()
+            writer.writerows(result.stock_daily)
+        weekly = [row for i, row in enumerate(result.stock_daily) if i % 7 == 6 or i == len(result.stock_daily) - 1]
+        with weekly_path.open("w", newline="", encoding="utf-8") as output:
+            writer = csv.DictWriter(output, fieldnames=["global_day", "year", "day", "firm", "price"])
+            writer.writeheader()
+            for row in weekly:
+                writer.writerows({"global_day": row["global_day"], "year": row["year"], "day": row["day"],
+                                  "firm": "INDEX" if key == "index" else key, "price": value}
+                                 for key, value in row.items() if key not in ("global_day", "year", "day"))
+        paths += [daily_path, weekly_path]
     # Phase 2: brand and consumer-class reports exist only in the classes model.
     for name, rows in (("brand_report.csv", result.brand_reports), ("class_report.csv", result.class_reports),
                        ("rnd_projects.csv", result.rnd_reports)):

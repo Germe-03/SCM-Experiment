@@ -77,6 +77,22 @@ banking:
   entry_names: [Zürcher Privatbank, Gotthard Bank, Rhein Bank, Léman Banque]
   entry_margin: 0.02
 
+# Phase 17: Börse. Ab Jahr 5 sind alle aktiven Firmen handelbar (Börsengang über eine Bank ist ein TODO).
+stock_market:
+  enabled: true
+  tradable_from_year: 5
+  shares_per_firm: 1000000
+  # Kurs = (Gewinn x Faktor + Kasse) x Stimmung; höherer Leitzins senkt den Faktor.
+  base_multiple: 8.0
+  rate_sensitivity: 10.0
+  min_multiple: 3.0
+  max_multiple: 15.0
+  reversion: 0.01
+  volatility: 0.015
+  revalue_days: 91
+  event_shocks: {poisoning: -0.5, firm_recall: -0.15, recall: -0.15, offence_detected: -0.1, rnd_success: 0.1, restructuring: -0.3}
+  index_base: 1000.0
+
 bank:
   loan_margin: 0.02
   deposit_spread: 0.005

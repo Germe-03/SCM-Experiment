@@ -75,6 +75,9 @@ class SystemKPIs(BaseModel):
     bank_equity: float = 0.0
     # Year-end policy rate for the following year; gap is a model indicator, not GDP.
     policy_rate: float | None = None
+    stock_index: float = 0.0
+    market_cap: float = 0.0
+    listed_firms: int = 0
     inflation: float = 0.0
     output_gap: float | None = None
     hhi_wholesaler: float = 0.0
