@@ -238,7 +238,7 @@ td.num,th.num{text-align:right}tbody tr.click{cursor:pointer}tbody tr.click:hove
 </section>
 </main>
 <button id="chat-open" class="btn primary" aria-haspopup="dialog" aria-controls="chat" style="position:fixed;right:20px;bottom:20px;border-radius:999px;padding:12px 18px;box-shadow:var(--shadow);z-index:20">💬 Fragen</button>
-<div id="chat" role="dialog" aria-label="Fragen an die Daten" hidden style="position:fixed;right:20px;bottom:76px;width:min(380px,calc(100vw - 40px));max-height:70vh;display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:0 8px 30px #0003;z-index:21">
+<div id="chat" role="dialog" aria-label="Fragen an die Daten" hidden style="position:fixed;right:20px;bottom:76px;width:min(380px,calc(100vw - 40px));max-height:70vh;display:none;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:0 8px 30px #0003;z-index:21">
  <div style="display:flex;align-items:center;padding:12px 14px;border-bottom:1px solid var(--line)"><b>Fragen an die Daten</b><button class="btn" id="chat-close" aria-label="Chat schliessen" style="margin-left:auto">✕</button></div>
  <div id="chat-log" aria-live="polite" style="padding:12px 14px;overflow:auto;flex:1;display:grid;gap:10px"><div class="hint">Frag zum Beispiel: «Warum ging Rigi Markt Konkurs?» oder «Was passierte in Jahr 20?». Die Antworten kommen vom lokalen Modell und stützen sich nur auf die Daten dieses Laufs.</div></div>
  <form id="chat-form" style="display:flex;gap:8px;padding:12px 14px;border-top:1px solid var(--line)"><input id="chat-input" type="text" placeholder="Deine Frage …" aria-label="Deine Frage" style="flex:1;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 10px" maxlength="500"><button class="btn primary" id="chat-send">Senden</button></form>
@@ -576,7 +576,7 @@ function renderChronicle(){const c=(D.texts||{}).chronicle||{};const yrs=Object.
  $('#ch-list').innerHTML=yrs.length?yrs.map(y=>`<div class="card" style="margin-bottom:12px"><h3>Jahr ${y} ${c[y].checked?'<span class="badge ok">Zahlen geprüft</span>':'<span class="badge">Kurzfassung aus den Fakten</span>'}</h3><p style="margin:0">${esc(pretty(c[y].text))}</p></div>`).join(''):empty('Noch keine Chronik. Erzeuge sie mit: python -m market_sim.dashboard --texts (dauert je nach Rechner eine halbe Stunde oder länger).')}
 // Chat with the local model through python -m market_sim.serve.
 (function(){const box=$('#chat'),log=$('#chat-log'),input=$('#chat-input');
- const open=v=>{box.hidden=!v;$('#chat-open').setAttribute('aria-expanded',v);if(v)input.focus()};
+ const open=v=>{box.hidden=!v;box.style.display=v?'flex':'none';$('#chat-open').setAttribute('aria-expanded',v);if(v)input.focus()};
  $('#chat-open').onclick=()=>open(box.hidden);$('#chat-close').onclick=()=>open(false);
  box.addEventListener('keydown',e=>{if(e.key==='Escape')open(false)});
  const add=(who,html)=>{const d=document.createElement('div');d.style.cssText=who==='me'?'justify-self:end;background:var(--brand);color:var(--brand-ink);padding:8px 12px;border-radius:12px 12px 2px 12px;max-width:85%':'background:var(--soft);padding:8px 12px;border-radius:12px 12px 12px 2px;max-width:92%';d.innerHTML=html;log.appendChild(d);log.scrollTop=log.scrollHeight;return d};
