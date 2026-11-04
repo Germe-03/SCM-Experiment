@@ -47,6 +47,8 @@ class BankingSystem:
         self.banks = {b.id: CommercialBank(b.id, b.name, b.margin, equity)
                       for b in sorted(config.banks, key=lambda b: b.id)}
         self.failures: list[dict] = []
+        # Firms whose credit was called after a failure: their old debt stays with the failed bank.
+        self.called: set[str] = set()
         # Insertion order preserves the primary (credit) bank, regardless of shares.
         self.accounts: dict[str, dict[str, float]] = {}
         self.credit_events: list[dict] = []
@@ -88,7 +90,7 @@ class BankingSystem:
         for bank in self.banks.values():
             bank.loans = 0.0
         for fid, cash in balances.items():
-            if runtimes[fid].active and self.accounts.get(fid):
+            if runtimes[fid].active and self.accounts.get(fid) and fid not in self.called:
                 self.primary_bank(fid).loans += max(0.0, -cash)
         cash = balances[firm_id]
         debt = max(0.0, -cash)
@@ -148,7 +150,7 @@ class BankingSystem:
         self.accounts[firm_id] = {bank_id: 1.0}
 
     def write_off(self, firm_id: str, amount: float) -> None:
-        if self.accounts.get(firm_id):
+        if self.accounts.get(firm_id) and firm_id not in self.called:
             self.primary_bank(firm_id).write_offs += max(0.0, amount) * self.cfg.loss_given_default
 
     def remove_firm(self, firm_id: str, cash: float) -> None:
@@ -177,7 +179,8 @@ class BankingSystem:
             runtime = runtimes[firm_id]
             if not runtime.active:
                 continue
-            self.primary_bank(firm_id).loans += max(0.0, -runtime.cash)
+            if firm_id not in self.called:
+                self.primary_bank(firm_id).loans += max(0.0, -runtime.cash)
             for bank_id, share in self.accounts[firm_id].items():
                 self.banks[bank_id].deposits += max(0.0, runtime.cash) * share
 
@@ -244,6 +247,7 @@ class BankingSystem:
 
                     new = max(candidates, key=score)
                     runtime.credit_limit = 0.0
+                    self.called.add(firm_id)
                 self.accounts[firm_id] = {new: 1.0}
                 new_bank = self.banks[new]
 
@@ -300,10 +304,12 @@ class BankingSystem:
         events.append({"year": year, "day": day, "firm": bank_id, "event": "bank_entry",
                        "details": f"{name} gegründet, Eigenkapital {equity:,.0f} CHF, "
                                   f"Marge {margin:.2%}"})
-        # Firms left without any bank (all failed) become customers of the newcomer.
+        # Firms left without any bank (all failed) become customers of the newcomer; old debt stays behind.
         for firm_id in sorted(self.accounts):
             if not self.accounts[firm_id] and runtimes[firm_id].active:
                 self.accounts[firm_id] = {bank_id: 1.0}
+                if runtimes[firm_id].cash < 0:
+                    self.called.add(firm_id)
 
     def year_end(self, runtimes: dict, bank_config, price_index: float,
                  year: int, day: int, events: list) -> list[BankAnnualReport]:

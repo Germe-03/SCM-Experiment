@@ -15,6 +15,22 @@ def _weekly(values: list[float]) -> list[float]:
     return [sum(values[i:i + 7]) / len(values[i:i + 7]) for i in range(0, len(values), 7)]
 
 
+def _stock_weekly(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Keep weekly closes and the final day, with gaps around listings."""
+    selected = list(range(6, len(rows), 7))
+    if rows and (not selected or selected[-1] != len(rows) - 1):
+        selected.append(len(rows) - 1)
+    closes = [rows[i] for i in selected]
+    ids = sorted({key for row in rows for key in row} - {"global_day", "year", "day", "index"})
+    rounded = lambda value: round(value, 2) if value is not None else None
+    return {
+        "days": [row["global_day"] for row in closes],
+        "years": [row["year"] for row in closes],
+        "index": [rounded(row.get("index")) for row in closes],
+        "prices": {fid: [rounded(row.get(fid)) for row in closes] for fid in ids},
+    }
+
+
 def build_dashboard_data(
     result: RunResult, network: SupplyNetwork, config: MarketConfig, seed: int,
 ) -> dict[str, Any]:
@@ -73,6 +89,8 @@ def build_dashboard_data(
         },
         "firms": firm_data,
         "system": [item.model_dump(mode="json") for item in result.system_kpis],
+        "banks": [item.model_dump(mode="json") for item in result.bank_history],
+        "stocks": _stock_weekly(result.stock_daily),
         "events": list(result.events),
         "ranking": ranking,
         "brands": list(result.brand_reports),

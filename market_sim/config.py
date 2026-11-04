@@ -349,6 +349,8 @@ class BankingConfig(ConfigModel):
     payout_ratio: float = Field(default=0.5, ge=0, le=1)
     target_capital_ratio: float = Field(default=0.15, ge=0)
     min_capital_ratio: float = Field(default=0.10, gt=0, le=1)
+    # Firms at their credit line may not buy goods either (strict credit crunch); investments are always blocked.
+    block_purchases: bool = False
     second_account_enabled: bool = True
     second_account_share: float = Field(default=0.5, gt=0, lt=1)
     interest_weight: float = Field(default=1.0, ge=0)

@@ -89,6 +89,8 @@ def test_second_bank_cannot_ignore_transferred_debt_or_account_limit():
 def market(enabled=True, categories=False):
     cfg = load_market_config()
     cfg.banking.enabled = enabled
+    # These tests cover the strict credit crunch that also stops purchases.
+    cfg.banking.block_purchases = True
     cfg.categories.enabled = categories
     env = MarketEnvironment(load_firms(), config=cfg, initial_inventory=20)
     env.reset()

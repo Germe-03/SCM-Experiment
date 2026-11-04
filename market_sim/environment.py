@@ -464,7 +464,7 @@ class MarketEnvironment:
             for downstream_id, quantity in allocations.items():
                 if downstream_id in self.runtimes:
                     price = self.network.firm(supplier_id).sell_price
-                    if self.banking is not None and quantity:
+                    if self.banking is not None and self.config.banking.block_purchases and quantity:
                         customer = self.network.firm(downstream_id)
                         def cost(units):
                             if not self.brand_book.categories_on:
@@ -556,7 +556,7 @@ class MarketEnvironment:
                         )
                     continue
                 candidates = self.supplier_candidates(firm.id)
-                if self.banking is not None and candidates and quantity:
+                if self.banking is not None and self.config.banking.block_purchases and candidates and quantity:
                     factor = max((self.brand_book.value_factor(b) for b in self.brand_book.brands), default=1.0) if self.brand_book.categories_on else 1.0
                     unit_cost = max(self._trade_value(1, s.sell_price) for s in candidates) * factor
                     pending = self.runtimes[firm.id].on_order
@@ -653,7 +653,7 @@ class MarketEnvironment:
         return budget > 0 and amount <= budget
 
     def affordable_units(self, firm_id: str, quantity: int, unit_cost: float) -> int:
-        if self.banking is None or quantity <= 0 or unit_cost <= 0:
+        if self.banking is None or not self.config.banking.block_purchases or quantity <= 0 or unit_cost <= 0:
             return quantity
         budget = self.spending_budget(firm_id, quantity * unit_cost)
         return min(quantity, max(0, int(budget / unit_cost)))

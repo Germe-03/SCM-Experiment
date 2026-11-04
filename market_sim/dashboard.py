@@ -198,6 +198,13 @@ td.num,th.num{text-align:right}tbody tr.click{cursor:pointer}tbody tr.click:hove
 </section>
 <section role="tabpanel" id="tab-finance">
  <h2>Finanzen</h2><p class="lead">Schulden, Zinsen, Ein- und Austritte.</p>
+ <div class="grid">
+  <div class="card"><h3>Leitzins und Teuerung</h3><p class="hint">Konjunkturlücke ist ein Modellindikator, kein BIP.</p><div class="chart"><canvas id="fi-policy"></canvas></div></div>
+  <div class="card"><h3>Banken: Eigenkapital</h3><div class="chart"><canvas id="fi-bank-equity"></canvas></div></div>
+  <div class="card"><h3>Banken: Kredite und Einlagen</h3><div class="chart"><canvas id="fi-bank-balances"></canvas></div></div>
+  <div class="card wide"><h3>Banken im Vergleich</h3><p class="hint" id="fi-bank-year"></p><div class="table-wrap"><table id="fi-banks"></table></div></div>
+  <div class="card wide"><h3>Börse</h3><div class="filters"><label for="fi-stock-period">Zeitschritte</label><select id="fi-stock-period"><option value="week">Woche</option><option value="month">Monat</option></select></div><p class="hint">Wochenschlusskurse; Monat zeigt jeden vierten Wochenpunkt und den letzten Stand. Firmenkurse in CHF auf der rechten Achse.</p><div class="chips" id="fi-stock-firms" role="group" aria-label="Firmenkurse auswählen"></div><p class="hint" id="fi-stock-empty"></p><div class="chart"><canvas id="fi-stocks"></canvas></div></div>
+ </div>
  <div class="card"><h3>Negativzinsen pro Stufe</h3><div class="chart"><canvas id="fi-negative"></canvas></div></div>
  <div class="grid">
   <div class="card"><h3>Verschuldung pro Stufe</h3><div class="chart"><canvas id="fi-debt"></canvas></div></div>
@@ -263,6 +270,7 @@ const trendText=d=>String(d).split(/->|→/).map(x=>TREND[x.trim()]||x.trim()).j
 const REGION={genfersee:'Genferseeregion',bern:'Bern',jura_freiburg:'Jura/Freiburg/Neuenburg',nordwestschweiz:'Nordwestschweiz',zuerich:'Zürich',ostschweiz:'Ostschweiz',zentralschweiz:'Zentralschweiz',tessin:'Tessin'};
 // Firm ids and region keys in event texts become readable names.
 const pretty=t=>String(t??'').replace(/[a-z]+(?:_[a-z0-9]+)*/g,m=>D.firms[m]?.name||REGION[m]||m);
+Object.assign(EVENT,{policy_rate_changed:'Leitzins geändert',credit_rejected:'Kredit abgelehnt',account_opened:'Zweitkonto eröffnet',bank_switched:'Bankwechsel',bank_failed:'Bankpleite',bank_entry:'Neue Bank',bank_payout:'Bank schüttet aus',exchange_opened:'Börse eröffnet',listed:'Börsengang',delisted:'Dekotiert',stock_crash:'Börsencrash'});
 const KEY_EVENTS=new Set(['law_enacted','trend_change','recession','raw_material_shortage','cost_shock','poisoning','breakup','wage_push']);
 const firm=id=>D.firms[id],fname=id=>firm(id)?.name||id||'Markt';
 const stageLabel=f=>f?.channel==='restaurant'?'Gastronomie':STAGE[f?.stage]||'';
@@ -438,6 +446,7 @@ function renderFirmDetail(){const root=$('#fm-detail');destroy();if(S.tab!=='fir
  <div class="card"><h3>Cash (Wochenschnitt)</h3><div class="chart"><canvas id="fd-cash"></canvas></div></div><div class="card"><h3>Lager und Rückstand (Wochenschnitt)</h3><div class="chart"><canvas id="fd-stock"></canvas></div></div>
  <div class="card"><h3>Reputation und Qualität</h3><div class="chart"><canvas id="fd-rep"></canvas></div></div><div class="card"><h3>Ereignisse dieser Firma</h3><ul class="list" id="fd-events" style="max-height:270px;overflow:auto"></ul></div>
  <div class="card wide" id="fd-story" hidden></div>
+ ${D.stocks?.prices?.[id]?'<div class="card wide"><h3>Börsenkurs</h3><p class="hint" id="fd-stock-empty"></p><div class="chart"><canvas id="fd-price"></canvas></div></div>':''}
  <div class="card wide" id="fd-exit" hidden></div>
  <div class="card wide"><h3>Entscheidungen</h3><p class="hint">Pro Jahr nur, was sich geändert hat, dazu Straftaten, Investitionen und Projekte.</p><div class="chips" id="fd-dec-filter" style="margin-bottom:10px"></div><ul class="list" id="fd-decisions" style="max-height:420px;overflow:auto"></ul></div></div></div>`;
  $('#fd-cmp').disabled=!inCmp&&(S.cmp||[]).length>=6;
@@ -452,6 +461,7 @@ function renderFirmDetail(){const root=$('#fm-detail');destroy();if(S.tab!=='fir
  chart('fd-rep',{type:'line',data:{labels:lbl,datasets:[{label:'Reputation',data:y.map(r=>r.reputation),borderColor:pal()[4],pointRadius:0,borderWidth:2},{label:'Qualität',data:y.map(r=>r.average_quality),borderColor:pal()[5],pointRadius:0,borderWidth:2}]},options:{scales:{y:fmtAxis('pct')}}});
  const fe=f.events.filter(e=>inRange(e.year)&&e.event!=='inflation').slice().reverse();
  $('#fd-events').innerHTML=fe.length?fe.map(e=>`<li><span class="yr">Jahr ${e.year}</span><span><b>${esc(EVENT[e.event]||e.event)}</b> <span class="badge">${esc(pretty(e.details))}</span></span></li>`).join(''):'<li>Keine Ereignisse im Zeitraum.</li>';
+ if(D.stocks?.prices?.[id])renderStockChart('fd-price',[id],false,'week','fd-stock-empty');
  renderExit(id);renderDecisions(id);
  const st=((D.texts||{}).stories||{})[id],sb=$('#fd-story');sb.hidden=!st;if(st)sb.innerHTML=`<h3>Geschichte ${st.checked?'<span class="badge ok">vom lokalen Modell, Zahlen geprüft</span>':'<span class="badge">Kurzfassung aus den Fakten</span>'}</h3><p style="margin:0">${esc(pretty(st.text))}</p>`}
 
@@ -507,7 +517,31 @@ function renderChain(){lines('ch-margin',byStage('margin_'),{fmt:'pct'});lines('
 function renderHoldings(){lines('fi-stakes',[{label:'Gehaltene Beteiligungen',get:x=>x.stakes_held},{label:'Dividenden',get:x=>x.dividends,axis:'y2',fmt:'chf'}]);
  const end=(D.holdings||[]).filter(h=>h.action==null&&h.year===Math.max(...(D.holdings||[]).filter(x=>x.action==null).map(x=>x.year),0));
  $('#fi-holdings').innerHTML='<thead><tr><th>Eigentümer</th><th>Beteiligung an</th><th class="num">Anteil</th><th class="num">Dividenden</th></tr></thead><tbody>'+(end.length?end.sort((a,b)=>b.share-a.share).map(h=>`<tr class="click" data-firm="${esc(h.owner)}"><td>${esc(fname(h.owner))}</td><td>${esc(fname(h.target))}</td><td class="num">${pct(h.share)}</td><td class="num">${chf(h.dividends)}</td></tr>`).join(''):`<tr><td colspan="4">${empty('Am Ende des Laufs hält keine Firma Anteile an einer anderen.')}</td></tr>`)+'</tbody>';wireFirmLinks($('#fi-holdings'))}
-function renderFinance(){renderHoldings();lines('fi-labor',[{label:'Offene Stellen',get:x=>x.open_positions},{label:'Abgeworben',get:x=>x.poached_workers},{label:'Lohnniveau',get:x=>x.wage_index_mean,axis:'y2'}]);lines('fi-negative',byStage('negative_interest_','chf'),{fmt:'chf'});lines('fi-debt',byStage('debt_','chf'),{fmt:'chf'});lines('fi-interest',byStage('interest_cost_','chf'),{fmt:'chf'});
+function renderBanks(){
+ lines('fi-policy',[{label:'Leitzins',get:x=>x.policy_rate},{label:'Teuerung',get:x=>x.inflation},{label:'Konjunkturlücke',get:x=>x.output_gap}],{fmt:'pct'});
+ const history=D.banks||[],rows=history.filter(b=>inRange(b.year)),ids=[...new Set(rows.map(b=>b.bank_id))];
+ lines('fi-bank-equity',ids.map(id=>({label:rows.find(b=>b.bank_id===id).name,get:x=>rows.find(b=>b.bank_id===id&&b.year===x.year)?.equity??null})),{fmt:'chf'});
+ lines('fi-bank-balances',[{label:'Kredite',get:x=>x.total_loans},{label:'Einlagen',get:x=>x.total_deposits}],{fmt:'chf'});
+ const year=sys().at(-1)?.year,last=rows.filter(b=>b.year===year);
+ $('#fi-bank-year').textContent=year?'Stand: Jahr '+year:'';
+ $('#fi-banks').innerHTML='<thead><tr>'+['Name','Kunden','Eigenkapital','Eigenkapitalquote','Kredite','Einlagen','Gewinn','Abschreibungen','Abgelehnte Kredite','Gebühren','Status'].map(n=>`<th>${n}</th>`).join('')+'</tr></thead><tbody>'+(last.length?last.map(b=>{
+  const failed=history.filter(r=>r.bank_id===b.bank_id&&!r.active&&r.year<=year).map(r=>r.year),since=failed.length?Math.min(...failed):year;
+  return `<tr><td>${esc(b.name)}</td><td class="num">${nf(b.customers)}</td><td class="num">${chf(b.equity)}</td><td class="num">${pct(b.capital_ratio)}</td><td class="num">${chf(b.loans)}</td><td class="num">${chf(b.deposits)}</td><td class="num">${chf(b.profit)}</td><td class="num">${chf(b.write_offs)}</td><td class="num">${nf(b.credit_rejections||0)}</td><td class="num">${chf(b.fee_income||0)}</td><td>${b.active?'aktiv':'pleite seit Jahr '+since}</td></tr>`
+ }).join(''):`<tr><td colspan="11">${empty('Keine Bankberichte für dieses Jahr.')}</td></tr>`)+'</tbody>'}
+function stockPoints(period){const s=D.stocks||{days:[],years:[]},points=s.days.map((_,i)=>i).filter(i=>inRange(s.years[i]));
+ return period==='month'?points.filter((_,i)=>i%4===3||i===points.length-1):points}
+function renderStockChart(id,ids,withIndex=true,period='week',hint='fi-stock-empty'){
+ const s=D.stocks||{days:[],years:[],index:[],prices:{}},points=stockPoints(period),datasets=[];
+ if(withIndex)datasets.push({label:'Börsenindex',data:points.map(i=>s.index[i]),borderColor:pal()[0],yAxisID:'y'});
+ ids.forEach((fid,j)=>datasets.push({label:fname(fid),data:points.map(i=>s.prices[fid]?.[i]??null),borderColor:pal()[(j+1)%8],yAxisID:withIndex?'y2':'y'}));
+ $('#'+hint).textContent=datasets.some(d=>d.data.some(v=>v!=null))?'':'Keine Börsenkurse im gewählten Zeitraum.';
+ chart(id,{type:'line',data:{labels:points.map(i=>`Jahr ${s.years[i]}, Tag ${s.days[i]}`),datasets:datasets.map(d=>({...d,pointRadius:0,borderWidth:2,spanGaps:false}))},options:{scales:{x:{ticks:{maxTicksLimit:10}},y:{title:{display:true,text:withIndex?'Index':'Kurs (CHF)'},...fmtAxis(withIndex?null:'chf')},...(withIndex&&ids.length?{y2:{position:'right',title:{display:true,text:'Kurs (CHF)'},grid:{display:false},...fmtAxis('chf')}}:{})}}})}
+function renderStocks(){const ids=Object.keys(D.stocks?.prices||{});S.stockFirms=(S.stockFirms||[]).filter(id=>ids.includes(id));
+ $('#fi-stock-period').value=S.stockPeriod||'week';$('#fi-stock-period').onchange=e=>{S.stockPeriod=e.target.value;render()};
+ $('#fi-stock-firms').innerHTML=ids.map(id=>`<button class="chip" data-stock="${esc(id)}" aria-pressed="${S.stockFirms.includes(id)}">${esc(fname(id))}</button>`).join('');
+ $$('#fi-stock-firms button').forEach(b=>b.onclick=()=>{const id=b.dataset.stock;S.stockFirms=S.stockFirms.includes(id)?S.stockFirms.filter(x=>x!==id):[...S.stockFirms,id];render()});
+ renderStockChart('fi-stocks',S.stockFirms,true,S.stockPeriod||'week')}
+function renderFinance(){renderBanks();renderStocks();renderHoldings();lines('fi-labor',[{label:'Offene Stellen',get:x=>x.open_positions},{label:'Abgeworben',get:x=>x.poached_workers},{label:'Lohnniveau',get:x=>x.wage_index_mean,axis:'y2'}]);lines('fi-negative',byStage('negative_interest_','chf'),{fmt:'chf'});lines('fi-debt',byStage('debt_','chf'),{fmt:'chf'});lines('fi-interest',byStage('interest_cost_','chf'),{fmt:'chf'});
  const s=sys(),restr=y=>D.events.filter(e=>e.year===y&&e.event==='restructuring').length;
  chart('fi-churn',{type:'bar',data:{labels:s.map(x=>x.year),datasets:[{label:'Eintritte',data:s.map(x=>x.market_entries),backgroundColor:pal()[0]+'bb'},{label:'Konkurse',data:s.map(x=>x.bankruptcies),backgroundColor:css('--bad')+'bb'},{label:'Sanierungen',data:s.map(x=>restr(x.year)),backgroundColor:pal()[3]+'bb'},{type:'line',label:'Strategiewechsel',data:s.map(x=>x.strategy_changes),borderColor:pal()[4],pointRadius:0}]},options:{scales:{x:{grid:{display:false}}}}});
  lines('fi-hhi',[{label:'HHI',get:x=>x.market_concentration}])}
@@ -613,8 +647,8 @@ function flowGroups(id,year){const r=firm(id).yearly.find(x=>x.year===year)||{},
  put('betrieb','out','Fixkosten',r.fixed_cost,'Miete, Maschinen, Abschreibungen');put('betrieb','out','Handling & Transport',r.handling_cost,'');
  put('betrieb','out','Lager',r.holding_cost,'');put('betrieb','out','Rückstand',r.backlog_cost,'Strafkosten für offene Aufträge');
  put('forschung','out','F&E',r.rnd_cost,'Forschungsprojekte');put('bank','out','Zinsen',r.interest_cost,'');
- for(const [k,v] of Object.entries(cf)){const [g,other]=k.split(':'),grp=g==='staat'?'staat':g==='bank'?'bank':'beteiligungen';
-  const info=g==='staat'?(FLOW_REASON[other]||(other.startsWith('Busse')?'Straftat wurde entdeckt':'')):g==='bank'?FLOW_REASON.Schuldenschnitt:FLOW_CF[g]||'';
+ for(const [k,v] of Object.entries(cf)){const [g,other='']=k.split(':'),grp=g==='staat'?'staat':['bank','bankpleite'].includes(g)?'bank':Object.hasOwn(FLOW_CF,g)?'beteiligungen':'betrieb';
+  const info=g==='staat'?(FLOW_REASON[other]||(other.startsWith('Busse')?'Straftat wurde entdeckt':'')):g==='bankpleite'?'Verlust bei Bankpleite (nur 30 % gesichert)':g==='bank'?(FLOW_REASON[other]||''):FLOW_CF[g]||'';
   put(grp,v>0?'in':'out',flowName(k),Math.abs(v),info,D.firms[other]?other:null)}
  for(const g of Object.values(G)){g.in.sort((a,b)=>b.v-a.v);g.out.sort((a,b)=>b.v-a.v)}
  return G}

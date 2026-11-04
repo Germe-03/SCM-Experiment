@@ -9,7 +9,7 @@ import pytest
 
 from market_sim.config import load_market_config
 from market_sim.dashboard import CHART_JS_URL, write_dashboard_html
-from market_sim.dashboard_data import build_dashboard_data
+from market_sim.dashboard_data import _stock_weekly, build_dashboard_data
 from market_sim.models import load_firms
 from market_sim.run import run_simulation
 
@@ -27,7 +27,7 @@ def _data():
 def test_dashboard_data_is_complete_and_json_serializable():
     data = _data()
     json.dumps(data)
-    assert {"meta", "firms", "system", "ranking"} <= data.keys()
+    assert {"meta", "firms", "system", "ranking", "banks", "stocks"} <= data.keys()
     assert len(data["ranking"]) == len(data["firms"])
     for firm in data["firms"].values():
         entry = [e["year"] for e in data["events"] if e["firm"] == firm["id"] and e["event"] in ("market_entry", "spin_off")]
@@ -53,6 +53,8 @@ def test_write_dashboard_html(tmp_path):
     assert 'id="cp-search"' in content
     assert 'id="cp-add"' not in content
     assert 'id="fi-negative"' in content
+    for chart_id in ("fi-policy", "fi-bank-equity", "fi-bank-balances", "fi-banks", "fi-stocks"):
+        assert f'id="{chart_id}"' in content
     assert "Hat es sich gelohnt?" in content
 
 
@@ -61,3 +63,55 @@ def test_comparison_and_structure_javascript():
     directory = Path(__file__).parent
     subprocess.run(["node", str(directory / "dashboard_phase8_check.cjs"),
                     str(directory.parent / "dashboard.py")], check=True, capture_output=True, text=True)
+
+
+@pytest.mark.parametrize("length,days", [(0, []), (1, [1]), (7, [7]), (14, [7, 14]), (16, [7, 14, 16])])
+def test_stock_weekly_closes(length, days):
+    rows = [{"global_day": day, "year": 1 if day <= 7 else 2, "day": day,
+             "index": day + 0.12345,
+             **({"early": 2.3456} if day <= 7 else {"late": 4.5678})}
+            for day in range(1, length + 1)]
+    stocks = _stock_weekly(rows)
+    assert stocks["days"] == days
+    assert stocks["years"] == [1 if day <= 7 else 2 for day in days]
+    assert stocks["index"] == [day + 0.12 for day in days]
+    if length:
+        assert stocks["prices"]["early"] == [2.35 if day <= 7 else None for day in days]
+    else:
+        assert stocks == {"days": [], "years": [], "index": [], "prices": {}}
+    if length > 7:
+        assert stocks["prices"]["late"] == [None if day <= 7 else 4.57 for day in days]
+
+
+def test_banking_and_stock_dashboard(tmp_path):
+    config = load_market_config()
+    config = config.model_copy(update={
+        "banking": config.banking.model_copy(update={"enabled": True}),
+        "central_bank": config.central_bank.model_copy(update={"enabled": True}),
+        "stock_market": config.stock_market.model_copy(update={"enabled": True, "tradable_from_year": 1}),
+        "simulation": config.simulation.model_copy(update={"years": 2, "days_per_year": 21}),
+    })
+    network = load_firms()
+    result = run_simulation(2, 0, 21, config, network)
+    data = build_dashboard_data(result, network, config, 0)
+    assert data["banks"] == [b.model_dump(mode="json") for b in result.bank_history]
+    assert data["banks"] and data["stocks"]["prices"]
+    assert data["stocks"]["days"][-1] == result.stock_daily[-1]["global_day"]
+    assert len(data["stocks"]["days"]) == 6
+    path = write_dashboard_html(data, tmp_path / "banking.html")
+    if shutil.which("node"):
+        subprocess.run(["node", str(Path(__file__).with_name("dashboard_phase19_check.cjs")), str(path)],
+                       check=True, capture_output=True, text=True)
+
+
+def test_disabled_banking_and_stocks():
+    config = load_market_config()
+    config = config.model_copy(update={
+        "banking": config.banking.model_copy(update={"enabled": False}),
+        "stock_market": config.stock_market.model_copy(update={"enabled": False}),
+    })
+    network = load_firms()
+    result = run_simulation(1, 0, 2, config, network)
+    data = build_dashboard_data(result, network, config, 0)
+    assert data["banks"] == []
+    assert data["stocks"] == {"days": [], "years": [], "index": [], "prices": {}}
