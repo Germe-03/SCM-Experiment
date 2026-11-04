@@ -774,6 +774,10 @@ class SimulationRunner:
             margin = sum(state.summaries[-1][f.id].profit for f in active) / revenue if revenue else 0.0
             probability = min(cfg.max_probability, cfg.base_probability
                               + cfg.margin_slope * max(0.0, margin - cfg.margin_threshold))
+            # Anyone may found a small firm at any time, good margins or not.
+            founding = cfg.founding_probability.get(stage, 0.0)
+            probability = max(probability, founding)
+            forced = False
             capacity_share = cfg.start_capacity_fraction
             stage_capacity = sum(self.env._effective_capacity(f.id) for f in active if f.channel != "restaurant")
             needed = self.demand.mean
@@ -782,14 +786,14 @@ class SimulationRunner:
                 needed *= 1 - self.config.restaurants.out_of_home_share
             if cfg.shortage_capacity_ratio and stage_capacity < cfg.shortage_capacity_ratio * needed:
                 # A starved stage attracts a full-size newcomer.
-                probability, capacity_share = 1.0, 1.0
+                probability, capacity_share, forced = 1.0, 1.0, True
             book = self.env.brand_book
             if stage == "factory" and cfg.shortage_capacity_ratio and book.categories_on:
                 # Producers are checked per category: plenty of wine does not replace missing beer.
                 for c, share_c in book.base_share.items():
                     cap_c = sum(self.env._effective_capacity(f.id) for f in active if f.category == c)
                     if cap_c < cfg.shortage_capacity_ratio * self.demand.mean * share_c:
-                        probability, capacity_share = 1.0, 1.0
+                        probability, capacity_share, forced = 1.0, 1.0, True
             want_restaurant = False
             if stage == "retailer" and self.config.restaurants.enabled:
                 # Phase 10: too few seats for the out-of-home demand bring a new restaurant.
@@ -797,14 +801,17 @@ class SimulationRunner:
                 guests = self.demand.mean * self.config.restaurants.out_of_home_share
                 stores_short = cfg.shortage_capacity_ratio and stage_capacity < cfg.shortage_capacity_ratio * needed
                 if seats < max(1.0, cfg.shortage_capacity_ratio) * guests and not stores_short:
-                    probability, capacity_share, want_restaurant = 1.0, 1.0, True
+                    probability, capacity_share, want_restaurant, forced = 1.0, 1.0, True, True
             if stage == "factory" and book is not None and book.categories_on:
                 # A category without any producer gets a new one at once.
                 present = {f.category for f in active}
                 if any(c not in present for c in book.base_share):
-                    probability = 1.0
+                    probability, forced = 1.0, True
             if roll >= probability or len(active) >= cfg.max_firms_per_stage[stage]:
                 continue
+            if stage == "retailer" and self.config.restaurants.enabled and founding and not forced:
+                # roll < probability, so roll / probability is uniform: restaurant or store.
+                want_restaurant = roll / probability < cfg.restaurant_founding_share
             pool = active
             if stage == "retailer":
                 restaurants = [f for f in active if f.channel == "restaurant"]

@@ -284,6 +284,10 @@ class MarketEntryConfig(ConfigModel):
     margin_threshold: float = 0.05
     margin_slope: float = Field(default=2.0, ge=0)
     max_probability: float = Field(default=0.5, ge=0, le=1)
+    # Yearly chance per stage that a small firm is founded regardless of margin and capacity.
+    founding_probability: dict[str, float] = Field(default_factory=dict)
+    # Share of retail foundings that open a restaurant instead of a store.
+    restaurant_founding_share: float = Field(default=0.5, ge=0, le=1)
     max_firms_per_stage: dict[str, int] = Field(default_factory=dict)
     start_cash_fraction: float = Field(default=0.5, ge=0)
     start_capacity_fraction: float = Field(default=0.5, gt=0, le=1)
@@ -295,6 +299,10 @@ class MarketEntryConfig(ConfigModel):
     def _entry_bounds(self) -> Self:
         if not 0 <= self.start_reputation[0] <= self.start_reputation[1] <= 1:
             raise ValueError("start_reputation must be ordered within [0, 1]")
+        if not set(self.founding_probability) <= {"retailer", "wholesaler", "distributor", "factory"}:
+            raise ValueError("founding_probability keys must be stages")
+        if any(not 0 <= p <= 1 for p in self.founding_probability.values()):
+            raise ValueError("founding_probability values must lie within [0, 1]")
         if self.enabled:
             stages = {"retailer", "wholesaler", "distributor", "factory"}
             if not stages <= set(self.names) or set(self.max_firms_per_stage) != stages:
