@@ -82,6 +82,15 @@ Bevölkerung mit Personas, Marketing, Restaurants, Beteiligungen, neue
 Gesetze mit vorsichtiger Beurteilung ihrer Folgen, regionaler Arbeitsmarkt
 und Texte vom lokalen Sprachmodell (Firmengeschichten, Chronik, Chat).
 
+**Erweiterung 3 (Phasen 13–20,** siehe
+[`docs/bauplan-banken-boerse.md`](docs/bauplan-banken-boerse.md)**):**
+SNB mit Leitzins nach Taylor-Regel, drei Geschäftsbanken (später bis sechs)
+mit Hausbank und höchstens zwei Konten pro Firma, Kreditlinie und
+Kreditklemme, Bankpleite mit 30 % Einlagensicherung und freier Bankwahl,
+Börse mit Tageskursen ab Jahr 5 und verkettetem Index, kleine Beteiligungen
+über Börse und Hausbank. Neue Ausgaben: `bank_reports.csv`,
+`stock_daily.csv`, `stock_weekly.csv`.
+
 **TODO:**
 
 - Zigaretten als eigene Kategorie mit Sucht und Regulierung (Idee 15).

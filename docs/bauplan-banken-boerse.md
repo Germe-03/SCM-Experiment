@@ -125,6 +125,60 @@ Co-Autor-Zeile. Code schreibt Codex.
 
 ---
 
+## Phase 20: Abschluss und Messprotokoll
+
+Umgesetzt am 2026-11-04 auf dem Branch `bauplan-3-banken` (Phasen 13–19,
+Phasen 15 und 16 in einem Commit). Code: Codex (13, 14, 15, 19) und die
+günstigen Delegate-Modelle (16, 17, 18, Tests), Korrekturen von Hand.
+
+### Abweichungen vom Plan
+
+- **Kreditklemme stoppt nur Investitionen** (Ausbau, Standorte, F&E,
+  Marketing, Beteiligungen, Übernahmen), nicht den Wareneinkauf. Mit
+  Einkaufssperre (`banking.block_purchases: true`) gerieten Firmen in
+  Abwärtsspiralen: ohne Ware kein Umsatz, Löhne liefen weiter, Schulden bis
+  zum Neunfachen der Linie, 4–8 Konkurse pro Jahr und Zusammenbruch aller
+  Banken in 2 von 3 Läufen.
+- **Konkursdividende:** Die Bank verliert nur 20 % einer ausgefallenen Schuld
+  (`loss_given_default: 0.2`), der Rest kommt aus der Konkursmasse.
+- **SNB-Freibetrag:** 80 % der Reserven sind vom Negativzins befreit
+  (`reserve_exemption: 0.8`, wie 2015–2022). Ohne Freibetrag frass der
+  Negativzins auf Milliarden-Reserven das Eigenkapital in wenigen Jahren.
+- **Alte Schulden bleiben bei der gefallenen Bank:** Findet ein Schuldner nach
+  einer Pleite keine Bank, wird sein Kredit gekündigt; die neue Bank erbt
+  seine Schuld nicht.
+- Höchstzahl Banken zählt nur aktive Banken; gefallene machen Platz für neue.
+- Kapitalausstattung: `start_equity_fraction: 1.2`, `payout_ratio: 0.3`.
+- Gemessen wurden 3 statt 10 Seeds (je 50 Jahre, ca. 25 Minuten pro Lauf).
+
+### Messwerte (Seeds 1–3, je 50 Jahre)
+
+| | Seed 1 | Seed 2 | Seed 3 |
+|---|---|---|---|
+| Firmenkonkurse total | 47 | 76 | 31 |
+| Leitzins min … max (Mittel) | −0.75 … 2.00 % (0.65 %) | −0.75 … 2.25 % (0.56 %) | −0.75 … 2.00 % (0.70 %) |
+| Teuerung im Mittel | 1.11 % | 0.84 % | 0.74 % |
+| Bankpleiten | 0 | 1 (neue Bank, 5 Kunden) | 0 |
+| Neue Banken | 3 | 4 | 3 |
+| Zweitkonten eröffnet | 21 | 20 | 24 |
+| Kreditablehnungen | 153 | 172 | 109 |
+| Börsenindex Jahr 5 → 50 (Tief) | 1072 → 8081 (1072) | 1031 → 2778 (645) | 1135 → 9391 (717) |
+| Beteiligungen über Börse / mit Kredit | 18 / 20 | 13 / 10 | 20 / 13 |
+| Abschreibungen der Banken total | 8.5 Mrd. | 8.1 Mrd. | 4.2 Mrd. |
+
+Zum Vergleich die Läufe vor der Korrektur (gleiche Seeds): mit Einkaufssperre
+und ohne Freibetrag fielen in Seed 2 und 3 alle Banken, danach 4 Konkurse pro
+Jahr bis Jahr 50 (Obergrenze pro Stufe).
+
+### Offene Punkte
+
+- Eigenkapitalquote = Eigenkapital / Kredite; bei kaum Krediten zeigt das
+  Dashboard sehr hohe Werte (z. B. 600 %). Besser wäre Eigenkapital / Bilanzsumme.
+- Hausbank und Zweitbank einer Firma erscheinen noch nicht im Firmen-Detail.
+- 10-Seed-Messung nachholen.
+
+---
+
 ## TODO
 
 > **TODO (2026-11-04):** Börsengang. Vorerst sind alle Firmen ab Jahr 5
