@@ -57,6 +57,8 @@ def build_dashboard_data(
         for index in range(result.years):
             report = result.annual_reports[index][firm.id].model_dump(mode="json")
             report.update(result.financial_breakdown[firm.id][index])
+            report.setdefault("paid_items", {})
+            report.setdefault("sold_items", {})
             yearly.append(report)
         firm_data[firm.id] = {
             **next(item for item in identities if item["id"] == firm.id),

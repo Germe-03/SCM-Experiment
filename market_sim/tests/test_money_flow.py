@@ -34,3 +34,43 @@ def test_only_willing_firms_commit_offences():
     runner.config.state.willing_share = 0.0
     runner.run(2)
     assert runner.state_actor.stats["offences"] == 0
+
+
+def test_item_ledgers_match_partner_payments_and_revenue(result):
+    runner, res = result
+    for firm_id, rows in res.financial_breakdown.items():
+        for index, row in enumerate(rows):
+            for partner, amount in row.get("paid_to", {}).items():
+                items = [v for k, v in row["paid_items"].items() if k.rsplit("|", 1)[0] == partner]
+                assert sum(v["chf"] for v in items) == pytest.approx(amount, abs=0.03)
+                if partner in runner.env.runtimes:
+                    seller = res.financial_breakdown[partner][index]["sold_items"]
+                    for key, item in row["paid_items"].items():
+                        supplier, category = key.rsplit("|", 1)
+                        if supplier == partner:
+                            assert seller[f"{firm_id}|{category}"] == item
+            assert sum(v["chf"] for v in row.get("sold_items", {}).values()) == pytest.approx(
+                row["revenue"], abs=0.2)
+        # Snapshots must be independent yearly deltas, not cumulative aliases.
+        runtime = runner.env.runtimes[firm_id]
+        for key, item in runtime.sold_items.items():
+            for metric in ("chf", "units"):
+                assert sum(row.get("sold_items", {}).get(key, {}).get(metric, 0) for row in rows) == pytest.approx(
+                    item[metric], abs=0.03)
+
+
+@pytest.mark.parametrize("categories", [True, False])
+def test_mixed_parcel_uses_category_value_and_actual_units(categories):
+    runner, _ = build_runner(1, 0, days_per_year=2)
+    runner.start()
+    env = runner.env
+    env.brand_book.categories_on = categories
+    parcel = {"alpen_lager": 2, "wallis_rot": 1}
+    original = dict(parcel)
+    items = env.trade_items(parcel, 360)
+    assert parcel == original
+    if categories:
+        assert items == {"beer": {"chf": pytest.approx(200), "units": 2},
+                         "wine": {"chf": pytest.approx(160), "units": 1}}
+    else:
+        assert items == {"alle": {"chf": 360, "units": 3}}

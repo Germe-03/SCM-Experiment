@@ -35,6 +35,11 @@ def load_checkpoint(path: str | Path) -> tuple[SimulationRunner, RunState]:
         payload = pickle.load(source)
     if not isinstance(payload, dict) or payload.get("version") != CHECKPOINT_VERSION:
         raise ValueError(f"{path} is not a market_sim checkpoint (version {CHECKPOINT_VERSION})")
+    # Older checkpoints predate the observational product ledgers.
+    for runtime in payload["runner"].env.runtimes.values():
+        for name in ("paid_items", "sold_items"):
+            if not hasattr(runtime, name):
+                setattr(runtime, name, {})
     return payload["runner"], payload["state"]
 
 

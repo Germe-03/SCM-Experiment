@@ -50,7 +50,7 @@ select,input[type=search]{background:var(--panel);border:1px solid var(--line);b
 nav.tabs{max-width:1440px;margin:auto;padding:0 12px;display:flex;gap:2px;overflow-x:auto;scrollbar-width:thin}
 nav.tabs button{border:0;background:none;padding:10px 14px;border-bottom:3px solid transparent;color:var(--muted);cursor:pointer;white-space:nowrap;font-weight:500}
 nav.tabs button:hover{color:var(--ink)}nav.tabs button[aria-selected=true]{color:var(--ink);border-bottom-color:var(--brand)}
-main{max-width:1440px;margin:auto;padding:20px}
+main{max-width:1440px;margin:auto;padding:20px 20px 100px}
 section[role=tabpanel]{display:none}section[role=tabpanel].active{display:block}
 .lead{color:var(--muted);margin:-4px 0 16px;max-width:900px}
 h2{font-size:20px;margin:0 0 6px}h3{font-size:14px;margin:0 0 8px}
@@ -89,13 +89,14 @@ td.num,th.num{text-align:right}tbody tr.click{cursor:pointer}tbody tr.click:hove
 .more{display:block;margin:10px auto 0}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
 @media(max-width:900px){.grid,.split{grid-template-columns:1fr}.card.wide{grid-column:auto}main{padding:12px}.bar{padding:10px 12px}}
-.compare-layout{display:grid;grid-template-columns:280px minmax(0,1fr);gap:20px}.compare-layout aside{max-height:760px;overflow:auto}.compare-layout label.firm-choice{display:block;padding:7px 0}.compare-layout input[type=search]{width:100%;margin:8px 0}.best{font-weight:700;background:var(--soft)}.structure svg{min-width:900px;width:100%}.structure svg text{fill:var(--ink)}.structure [data-firm]{cursor:pointer}.structure [data-firm]:focus rect{stroke:var(--ink);stroke-width:3}@media(max-width:900px){.compare-layout{grid-template-columns:1fr}}
+.compare-layout{display:grid;grid-template-columns:280px minmax(0,1fr);gap:20px}.compare-layout>div{min-width:0}.compare-layout .table-wrap{max-height:none;margin-bottom:80px}.compare-layout aside{max-height:760px;overflow:auto}.compare-layout label.firm-choice{display:block;padding:7px 0}.compare-layout input[type=search]{width:100%;margin:8px 0}.best{font-weight:700;background:var(--soft)}.structure svg{min-width:900px;width:100%}.structure svg text{fill:var(--ink)}.structure [data-firm]{cursor:pointer}.structure [data-firm]:focus rect{stroke:var(--ink);stroke-width:3}@media(max-width:900px){.compare-layout{grid-template-columns:1fr}}
 body:has(dialog[open]){overflow:hidden}
 #flow{width:min(1040px,96vw);max-height:94vh;overflow:auto;overscroll-behavior:contain;border:1px solid var(--line);border-radius:14px;background:var(--panel);color:inherit;padding:18px 22px;box-shadow:0 8px 30px #0003}
 #flow::backdrop{background:#0006}.flow-head{display:flex;gap:8px;align-items:center}.flow-head h3{margin:0;margin-right:auto}
 #flow text:not([fill]){fill:currentColor}.flow-node[tabindex]{cursor:pointer}.flow-node.off{opacity:.4}.flow-node[tabindex]:hover rect,.flow-node:focus rect{stroke-width:3.5}.flow-node:focus{outline:none}
 #flow-detail h4{margin:6px 0}.flow-row{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(80px,1fr) 7.5em;gap:12px;align-items:center;padding:5px 0;border-top:1px solid var(--line)}
 .flow-bar{height:8px;border-radius:4px;background:var(--soft)}.flow-bar span{display:block;height:8px;border-radius:4px}.flow-row .num{font-variant-numeric:tabular-nums;white-space:nowrap;text-align:right}
+#view-back{position:fixed;left:20px;bottom:20px;width:48px;height:48px;border-radius:999px;box-shadow:var(--shadow);z-index:20;font-size:24px;padding:0}#view-back:disabled{opacity:.35;cursor:default}#cp-filters{display:grid;gap:8px}#cp-filters label{display:grid;gap:3px}#cp-product-label[hidden]{display:none}.flow-row .num{white-space:normal}#market-people{margin-top:28px}@media(max-width:900px){main{padding-bottom:100px}}
 </style></head><body>
 <header class="top">
  <div class="bar">
@@ -110,7 +111,6 @@ body:has(dialog[open]){overflow:hidden}
   <button role="tab" data-tab="overview">Überblick</button>
   <button role="tab" data-tab="market">Markt &amp; Kunden</button>
   <button role="tab" data-tab="map">Karte</button>
-  <button role="tab" data-tab="people">Bevölkerung</button>
   <button role="tab" data-tab="firms">Firmen</button>
   <button role="tab" data-tab="structure">Marktaufbau</button>
   <button role="tab" data-tab="compare">Vergleich</button>
@@ -149,6 +149,11 @@ body:has(dialog[open]){overflow:hidden}
   <div class="card"><h3>Marketing und Bekanntheit</h3><p class="hint">Ausgaben aller Firmen und Bekanntheit der vier bekanntesten Marken.</p><div class="chart"><canvas id="mk-marketing"></canvas></div></div>
   <div class="card wide"><h3>Trends</h3><ul class="list" id="mk-trends"></ul></div>
  </div>
+<section id="market-people" aria-labelledby="people-title">
+ <h2 id="people-title">Bevölkerung</h2><p class="lead">Die 30 Kundenklassen im letzten Jahr des Zeitraums. Klicke auf eine Klasse, um zwei typische Personen kennenzulernen.</p>
+ <div class="card" style="margin-bottom:16px"><div class="table-wrap" style="max-height:none"><table id="pp-grid" class="heat"></table></div><p class="hint" style="margin-top:8px">Zahl oben: Personen. Unten: Anteil der Nachfrage, die gekauft wurde, und Lieblingskategorie.</p></div>
+ <div id="pp-detail"></div>
+</section>
 </section>
 <section role="tabpanel" id="tab-map">
  <h2>Karte</h2><p class="lead">Die acht Regionen der Simulation, schematisch. Gezeigt wird das letzte Jahr des Zeitraums oben rechts.</p>
@@ -156,11 +161,7 @@ body:has(dialog[open]){overflow:hidden}
  <div class="split"><div class="card"><div id="map-svg"></div><div id="map-legend" class="hint" style="margin-top:8px"></div></div>
  <div class="card"><h3 id="map-title">Regionen</h3><div class="table-wrap"><table id="map-table"></table></div></div></div>
 </section>
-<section role="tabpanel" id="tab-people">
- <h2>Bevölkerung</h2><p class="lead">Die 30 Kundenklassen im letzten Jahr des Zeitraums. Klicke auf eine Klasse, um zwei typische Personen kennenzulernen.</p>
- <div class="card" style="margin-bottom:16px"><div class="table-wrap" style="max-height:none"><table id="pp-grid" class="heat"></table></div><p class="hint" style="margin-top:8px">Zahl oben: Personen. Unten: Anteil der Nachfrage, die gekauft wurde, und Lieblingskategorie.</p></div>
- <div id="pp-detail"></div>
-</section>
+
 <section role="tabpanel" id="tab-firms">
  <h2>Firmen</h2><p class="lead">Alle Firmen, auch ausgeschiedene. Klicke auf eine Zeile für die Details.</p>
  <div class="filters">
@@ -182,6 +183,12 @@ body:has(dialog[open]){overflow:hidden}
  <div class="compare-layout">
   <aside class="card" id="actor-selector">
    <label for="cp-search">Firmen suchen</label><input id="cp-search" type="search" placeholder="Name oder Kennung">
+   <div id="cp-filters">
+    <label for="cp-category">Kategorie<select id="cp-category"><option value="all">Alle</option><option value="retailer">Detailhandel</option><option value="restaurant">Gastronomie</option><option value="wholesaler">Grosshandel</option><option value="distributor">Verteilung</option><option value="factory">Hersteller</option><option value="bank">Banken</option></select></label>
+    <label for="cp-product" id="cp-product-label" hidden>Produktart<select id="cp-product"><option value="all">Alle</option><option value="beer">Bier</option><option value="wine">Wein</option><option value="spirits">Spirituosen</option></select></label>
+    <label for="cp-status">Status<select id="cp-status"><option value="all">Alle</option><option value="active">Aktiv</option><option value="exited">Ausgeschieden</option></select></label>
+    <label for="cp-years"><span id="cp-years-label">Mindestens 0 Jahre im Markt</span><input id="cp-years" type="range" min="0" value="0" step="1"></label>
+   </div><p id="cp-count" class="hint" role="status"></p>
    <div class="filters"><button class="btn" id="cp-top">Top 5 nach Gewinn</button><button class="btn" id="cp-clear">Leeren</button></div>
    <p class="hint" id="cp-limit" aria-live="polite"></p><div id="cp-firms"></div>
   </aside>
@@ -270,6 +277,7 @@ body:has(dialog[open]){overflow:hidden}
 </section>
 </main>
 <dialog id="flow" aria-labelledby="flow-title"><div class="flow-head"><h3 id="flow-title"></h3><button class="btn" id="flow-prev" aria-label="Jahr davor">‹</button><button class="btn" id="flow-next" aria-label="Jahr danach">›</button><button class="btn" id="flow-close" aria-label="Schliessen">✕</button></div><div id="flow-body"></div><div id="flow-detail"></div><p class="hint" style="margin-top:10px">Schliessen mit Esc, Jahr wechseln mit den Pfeiltasten.</p></dialog>
+<button id="view-back" class="btn primary" aria-label="Zurück" title="Zurück" disabled>←</button>
 <button id="chat-open" class="btn primary" aria-haspopup="dialog" aria-controls="chat" style="position:fixed;right:20px;bottom:20px;border-radius:999px;padding:12px 18px;box-shadow:var(--shadow);z-index:20">💬 Fragen</button>
 <div id="chat" role="dialog" aria-label="Fragen an die Daten" hidden style="position:fixed;right:20px;bottom:76px;width:min(380px,calc(100vw - 40px));max-height:70vh;display:none;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:0 8px 30px #0003;z-index:21">
  <div style="display:flex;align-items:center;padding:12px 14px;border-bottom:1px solid var(--line)"><b>Fragen an die Daten</b><button class="btn" id="chat-close" aria-label="Chat schliessen" style="margin-left:auto">✕</button></div>
@@ -313,7 +321,7 @@ const catColor=()=>({beer:pal()[3],wine:pal()[6],spirits:pal()[2]});
 const years=D.system.map(x=>x.year);
 let range={from:years[0],to:years.at(-1)};
 const S={tab:'overview',fmStage:new Set(FM_GROUPS),fmStatus:'all',fmSort:['profit',-1],fmFirm:null,cmp:store.get('cmp',null),evTypes:null,evLimit:200};
-S.cmp=[...new Set(Array.isArray(S.cmp)?S.cmp:[])].filter(id=>firm(id)).slice(0,6);
+S.cmp=[...new Set(Array.isArray(S.cmp)?S.cmp:[])].filter(id=>firm(id)||bankActors()[id]).slice(0,6);
 const inRange=y=>y>=range.from&&y<=range.to;
 const sys=()=>D.system.filter(x=>inRange(x.year));
 
@@ -332,13 +340,25 @@ $('#reset-range').onclick=()=>{range={from:years[0],to:years.at(-1)};$('#from').
 
 // --- tabs ----------------------------------------------------------------
 const tabs=$$('nav.tabs button');
-function openTab(name,focus=false){if(!tabs.some(b=>b.dataset.tab===name))name='overview';if(S.tab!==name)window.scrollTo(0,0);S.tab=name;
+// Keep the same view snapshots in our list and browser history. Scroll is updated
+// before each action, and while scrolling so native Back restores the last position.
+const viewHistory=[];let viewIndex=-1,restoringView=false,viewReady=false;
+function viewSnapshot(){return {tab:S.tab,fmFirm:S.fmFirm,cmp:[...S.cmp],flow:S.flow?{...S.flow}:null,range:{...range},scroll:window.scrollY,flowScroll:$('#flow').scrollTop}}
+function rememberView(){if(!viewReady||restoringView)return;viewHistory[viewIndex]=viewSnapshot();history.replaceState({dashboardView:viewIndex},'', '#'+S.tab)}
+function backState(){const button=$('#view-back'),parent=$('#flow').open?$('#flow'):document.body;if(button.parentElement!==parent)parent.appendChild(button);button.disabled=viewIndex<=0}
+function navigateView(change){if(restoringView){change();return}rememberView();change();if(!viewReady)return;viewHistory.splice(viewIndex+1);viewHistory.push(viewSnapshot());viewIndex=viewHistory.length-1;history.pushState({dashboardView:viewIndex},'', '#'+S.tab);backState()}
+function showTab(name,focus=false){if(name==='people')name='market';if(!tabs.some(b=>b.dataset.tab===name))name='overview';S.tab=name;
  tabs.forEach(b=>{const on=b.dataset.tab===name;b.setAttribute('aria-selected',on);b.tabIndex=on?0:-1;if(on&&focus)b.focus()});
- $$('section[role=tabpanel]').forEach(p=>p.classList.toggle('active',p.id==='tab-'+name));
- if(location.hash!=='#'+name)history.replaceState(null,'','#'+name);render()}
+ $$('section[role=tabpanel]').forEach(p=>p.classList.toggle('active',p.id==='tab-'+name));render()}
+function openTab(name,focus=false){navigateView(()=>{S.flow=null;if($('#flow').open)$('#flow').close();showTab(name,focus);window.scrollTo({top:0,behavior:'instant'})})}
+function restoreView(index){const v=viewHistory[index];if(!v)return;restoringView=true;viewIndex=index;S.fmFirm=v.fmFirm;S.cmp=[...v.cmp];store.set('cmp',S.cmp);range={...v.range};$('#from').value=range.from;$('#to').value=range.to;S.flow=null;if($('#flow').open)$('#flow').close();showTab(v.tab);if(v.flow)openFlow(v.flow.id,v.flow.year,v.flow.sel);backState();requestAnimationFrame(()=>{window.scrollTo({top:v.scroll,behavior:'instant'});$('#flow').scrollTop=v.flowScroll||0;restoringView=false})}
+$('#view-back').onclick=()=>{if(viewIndex>0){rememberView();history.back()}};
+window.addEventListener('scroll',()=>{if(viewReady&&!restoringView)viewHistory[viewIndex]=viewSnapshot()},{passive:true});
+$('#flow').addEventListener('scroll',()=>{if(viewReady&&!restoringView)viewHistory[viewIndex]=viewSnapshot()},{passive:true});
 tabs.forEach((b,i)=>{b.id='t-'+b.dataset.tab;b.setAttribute('aria-controls','tab-'+b.dataset.tab);b.onclick=()=>openTab(b.dataset.tab);
- b.onkeydown=e=>{const k={ArrowRight:1,ArrowLeft:-1}[e.key];if(k){e.preventDefault();openTab(tabs[(i+k+tabs.length)%tabs.length].dataset.tab,true)}}});
-window.addEventListener('hashchange',()=>openTab(location.hash.slice(1)));
+ b.onkeydown=e=>{const k={ArrowRight:1,ArrowLeft:-1}[e.key];if(k&&!e.altKey){e.preventDefault();openTab(tabs[(i+k+tabs.length)%tabs.length].dataset.tab,true)}}});
+window.addEventListener('popstate',e=>{if(Number.isInteger(e.state?.dashboardView)&&viewHistory[e.state.dashboardView])restoreView(e.state.dashboardView)});
+window.addEventListener('hashchange',()=>{const name=location.hash.slice(1)==='people'?'market':location.hash.slice(1);if(name===S.tab)return;rememberView();showTab(name);S.flow=null;if($('#flow').open)$('#flow').close();window.scrollTo({top:0,behavior:'instant'});viewHistory.splice(viewIndex+1);viewHistory.push(viewSnapshot());viewIndex=viewHistory.length-1;history.replaceState({dashboardView:viewIndex},'', '#'+S.tab);backState()});
 
 // --- charts --------------------------------------------------------------
 const charts=[];
@@ -373,7 +393,7 @@ const firmProfit=id=>firm(id).yearly.filter(y=>inRange(y.year)).reduce((a,y)=>a+
 const status=f=>f.exit_year?`<span class="badge off">Jahr ${f.entry_year||1}–${f.exit_year}, ausgeschieden</span>`:`<span class="badge ok">aktiv seit Jahr ${f.entry_year||1}</span>`;
 const empty=msg=>`<div class="empty">${esc(msg)}</div>`;
 function firmRows(ids,cols){return ids.map(id=>`<tr class="click" data-firm="${esc(id)}">${cols(firm(id))}</tr>`).join('')}
-function wireFirmLinks(root){root.querySelectorAll('[data-firm]').forEach(r=>{r.tabIndex=0;const go=()=>{S.fmFirm=r.dataset.firm;openTab('firms');setTimeout(()=>$('#fm-detail').scrollIntoView(),50)};r.onclick=go;r.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();go()}}})}
+function wireFirmLinks(root){root.querySelectorAll('[data-firm]').forEach(r=>{r.tabIndex=0;const go=e=>{e?.preventDefault();showActor(r.dataset.firm)};r.onclick=go;r.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();go()}}})}
 
 // --- Überblick -----------------------------------------------------------
 function renderOverview(){const s=sys(),first=s[0],last=s.at(-1);const e=evs();
@@ -426,9 +446,11 @@ function bankActors(){const actors={};for(const r of D.banks||[]){const key='ban
  if(!actors[key])actors[key]={id:key,bank_id:r.bank_id,name:r.name,stage:'bank',entry_year:Math.max(1,r.founded_year||r.year),exit_year:null,yearly:[]};
  const f=actors[key];f.yearly.push(r);if(!r.active)f.exit_year=f.exit_year==null?r.year:Math.min(f.exit_year,r.year)}
  for(const f of Object.values(actors))f.yearly.sort((a,b)=>a.year-b.year);return actors}
+function showActor(id){navigateView(()=>{S.fmFirm=id;S.flow=null;if($('#flow').open)$('#flow').close();showTab('firms');$('#fm-detail').scrollIntoView({block:'start',behavior:'instant'})})}
+function closeActor(){navigateView(()=>{S.fmFirm=null;renderFirms()})}
 function bankRatio(b){const assets=Math.max(b.loans||0,(b.deposits||0)+(b.equity||0));return assets>0?b.equity/assets:null}
 function bankLink(id,name){return `<a href="#firms" data-bank="${esc(id)}">${esc(name)}</a>`}
-function wireBankLinks(root){root.querySelectorAll('[data-bank]').forEach(r=>{r.tabIndex=0;const go=e=>{e?.preventDefault();e?.stopPropagation();S.fmFirm='bank:'+r.dataset.bank;openTab('firms');$('#fm-detail').scrollIntoView({block:'start'})};r.onclick=go;r.onkeydown=e=>{if(e.key==='Enter'||e.key===' ')go(e)}})}
+function wireBankLinks(root){root.querySelectorAll('[data-bank]').forEach(r=>{r.tabIndex=0;const go=e=>{e?.preventDefault();e?.stopPropagation();showActor('bank:'+r.dataset.bank)};r.onclick=go;r.onkeydown=e=>{if(e.key==='Enter'||e.key===' ')go(e)}})}
 function eventList(rows){return rows.length?rows.slice().reverse().map(e=>`<li><span class="yr">Jahr ${e.year}</span><span><b>${esc(EVENT[e.event]||e.event)}</b> ${esc(pretty(e.details))}</span></li>`).join(''):'<li>Keine Ereignisse im Zeitraum.</li>'}
 function renderFirms(){
  $('#fm-stage').innerHTML=FM_GROUPS.map(s=>`<button class="chip" data-s="${s}" aria-pressed="${S.fmStage.has(s)}"><span class="dot" style="background:${stageColor()[s]}"></span>${fmGroupLabel(s)}</button>`).join('');
@@ -443,12 +465,12 @@ function renderFirms(){
  const [sk,sd]=S.fmSort;ids.sort((a,b)=>{const x=val(a,sk),y=val(b,sk);return x==null?y==null?0:1:y==null?-1:(x>y?1:x<y?-1:0)*sd});
  $('#fm-table').innerHTML=`<thead><tr>${cols.map(([k,l,n])=>`<th class="sort ${n?'num':''} ${sk===k?(sd>0?'asc':'desc'):''}" data-k="${k}" tabindex="0">${l}</th>`).join('')}</tr></thead><tbody>${ids.length?ids.map(id=>{const f=actors[id],bank=f.stage==='bank';return`<tr class="click ${S.fmFirm===id?'current':''}" data-actor="${esc(id)}"><td><span class="dot" style="background:${stageColor()[fmGroup(f)]}"></span>${esc(f.name)}</td><td>${esc(fmGroupLabel(fmGroup(f)))}</td><td>${esc(catLabel(f))}${f.importer?' (Import)':''}</td><td>${esc(REGION[f.region]||val(id,'region'))}</td><td>${esc(ARCH[val(id,'arch')]||val(id,'arch'))}</td><td class="num">${chf(val(id,'revenue'))}</td><td class="num">${chf(val(id,'profit'))}</td><td class="num">${chf(val(id,'cash'))}</td><td class="num">${pct(val(id,'share'))}${bank?'<small> Einlagen</small>':''}</td><td><span class="badge ${exited(f)?'off':'ok'}">${exited(f)?(bank?'pleite':'ausgeschieden')+' in Jahr '+f.exit_year:'aktiv'}</span><small> im Markt seit Jahr ${f.entry_year}</small></td></tr>`}).join(''):`<tr><td colspan="10">${empty('Keine Firma oder Bank passt zu Suche und Filter.')}</td></tr>`}</tbody>`;
  $$('#fm-table th.sort').forEach(th=>{const go=()=>{const k=th.dataset.k;S.fmSort=[k,S.fmSort[0]===k?-S.fmSort[1]:(['name','stage','category','region','arch'].includes(k)?1:-1)];renderFirms()};th.onclick=go;th.onkeydown=e=>{if(e.key==='Enter')go()}});
- $$('#fm-table tr[data-actor]').forEach(r=>{r.tabIndex=0;const go=()=>{S.fmFirm=r.dataset.actor;renderFirms();$('#fm-detail').scrollIntoView({block:'start'})};r.onclick=go;r.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();go()}}});
- renderFirmDetail()}
+ $$('#fm-table tr[data-actor]').forEach(r=>{r.tabIndex=0;const go=()=>{showActor(r.dataset.actor)};r.onclick=go;r.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();go()}}});
+ renderFirmDetail();$$('#fm-detail [data-close-actor]').forEach(b=>b.onclick=closeActor)}
 function renderBankDetail(id){const root=$('#fm-detail'),f=bankActors()['bank:'+id];if(!f){root.innerHTML=empty('Keine Bank ausgewählt.');return}
  const y=f.yearly.filter(r=>inRange(r.year)),last=y.at(-1),failed=f.exit_year!=null&&f.exit_year<=range.to,latest=f.yearly.filter(r=>r.year<=range.to).at(-1);
  if(!latest){root.innerHTML=empty('Diese Bank war im gewählten Zeitraum noch nicht gegründet.');return}
- root.innerHTML=`<div class="card"><div class="detail-head"><h2>${esc(f.name)}</h2><span class="badge">Bank</span><span class="badge ${failed?'off':'ok'}">${failed?'pleite seit Jahr '+f.exit_year:'aktiv'}</span></div><p class="hint">Gegründet in Jahr ${f.entry_year} · Zinsmarge ${pct(latest.margin)}${last?' · Letzter Bericht im Zeitraum: Jahr '+last.year:''}</p>
+ root.innerHTML=`<div class="card"><div class="detail-head"><button class="btn" data-close-actor aria-label="Detailansicht schliessen">✕</button><h2>${esc(f.name)}</h2><span class="badge">Bank</span><span class="badge ${failed?'off':'ok'}">${failed?'pleite seit Jahr '+f.exit_year:'aktiv'}</span></div><p class="hint">Gegründet in Jahr ${f.entry_year} · Zinsmarge ${pct(latest.margin)}${last?' · Letzter Bericht im Zeitraum: Jahr '+last.year:''}</p>
  <div class="kpis">${kpi('Eigenkapital',chf(last?.equity))}${kpi('Eigenkapitalquote',pct(last?bankRatio(last):null))}${kpi('Marktanteil Einlagen',pct(last?.deposit_share))}${kpi('Marktanteil Kredite',pct(last?.loan_share))}${kpi('Kunden',last?nf(last.customers):'–',last?nf(last.house_customers)+' davon Hausbank-Kunden':'')}${kpi('Gewinn im letzten Jahr',chf(y.find(r=>r.year===range.to)?.profit))}</div>
  <p class="hint">Eigenkapitalquote = Eigenkapital / Bilanzsumme. Bilanzsumme = grösserer Wert aus Krediten oder Einlagen + Eigenkapital. Marktanteile beziehen sich auf aktive Banken.</p>
  ${last?'':empty('Keine Bankberichte im gewählten Zeitraum.')}<div class="grid">
@@ -501,7 +523,7 @@ function renderFirmDetail(){const root=$('#fm-detail');destroy();if(S.tab!=='fir
  if(id?.startsWith('bank:')){renderBankDetail(id.slice(5));return}
  if(!id||!firm(id)){root.innerHTML=empty('Wähle oben eine Firma, um ihre Entwicklung zu sehen.');return}
  const f=firm(id),y=f.yearly.filter(r=>inRange(r.year)),l=y.at(-1)||{};const inCmp=(S.cmp||[]).includes(id);
- root.innerHTML=`<div class="card"><div class="detail-head"><h2>${esc(f.name)}</h2><span class="badge">${stageLabel(f)}</span><span class="badge">${esc(catLabel(f))}${f.importer?' · Import':''}</span><span class="badge">${esc(REGION[f.region]||f.region||'')}</span>${status(f)}<button class="btn ${inCmp?'':'primary'}" id="fd-cmp" style="margin-left:auto">${inCmp?'Aus Vergleich entfernen':'Zum Vergleich hinzufügen'}</button></div>
+ root.innerHTML=`<div class="card"><div class="detail-head"><button class="btn" data-close-actor aria-label="Detailansicht schliessen">✕</button><h2>${esc(f.name)}</h2><span class="badge">${stageLabel(f)}</span><span class="badge">${esc(catLabel(f))}${f.importer?' · Import':''}</span><span class="badge">${esc(REGION[f.region]||f.region||'')}</span>${status(f)}<button class="btn ${inCmp?'':'primary'}" id="fd-cmp" style="margin-left:auto">${inCmp?'Aus Vergleich entfernen':'Zum Vergleich hinzufügen'}</button></div>
  <div class="kpis">${kpi('Gewinn im Zeitraum',chf(firmProfit(id)))}${kpi('Cash am Ende',chf(l.cash))}${kpi('Reputation',pct(l.reputation))}${kpi('Qualität',pct(l.average_quality))}${kpi('Auslastung',pct(l.capacity_utilization))}${kpi('Marktanteil',pct(l.market_share))}${kpi('Lieferquote',pct(l.service_level))}</div>
  ${firmBankLine(id)}<div class="grid"><div class="card wide"><h3>Umsatz und Kosten pro Jahr</h3><p class="hint">Fahre über eine Säule für die Kostenarten. Klicke auf ein Jahr, um zu sehen, wohin das Geld floss.</p><div class="chart"><canvas id="fd-cost"></canvas></div></div>
  <div class="card"><h3>Cash (Wochenschnitt)</h3><div class="chart"><canvas id="fd-cash"></canvas></div></div><div class="card"><h3>Lager und Rückstand (Wochenschnitt)</h3><div class="chart"><canvas id="fd-stock"></canvas></div></div>
@@ -511,9 +533,10 @@ function renderFirmDetail(){const root=$('#fm-detail');destroy();if(S.tab!=='fir
  <div class="card wide" id="fd-exit" hidden></div>
  <div class="card wide"><h3>Entscheidungen</h3><p class="hint">Pro Jahr nur, was sich geändert hat, dazu Straftaten, Investitionen und Projekte.</p><div class="chips" id="fd-dec-filter" style="margin-bottom:10px"></div><ul class="list" id="fd-decisions" style="max-height:420px;overflow:auto"></ul></div></div></div>`;
  wireBankLinks(root);
+ $$('#fm-detail [data-close-actor]').forEach(b=>b.onclick=closeActor);
  $('#fd-cmp').disabled=!inCmp&&(S.cmp||[]).length>=6;
  root.insertAdjacentHTML('beforeend',ledgerHtml(id));
- $('#fd-cmp').onclick=()=>{const c=new Set(S.cmp||[]);c.has(id)?c.delete(id):(c.size<6&&c.add(id));S.cmp=[...c];store.set('cmp',S.cmp);renderFirmDetail()};
+ $('#fd-cmp').onclick=()=>navigateView(()=>{const c=new Set(S.cmp||[]);c.has(id)?c.delete(id):(c.size<6&&c.add(id));S.cmp=[...c];store.set('cmp',S.cmp);renderFirmDetail()});
  const lbl=y.map(r=>r.year),costs={purchase_cost:'Einkauf/Rohstoffe',wage_cost:'Löhne',fixed_cost:'Fixkosten',handling_cost:'Handling & Transport',rnd_cost:'F&E',holding_cost:'Lager',backlog_cost:'Rückstand',hiring_cost:'Einstellung',interest_cost:'Zinsen'};
  chart('fd-cost',{type:'bar',data:{labels:lbl,datasets:[{label:'Umsatz',data:y.map(r=>r.revenue),backgroundColor:pal()[0],stack:'rev'},...Object.entries(costs).map(([k,n],j)=>({label:n,data:y.map(r=>r[k]),backgroundColor:pal()[(j+1)%8]+'cc',stack:'cost'}))]},
   options:{interaction:{mode:'stack'},onClick:(e,els,c)=>{const p=c.getElementsAtEventForMode(e,'index',{intersect:false},true);if(p.length)openFlow(id,+c.data.labels[p[0].index])},onHover:(e,els)=>{e.native.target.style.cursor=els.length?'pointer':'default'},plugins:{tooltip:{itemSort:(a,b)=>b.parsed.y-a.parsed.y,callbacks:{label:c=>`${c.dataset.label}: ${chf(c.parsed.y)}`,footer:it=>it.length>1?`Total Kosten: ${chf(it.reduce((a,c)=>a+c.parsed.y,0))}`:''}}},scales:{x:{stacked:true,grid:{display:false}},y:{stacked:true,...fmtAxis('chf')}}}});
@@ -533,28 +556,33 @@ const savedCmpColors=store.get('cmp-colors',{});
 const cmpColors=savedCmpColors&&typeof savedCmpColors==='object'&&!Array.isArray(savedCmpColors)?savedCmpColors:{};
 function assignCompareColors(){for(const id of Object.keys(cmpColors)){if(!S.cmp.includes(id))delete cmpColors[id]}for(const id of S.cmp){if(cmpColors[id]==null||S.cmp.some(other=>other!==id&&cmpColors[other]===cmpColors[id])){const used=S.cmp.filter(x=>x!==id).map(x=>cmpColors[x]);cmpColors[id]=[0,1,2,3,4,5].find(c=>!used.includes(c))??0}}store.set('cmp-colors',cmpColors)}
 function activeInYear(f,y){return y>=f.entry_year&&(!f.exit_year||y<=f.exit_year)}
-function renderCompare(){S.cmp=[...new Set(Array.isArray(S.cmp)?S.cmp:[])].filter(id=>firm(id)).slice(0,6);assignCompareColors();
- const save=()=>{store.set('cmp',S.cmp);renderCompare()};
- const q=$('#cp-search').value.toLowerCase().trim();
+function renderCompare(){const actors={...D.firms,...bankActors()},actor=id=>actors[id],actorName=id=>actor(id)?.name||id;S.cmp=[...new Set(Array.isArray(S.cmp)?S.cmp:[])].filter(id=>firm(id)||bankActors()[id]).slice(0,6);assignCompareColors();
+ const save=change=>navigateView(()=>{change();store.set('cmp',S.cmp);renderCompare()});
+ const q=$('#cp-search').value.toLowerCase().trim(),category=$('#cp-category').value,status=$('#cp-status').value,minYears=+$('#cp-years').value,product=$('#cp-product').value;
+ $('#cp-years').max=D.meta.years;$('#cp-years-label').textContent=`Mindestens ${minYears} Jahre im Markt`;
+ $('#cp-product-label').hidden=category!=='factory';
+ const matches=Object.values(actors).filter(f=>{const end=f.exit_year||D.meta.years;return(category==='all'||fmGroup(f)===category)&&(category!=='factory'||product==='all'||f.category===product)&&(status==='all'||(status==='active')===!f.exit_year)&&end-(f.entry_year||1)+1>=minYears&&(!q||(f.name+' '+f.id).toLowerCase().includes(q))});
+ $('#cp-count').textContent=matches.length+' Treffer';
  $('#cp-limit').textContent=S.cmp.length===6?'6 von 6 gewählt. Entferne eine Firma, um eine andere zu wählen.':S.cmp.length+' von höchstens 6 Firmen gewählt.';
- $('#cp-firms').innerHTML=STAGES.map(st=>`<h3>${STAGE[st]}</h3>`+Object.values(D.firms).filter(f=>f.stage===st&&(!q||(f.name+' '+f.id).toLowerCase().includes(q))).map(f=>`<label class="firm-choice"><input type="checkbox" data-id="${esc(f.id)}" ${S.cmp.includes(f.id)?'checked':S.cmp.length>=6?'disabled':''}>${S.cmp.includes(f.id)?`<span class="dot" style="background:${pal()[cmpColors[f.id]]}"></span>`:''}${esc(f.name)}</label>`).join('')).join('');
- $$('#cp-firms input').forEach(c=>c.onchange=()=>{S.cmp=c.checked?[...S.cmp,c.dataset.id]:S.cmp.filter(id=>id!==c.dataset.id);save()});
+ $('#cp-firms').innerHTML=FM_GROUPS.map(st=>{const rows=matches.filter(f=>fmGroup(f)===st);return rows.length?`<h3>${fmGroupLabel(st)}</h3>`+rows.map(f=>`<label class="firm-choice"><input type="checkbox" data-id="${esc(f.id)}" ${S.cmp.includes(f.id)?'checked':S.cmp.length>=6?'disabled':''}>${S.cmp.includes(f.id)?`<span class="dot" style="background:${pal()[cmpColors[f.id]]}"></span>`:''}${esc(f.name)} <small class="hint">${f.exit_year?'Jahr '+(f.entry_year||1)+'–'+f.exit_year:'seit Jahr '+(f.entry_year||1)}</small></label>`).join(''):''}).join('')||empty('Keine Firma passt zu Suche und Filter.');
+ $$('#cp-firms input').forEach(c=>c.onchange=()=>save(()=>{S.cmp=c.checked?[...S.cmp,c.dataset.id]:S.cmp.filter(id=>id!==c.dataset.id)}));
  $('#cp-search').oninput=renderCompare;
- $('#cp-top').onclick=()=>{S.cmp=Object.keys(D.firms).sort((a,b)=>firmProfit(b)-firmProfit(a)).slice(0,5);save()};
- $('#cp-clear').onclick=()=>{S.cmp=[];save()};
- const key=S.cmpMetric||'profit',relative=!!S.cmpRelative;
- $('#cp-metrics').innerHTML=CMP_METRICS.map(([k,t])=>`<button class="chip" data-metric="${k}" aria-pressed="${k===key}">${t}</button>`).join('');
+ ['cp-category','cp-product','cp-status'].forEach(id=>$('#'+id).onchange=renderCompare);$('#cp-years').oninput=renderCompare;
+ $('#cp-top').onclick=()=>save(()=>{S.cmp=matches.sort((a,b)=>sumBy(b.yearly.filter(r=>inRange(r.year)),'profit')-sumBy(a.yearly.filter(r=>inRange(r.year)),'profit')).slice(0,5).map(f=>f.id)});
+ $('#cp-clear').onclick=()=>save(()=>{S.cmp=[]});
+ const metrics=S.cmp.length&&S.cmp.every(id=>actor(id).stage==='bank')?CMP_METRICS.slice(0,4):CMP_METRICS;if(!metrics.some(m=>m[0]===S.cmpMetric))S.cmpMetric='profit';const key=S.cmpMetric,relative=!!S.cmpRelative;
+ $('#cp-metrics').innerHTML=metrics.map(([k,t])=>`<button class="chip" data-metric="${k}" aria-pressed="${k===key}">${t}</button>`).join('');
  $$('#cp-metrics button').forEach(b=>b.onclick=()=>{S.cmpMetric=b.dataset.metric;renderCompare()});
  $('#cp-relative').checked=relative;$('#cp-relative').onchange=e=>{S.cmpRelative=e.target.checked;renderCompare()};
  destroy();const root=$('#cp-charts');if(!S.cmp.length){root.innerHTML=empty('Wähle links bis zu sechs Firmen oder nutze «Top 5 nach Gewinn».');return}
- const [,title,fmt]=CMP_METRICS.find(x=>x[0]===key),labels=years.filter(inRange),format=v=>fmt==='chf'?chf(v):fmt==='pct'?pct(v):nf(v,2);
- const value=(id,y)=>{const f=firm(id);if(!activeInYear(f,y))return null;const v=f.yearly.find(r=>r.year===y)?.[key];if(v==null)return null;if(!relative)return v;
-  const peers=Object.values(D.firms).filter(p=>p.stage===f.stage&&activeInYear(p,y)).map(p=>p.yearly.find(r=>r.year===y)?.[key]).filter(v=>v!=null);return peers.length?v-peers.reduce((a,b)=>a+b,0)/peers.length:null};
- root.innerHTML=`<div class="card"><h3>${title}${relative?' relativ zum Stufenschnitt':''}</h3><div class="chart" style="height:400px"><canvas id="cp-metric"></canvas></div></div><div class="table-wrap"><table id="cp-summary"></table></div>`;
- chart('cp-metric',{type:'line',data:{labels,datasets:S.cmp.map(id=>({label:fname(id),data:labels.map(y=>value(id,y)),borderColor:pal()[cmpColors[id]],pointRadius:0,borderWidth:2,spanGaps:false}))},options:{scales:{y:fmtAxis(fmt)}}});
+ const [,title,fmt]=CMP_METRICS.find(x=>x[0]===key),labels=years.filter(inRange),format=v=>v==null?'–':fmt==='chf'?chf(v):fmt==='pct'?pct(v):nf(v,2);
+ const rawValue=(f,y)=>{if(!activeInYear(f,y))return null;const r=f.yearly.find(r=>r.year===y);if(!r)return null;if(f.stage==='bank'){if(!['profit','revenue','cash','market_share'].includes(key))return null;return r[{cash:'equity',market_share:'deposit_share'}[key]||key]??null}return r[key]??null};
+ const value=(id,y)=>{const f=actor(id),v=rawValue(f,y);if(v==null||!relative)return v;const peers=Object.values(actors).filter(p=>fmGroup(p)===fmGroup(f)).map(p=>rawValue(p,y)).filter(v=>v!=null);return peers.length?v-peers.reduce((a,b)=>a+b,0)/peers.length:null};
+ root.innerHTML=`<div class="card"><h3>${title}${key==='cash'?' / Eigenkapital':''}${relative?' relativ zum Stufenschnitt':''}</h3><div class="chart" style="height:400px"><canvas id="cp-metric"></canvas></div></div><div class="table-wrap"><table id="cp-summary"></table></div>`;
+ chart('cp-metric',{type:'line',data:{labels,datasets:S.cmp.map(id=>({label:actorName(id),data:labels.map(y=>value(id,y)),borderColor:pal()[cmpColors[id]],pointRadius:0,borderWidth:2,spanGaps:false}))},options:{scales:{y:fmtAxis(fmt)}}});
  const stats=S.cmp.map(id=>{const pairs=labels.map(y=>[y,value(id,y)]).filter(p=>p[1]!=null),v=pairs.map(p=>p[1]);return{id,pairs,values:v.length?[value(id,labels.at(-1)),v.reduce((a,b)=>a+b,0)/v.length,Math.max(...v),Math.min(...v)]:[null,null,null,null]}});
  const best=[0,1,2,3].map(i=>Math.max(...stats.map(r=>r.values[i]).filter(v=>v!=null)));
- $('#cp-summary').innerHTML='<thead><tr><th>Firma</th><th>Letztes Jahr</th><th>Durchschnitt</th><th>Bestes Jahr</th><th>Schlechtestes Jahr</th></tr></thead><tbody>'+stats.map(r=>`<tr><td><span class="dot" style="background:${pal()[cmpColors[r.id]]}"></span>${esc(fname(r.id))}</td>${r.values.map((v,i)=>`<td class="num ${v!=null&&v===best[i]?'best':''}">${v!=null&&v===best[i]?'<strong>':''}${format(v)}${i>=2&&v!=null?' (Jahr '+r.pairs.find(p=>p[1]===v)[0]+')':''}${v!=null&&v===best[i]?'</strong>':''}</td>`).join('')}</tr>`).join('')+'</tbody>'}
+ $('#cp-summary').innerHTML='<thead><tr><th>Firma</th><th>Letztes Jahr</th><th>Durchschnitt</th><th>Bestes Jahr</th><th>Schlechtestes Jahr</th></tr></thead><tbody>'+stats.map(r=>`<tr><td><span class="dot" style="background:${pal()[cmpColors[r.id]]}"></span>${esc(actorName(r.id))}</td>${r.values.map((v,i)=>`<td class="num ${v!=null&&v===best[i]?'best':''}">${v!=null&&v===best[i]?'<strong>':''}${format(v)}${i>=2&&v!=null?' (Jahr '+r.pairs.find(p=>p[1]===v)[0]+')':''}${v!=null&&v===best[i]?'</strong>':''}</td>`).join('')}</tr>`).join('')+'</tbody>'}
 
 function ledgerHtml(id){const rows=(D.offence_ledger||[]).filter(r=>inRange(r.year)&&(!id||r.firm===id));
  return `<div class="card"><h3>Hat es sich gelohnt?</h3><div class="kpis">${kpi('lohnend:',nf(rows.filter(r=>r.paid_off).length)+' von '+nf(rows.length))}</div><p class="hint">Schaden ist eine Schätzung aus Reputationsverlust und Vorjahresumsatz.</p>${rows.length?`<div class="table-wrap"><table><thead><tr><th>Firma</th><th>Straftat</th><th>Jahr</th><th>Gewinn</th><th>Busse</th><th>Schaden</th><th>Netto</th><th>Urteil</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${esc(fname(r.firm))}</td><td>${esc(({lohndumping:'Lohndumping',pfusch:'Pfusch bei Rohstoffen',steuerhinterziehung:'Steuerhinterziehung'})[r.offence]||r.offence)}</td><td>${r.year}</td>${['gain','fine','damage','net'].map(k=>`<td class="num">${chf(r[k])}</td>`).join('')}<td><span class="badge ${r.paid_off?'ok':'off'}">${r.paid_off?'lohnend':'nicht lohnend'}</span></td></tr>`).join('')}</tbody></table></div>`:empty('Keine Straftaten im Zeitraum.')}</div>`}
@@ -735,8 +763,10 @@ const FLOW_NODES=[
 function flowGroups(id,year){const r=firm(id).yearly.find(x=>x.year===year)||{},paid=r.paid_to||{},cf=r.cash_flows||{};
  const G=Object.fromEntries(FLOW_NODES.map(n=>[n.k,{in:[],out:[]}]));
  const put=(g,dir,n,v,info,firmId)=>{if(v>0.5)G[g][dir].push({n,v,info,firm:firmId||null})};
- put('kunden','in','Umsatz',r.revenue,'Verkäufe an Kunden');
- for(const [k,v] of Object.entries(paid))k.startsWith('staat:')?put('staat','out',flowName(k),v,FLOW_REASON[k.slice(6)]||''):put('lieferanten','out',flowName(k),v,D.firms[k]?stageLabel(firm(k)):'eigene Produktion',D.firms[k]?k:null);
+ const itemRows=(items,group,dir)=>{for(const [key,item] of Object.entries(items||{})){const split=key.lastIndexOf('|'),partner=key.slice(0,split),category=key.slice(split+1);if(partner.startsWith('staat:'))continue;const f=D.firms[partner],name=partner==='konsumenten'?'Konsumenten':partner==='export'?'Export':flowName(partner);put(group,dir,name,item.chf,[f?stageLabel(f):'',CAT[category]||category].filter(Boolean).join(' · '),f?partner:null);const row=G[group][dir].at(-1);if(item.chf>0.5&&row)row.units=item.units}}
+ if(Object.keys(r.sold_items||{}).length){itemRows(r.sold_items,'kunden','in');put('kunden','in','Weitere Verkäufe',(r.revenue||0)-Object.values(r.sold_items).reduce((n,x)=>n+x.chf,0),'Ohne Produktangabe')}else put('kunden','in','Umsatz',r.revenue,'Verkäufe an Kunden');
+ itemRows(r.paid_items,'lieferanten','out');
+ for(const [k,v] of Object.entries(paid)){const known=Object.entries(r.paid_items||{}).filter(([key])=>key.slice(0,key.lastIndexOf('|'))===k).reduce((n,[,x])=>n+x.chf,0);k.startsWith('staat:')?put('staat','out',flowName(k),v,FLOW_REASON[k.slice(6)]||''):put('lieferanten','out',flowName(k),v-known,D.firms[k]?stageLabel(firm(k)):'eigene Produktion',D.firms[k]?k:null)}
  put('lieferanten','out','Ohne Zuordnung',(r.purchase_cost||0)-Object.values(paid).reduce((a,v)=>a+v,0),'Lauf ohne Empfängerdaten');
  put('personal','out','Löhne',r.wage_cost,'');put('personal','out','Einstellung',r.hiring_cost,'Kosten für neue Mitarbeitende');
  put('betrieb','out','Fixkosten',r.fixed_cost,'Miete, Maschinen, Abschreibungen');put('betrieb','out','Handling & Transport',r.handling_cost,'');
@@ -779,19 +809,22 @@ function flowSvg(id,year,G,sel){const W=960,H=600,C={x:480,y:300,w:250,h:124},NW
 function flowDetail(id,year,G,k){const box=$('#flow-detail');if(!k){box.innerHTML=`<p class="hint">Grün fliesst Geld zur Firma, orange fliesst es weg. Die Dicke zeigt den Betrag. Klicke auf einen Partner für die Einzelheiten, ‹ und › wechseln das Jahr.</p>`;return}
  const n=FLOW_NODES.find(x=>x.k===k),g=G[k],max=Math.max(...[...g.in,...g.out].map(x=>x.v));
  const rows=(items,dir)=>items.map(x=>`<div class="flow-row"><div><b>${x.firm?`<a href="#" data-go="${esc(x.firm)}">${esc(x.n)}</a>`:esc(x.n)}</b>${x.info?`<span class="hint"> · ${esc(x.info)}</span>`:''}</div>`+
-  `<div class="flow-bar"><span style="width:${Math.max(1,x.v/max*100)}%;background:${dir==='in'?'var(--good)':'var(--c2)'}"></span></div><div class="num">${dir==='in'?'+':'−'}${chf(x.v)}</div></div>`).join('');
+  `<div class="flow-bar"><span style="width:${Math.max(1,x.v/max*100)}%;background:${dir==='in'?'var(--good)':'var(--c2)'}"></span></div><div class="num">${dir==='in'?'+':'−'}${chf(x.v)}${x.units!=null?`<br><small>${nf(x.units)} Einheiten</small>`:''}</div></div>`).join('');
  box.innerHTML=`<h4>${esc(n.label)}</h4>${g.in.length?`<p class="hint">Fliesst zur Firma: ${chf(sumV(g.in))}</p>${rows(g.in,'in')}`:''}${g.out.length?`<p class="hint">Fliesst weg: ${chf(sumV(g.out))}</p>${rows(g.out,'out')}`:''}`;
- $$('#flow-detail [data-go]').forEach(a=>a.onclick=e=>{e.preventDefault();$('#flow').close();S.fmFirm=a.dataset.go;openTab('firms');renderFirms();$('#fm-detail').scrollIntoView({block:'start'})})}
-function openFlow(id,year,sel=null){const dlg=$('#flow'),years=firm(id).yearly.map(r=>r.year).filter(inRange),G=flowGroups(id,year);
+ $$('#flow-detail [data-go]').forEach(a=>a.onclick=e=>{e.preventDefault();showActor(a.dataset.go)})}
+function openFlow(id,year,sel=null){navigateView(()=>renderFlow(id,year,sel))}
+function renderFlow(id,year,sel=null){S.flow={id,year,sel};const dlg=$('#flow'),years=firm(id).yearly.map(r=>r.year).filter(inRange),G=flowGroups(id,year);
  $('#flow-title').textContent=`Geldfluss ${firm(id).name} – Jahr ${year}`;
  const i=years.indexOf(year);$('#flow-prev').disabled=i<=0;$('#flow-next').disabled=i<0||i>=years.length-1;
  $('#flow-prev').onclick=()=>openFlow(id,years[i-1],sel);$('#flow-next').onclick=()=>openFlow(id,years[i+1],sel);
  if(sel&&!(G[sel].in.length||G[sel].out.length))sel=null;
  $('#flow-body').innerHTML=flowSvg(id,year,G,sel);flowDetail(id,year,G,sel);
  $$('#flow-body .flow-node[tabindex]').forEach(el=>{const go=()=>openFlow(id,year,sel===el.dataset.k?null:el.dataset.k);el.onclick=go;el.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();go()}}});
- dlg.onkeydown=e=>{if(e.key==='ArrowLeft'&&!$('#flow-prev').disabled)$('#flow-prev').click();if(e.key==='ArrowRight'&&!$('#flow-next').disabled)$('#flow-next').click()};
- $('#flow-close').onclick=()=>dlg.close();if(!dlg.open)dlg.showModal()}
-$('#flow').addEventListener('click',e=>{if(e.target.id==='flow')e.target.close()});
+ dlg.onkeydown=e=>{if(e.altKey)return;if(e.key==='ArrowLeft'&&!$('#flow-prev').disabled)$('#flow-prev').click();if(e.key==='ArrowRight'&&!$('#flow-next').disabled)$('#flow-next').click()};
+ $('#flow-close').onclick=closeFlow;if(!dlg.open)dlg.showModal()}
+function closeFlow(){navigateView(()=>{S.flow=null;$('#flow').close()})}
+$('#flow').addEventListener('cancel',e=>{e.preventDefault();closeFlow()});
+$('#flow').addEventListener('click',e=>{if(e.target.id==='flow')closeFlow()});
 
 // Chat with the local model through python -m market_sim.serve.
 (function(){const box=$('#chat'),log=$('#chat-log'),input=$('#chat-input');
@@ -806,9 +839,9 @@ $('#flow').addEventListener('click',e=>{if(e.target.id==='flow')e.target.close()
    wait.innerHTML=esc(pretty(a.answer)).replace(/\n/g,'<br>')+(a.sources&&a.sources.length?`<div class="hint" style="margin-top:6px">Quellen: ${a.sources.map(esc).join(' · ')}</div>`:'')}
   catch(err){wait.innerHTML='Keine Antwort vom Chat-Server. Läuft <code>python -m market_sim.serve</code> und ist das Sprachmodell erreichbar?'}
   finally{$('#chat-send').disabled=false;input.focus()}}})();
-const VIEWS={chronicle:renderChronicle,map:renderMap,people:renderPeople,structure:renderStructure,overview:renderOverview,market:renderMarket,firms:renderFirms,compare:renderCompare,chain:renderChain,finance:renderFinance,stocks:renderStocks,state:renderState,rnd:renderRnd,events:renderEvents};
+const VIEWS={chronicle:renderChronicle,map:renderMap,structure:renderStructure,overview:renderOverview,market:()=>{renderMarket();renderPeople()},firms:renderFirms,compare:renderCompare,chain:renderChain,finance:renderFinance,stocks:renderStocks,state:renderState,rnd:renderRnd,events:renderEvents};
 function render(){destroy();VIEWS[S.tab]()}
-openTab(location.hash.slice(1)||'overview');
+showTab(location.hash.slice(1)||'overview');viewHistory.push(viewSnapshot());viewIndex=0;viewReady=true;history.replaceState({dashboardView:0},'', '#'+S.tab);history.scrollRestoration='manual';backState();
 </script></body></html>'''
 
 

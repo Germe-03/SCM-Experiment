@@ -18,6 +18,7 @@ const context = {D, S, range, $, $$: selector => selector==='#sx-period button'?
   fmGroup:f=>f?.channel==='restaurant'?'restaurant':f?.stage, fmGroupLabel:g=>g==='bank'?'Banken':g, catLabel:()=> '–',
   stageColor:()=>({}), kpi:(label,value)=>label+': '+value, sumBy:(a,k)=>a.reduce((n,r)=>n+(r[k]||0),0),
   renderFirmDetail:()=>{}, wireFirmLinks:()=>{}, openTab:tab=>{S.tab=tab},
+  navigateView:change=>change(), showTab:tab=>{S.tab=tab},
   nf: String, chf: String, pct: String, empty: String, fmtAxis: () => ({}),
   pal: () => ['red','blue','green','orange','purple','cyan','pink','black'],
   chart: (id, cfg) => charts.set(id, cfg), lines: (id, series) => charts.set(id, series),
@@ -109,4 +110,18 @@ assert.equal(groups.bank.out[0].info, 'Verlust bei Bankpleite (nur 30 % gesicher
 assert.equal(groups.bank.in[0].v, 20);
 assert.equal(groups.beteiligungen.out.length, 0);
 assert.equal(groups.betrieb.out[0].v, 5);
+context.CAT={beer:'Bier',wine:'Wein',spirits:'Spirituosen'};
+context.stageLabel=()=> 'Grosshandel';
+const partner=ids[1];
+D.firms[fid].yearly=[{year:1,revenue:100,purchase_cost:300,paid_to:{[partner]:300},
+ paid_items:{[partner+'|beer']:{chf:100,units:10},[partner+'|wine']:{chf:200,units:8}},
+ sold_items:{'konsumenten|beer':{chf:60,units:5},'konsumenten|wine':{chf:40,units:2}}}];
+const products=vm.runInContext(`flowGroups(${JSON.stringify(fid)},1)`,context);
+assert.equal(products.lieferanten.out.length,2);
+assert.equal(products.lieferanten.out[0].v,200);
+assert.equal(products.lieferanten.out[0].units,8);
+assert.equal(products.lieferanten.out[0].firm,partner);
+assert.match(products.lieferanten.out[0].info,/Wein/);
+assert.equal(products.kunden.in.length,2);
+assert.equal(products.kunden.in[0].n,'Konsumenten');
 console.log('Dashboard syntax, stocks, bank details, filters, navigation and bank flows passed.');

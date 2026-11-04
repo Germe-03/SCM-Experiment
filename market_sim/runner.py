@@ -606,6 +606,13 @@ class SimulationRunner:
                 key: {k: round(v - start[key].get(k, 0.0), 2) for k, v in end[key].items()
                       if abs(v - start[key].get(k, 0.0)) >= 0.5}
                 for key in ("paid_to", "cash_flows")
+            } | {
+                key: {partner: {
+                    metric: round(item[metric] - start[key].get(partner, {}).get(metric, 0), 2)
+                    for metric in ("chf", "units")
+                } for partner, item in end[key].items()
+                    if any(item[m] != start[key].get(partner, {}).get(m, 0) for m in ("chf", "units"))}
+                for key in ("paid_items", "sold_items")
             })
         # P4b fix: exits are deterministic year-end events; cash freezes
         # from the following tick after the configured grace period.
@@ -1307,6 +1314,8 @@ class SimulationRunner:
                 "profit": float(getattr(runtime, "profit", 0.0)),
                 "cash": float(getattr(runtime, "cash", 0.0)),
                 "paid_to": dict(getattr(runtime, "paid_to", {})),
+                "paid_items": {k: dict(v) for k, v in getattr(runtime, "paid_items", {}).items()},
+                "sold_items": {k: dict(v) for k, v in getattr(runtime, "sold_items", {}).items()},
                 "cash_flows": dict(getattr(runtime, "cash_flows", {})),
             }
             for firm_id, runtime in self.env.runtimes.items()

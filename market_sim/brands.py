@@ -532,6 +532,9 @@ class BrandBook:
                 sold[firm_id] += units
                 value = env._trade_value(units, price)
                 runtime.revenue += value
+                runtime.record_items(runtime.sold_items, "konsumenten", {
+                    brand.category if self.categories_on else "alle": {"chf": value, "units": units}
+                })
                 runtime.handling_cost += units * env.config.costs.handling_cost_per_unit * self.value_factor(key[1])
                 if restaurant:
                     # Service, rent and kitchen grow with what the guests pay.

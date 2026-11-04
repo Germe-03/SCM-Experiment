@@ -21,10 +21,13 @@ const D = {firms, meta: {years: 3}, events: [{firm: 'f6', year: 1, event: 'bankr
 ]};
 let lastChart;
 const S = {cmp: []};
+$('#cp-category').value='all';$('#cp-product').value='all';$('#cp-status').value='all';
 const context = {
   $, $$: () => [], D, S, years: [1, 2, 3], range: {from: 1, to: 3},
   STAGES: ['retailer'], STAGE: {retailer: 'Retail'}, CAT: {beer: 'Bier'}, ARCH: {standard: 'Standard'},
   EVENT: {bankruptcy: 'Konkurs'}, store: {get: (_, fallback) => fallback, set: () => {}},
+  bankActors:()=>({}),FM_GROUPS:['retailer'],fmGroup:f=>f.stage,fmGroupLabel:String,
+  navigateView:change=>change(),sumBy:(a,k)=>a.reduce((n,r)=>n+(r[k]||0),0),
   pal: () => ['red', 'blue', 'green', 'orange', 'purple', 'cyan'], stageColor: () => ({retailer: 'red'}),
   firm: id => firms[id], fname: id => firms[id]?.name || id, firmProfit: id => firms[id].yearly[2].profit,
   inRange: year => year >= 1 && year <= 3, empty: text => text,
@@ -67,4 +70,20 @@ assert.match($('#ms-timeline').innerHTML, /Firm &lt;0&gt;/);
 assert.match($('#ms-timeline').innerHTML, /Konkurs/);
 assert.match($('#ms-brands').innerHTML, /seit Jahr 2/);
 assert.match($('#ms-brands').innerHTML, /Firm &lt;1&gt;/);
+$('#cp-status').value='exited';
+vm.runInContext('renderCompare()',context);
+assert.match($('#cp-count').textContent,/1 Treffer/);
+assert.match($('#cp-firms').innerHTML,/Jahr 1/);
+$('#cp-status').value='all';$('#cp-years').value='3';
+vm.runInContext('renderCompare()',context);
+assert.match($('#cp-count').textContent,/6 Treffer/);
+$('#cp-years').value='0';$('#cp-category').value='factory';$('#cp-product').value='wine';
+firms.f0.stage='factory';firms.f0.category='wine';context.FM_GROUPS.push('factory','bank');
+vm.runInContext('renderCompare()',context);assert.match($('#cp-count').textContent,/1 Treffer/);
+context.bankActors=()=>({'bank:B1':{id:'bank:B1',name:'Bank',stage:'bank',entry_year:1,exit_year:null,
+ yearly:[1,2,3].map(year=>({year,profit:5,revenue:20,equity:75,deposit_share:0.4}))}});
+$('#cp-category').value='bank';S.cmp=['bank:B1'];S.cmpMetric='cash';
+vm.runInContext('renderCompare()',context);
+assert.deepEqual(Array.from(lastChart.data.datasets[0].data),[75,75,75]);
+assert.doesNotMatch($('#cp-metrics').innerHTML,/Lieferquote|Reputation/);
 console.log('Comparison selection, colors, relative values, statistics and structure passed.');

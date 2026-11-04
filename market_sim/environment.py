@@ -77,6 +77,8 @@ class FirmRuntime:
     purchase_cost: float = 0.0
     # Money flow: purchase cost per recipient (supplier id, "rohstoffe", "staat:<reason>").
     paid_to: dict[str, float] = field(default_factory=dict)
+    paid_items: dict[str, dict[str, float]] = field(default_factory=dict)
+    sold_items: dict[str, dict[str, float]] = field(default_factory=dict)
     # Cash flows outside the profit by reason ("staat:Gewinnsteuer", "uebernahme:<firm>", ...).
     cash_flows: dict[str, float] = field(default_factory=dict)
     wage_cost: float = 0.0
@@ -149,11 +151,21 @@ class FirmRuntime:
         if delta:
             self.cash_flows[reason] = self.cash_flows.get(reason, 0.0) + delta
 
-    def pay(self, recipient: str, amount: float) -> None:
+    @staticmethod
+    def record_items(ledger: dict, partner: str, items: dict) -> None:
+        """Accumulate observations only; never change stock, cash or random state."""
+        for category, item in items.items():
+            entry = ledger.setdefault(f"{partner}|{category}", {"chf": 0.0, "units": 0})
+            entry["chf"] += item["chf"]
+            entry["units"] += item["units"]
+
+    def pay(self, recipient: str, amount: float, items: dict | None = None) -> None:
         """Book purchase cost and remember who received it."""
         self.purchase_cost += amount
         if amount:
             self.paid_to[recipient] = self.paid_to.get(recipient, 0.0) + amount
+            self.record_items(self.paid_items, recipient, items if items is not None else
+                              {"alle": {"chf": amount, "units": 0}})
 
 
 @dataclass(frozen=True)
@@ -487,6 +499,7 @@ class MarketEnvironment:
                             requested[downstream_id] = quantity
                             allocations[downstream_id] = quantity
                     trade_value = self._trade_value(quantity, price)
+                    parcel = {}
                     if quantity:
                         parcel = self.brand_book.take_for(
                             self.network.firm(downstream_id), runtime.stock, quantity)
@@ -506,7 +519,9 @@ class MarketEnvironment:
                             runtime.handling_cost += self.config.costs.handling_cost_per_unit * (
                                 self.brand_book.parcel_value(parcel, 1.0) - sum(parcel.values()))
                     runtime.revenue += trade_value
-                    self.runtimes[downstream_id].pay(supplier_id, trade_value)
+                    items = self.trade_items(parcel, trade_value)
+                    self.runtimes[downstream_id].pay(supplier_id, trade_value, items)
+                    runtime.record_items(runtime.sold_items, downstream_id, items)
                     self.runtimes[downstream_id].incoming_shipments[-1] += quantity
             if self.banking is not None:
                 shipped = sum(allocations.values())
@@ -755,6 +770,26 @@ class MarketEnvironment:
                 runtime.inventory += units
                 book.brands[brand_id].vintage_bonus = bonus
 
+    def trade_items(self, parcel: dict[str, int], amount: float) -> dict:
+        """Split the actual delivered parcel by category and its share of value."""
+        book = self.brand_book
+        items = {}
+        weights = {}
+        for brand_id, units in parcel.items():
+            if not units:
+                continue
+            category = book.brands[brand_id].category if book.categories_on else "alle"
+            item = items.setdefault(category, {"chf": 0.0, "units": 0})
+            item["units"] += units
+            weights[category] = weights.get(category, 0.0) + units * book.value_factor(brand_id)
+        total = sum(weights.values())
+        remaining = amount
+        for index, (category, weight) in enumerate(weights.items()):
+            value = remaining if index == len(weights) - 1 else amount * weight / total
+            items[category]["chf"] = value
+            remaining -= value
+        return items
+
     def _export(self) -> None:
         """Foreign demand buys good domestic brands; a weak franc helps exporters."""
         book = self.brand_book
@@ -785,6 +820,8 @@ class MarketEnvironment:
                 runtime.inventory -= sent
                 price = factory_price * cfg.world_price_factor * self.fx_rate
                 runtime.revenue += self._trade_value(1, book.parcel_value(parcel, price))
+                runtime.record_items(runtime.sold_items, "export", self.trade_items(
+                    parcel, self._trade_value(1, book.parcel_value(parcel, price))))
                 runtime.handling_cost += book.parcel_value(parcel, self.config.costs.handling_cost_per_unit)
                 book.export_units += sent
 
