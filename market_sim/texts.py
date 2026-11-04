@@ -1,7 +1,8 @@
-"""Phase 12: firm stories and a yearly chronicle written by a local model from checked facts.
+"""Phase 12: firm stories and a yearly chronicle written by a language model from checked facts.
 
 Python builds the facts; the model only words them. Every number in a text must appear
-in the facts, otherwise the text is regenerated once and then replaced by a plain summary.
+in the facts, otherwise the model is told the offending numbers and tries once more; after that
+the text is replaced by a plain summary.
 """
 
 from __future__ import annotations
@@ -22,8 +23,12 @@ YEAR_EVENTS = {"recession", "raw_material_shortage", "cost_shock", "wage_push", 
 SYSTEM = (
     "Du bist Wirtschaftsjournalist und schreibst auf Deutsch (Schweizer Rechtschreibung, kein ß). "
     "Verwende ausschliesslich die gegebenen Fakten. Erfinde keine Zahlen, Namen oder Ursachen. "
+    "Regeln für Zahlen: Jede Zahl in deinem Text muss genau so in den FAKTEN stehen, Ziffer für Ziffer. "
+    "Rechne nichts aus: keine Summen, Differenzen, Durchschnitte, Prozent-Veränderungen oder Verhältnisse. "
+    "Runde nicht und rechne nicht um (nicht Mio. in Mrd., nicht CHF in Prozent). "
+    "Nenne keine Mitarbeiterzahlen, Marktanteile, Preise oder Mengen, die nicht in den FAKTEN stehen. "
+    "Brauchst du eine Zahl, die nicht dasteht, beschreibe es mit Worten (z. B. 'stark gestiegen', 'fast halbiert'). "
     "Die Jahre heissen 'Jahr 1', 'Jahr 2' und so weiter; nenne nie Kalenderjahre wie 2002. "
-    "Übernimm Beträge genau so, wie sie in den Fakten stehen. "
     "Schreibe sachlich und verständlich, ohne Aufzählung, ohne Überschrift."
 )
 
@@ -110,9 +115,14 @@ def write_checked(llm, task: str, facts: str) -> dict:
             text = llm.generate(SYSTEM, prompt).replace("ß", "ss").strip()
         except Exception:  # model offline or timed out: fall back to the facts
             break
-        if text and not unchecked_numbers(text, facts):
+        bad = unchecked_numbers(text, facts) if text else []
+        if text and not bad:
             return {"text": text, "checked": True}
-        prompt = (f"{task} Verwende nur Zahlen, die wörtlich in den Fakten stehen.\n\nFAKTEN:\n{facts}")
+        # Second try: name the numbers that are not in the facts.
+        wrong = ", ".join(f"{value:g}" for value in bad) or "keine Antwort"
+        prompt = (f"{task}\n\nDein erster Text enthielt Zahlen, die nicht in den FAKTEN stehen: {wrong}. "
+                  f"Schreibe den Text neu und lass diese Zahlen weg oder beschreibe sie mit Worten. "
+                  f"Verwende nur Zahlen, die wörtlich in den FAKTEN stehen.\n\nFAKTEN:\n{facts}")
     plain = " ".join(line.lstrip("- ") + "." for line in facts.splitlines()[:5])
     return {"text": plain, "checked": False}
 

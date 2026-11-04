@@ -563,5 +563,5 @@ ollama:
   story_model: llama3.2:3b
   chat_model: llama3.2:3b
   timeout_seconds: 180
-  temperature: 0.3
+  temperature: 0.2
   max_tokens: 400
