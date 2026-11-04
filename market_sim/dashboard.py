@@ -335,8 +335,15 @@ Chart.Interaction.modes.stack=(chart,e,opts,useFinal)=>{const near=Chart.Interac
  return chart.data.datasets.flatMap((d,di)=>key(d)===st&&chart.isDatasetVisible(di)?[{element:chart.getDatasetMeta(di).data[i],datasetIndex:di,index:i}]:[])};
 const fmtAxis=f=>({ticks:{callback:v=>f==='chf'?chf(v):f==='pct'?pct(v):nf(v,2)}});
 function lines(id,series,{fmt,stacked,area}={}){const s=sys();chart(id,{type:'line',data:{labels:s.map(x=>x.year),datasets:series.map((d,i)=>({label:d.label,data:s.map(d.get),borderColor:d.color||pal()[i%8],backgroundColor:(d.color||pal()[i%8])+(area?'55':'22'),fill:area?'stack':false,pointRadius:0,borderWidth:2,tension:.2,yAxisID:d.axis||'y'}))},
- options:{scales:{x:{grid:{display:false}},y:{stacked:!!stacked,...fmtAxis(fmt),...(fmt==='pct'&&!stacked?{}:{})},...(series.some(d=>d.axis==='y2')?{y2:{position:'right',grid:{display:false},...fmtAxis(series.find(d=>d.axis==='y2').fmt)}}:{})}}})}
+ options:{...(fmt==='chf'?{plugins:{tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${chf(c.parsed.y)}`}}}}:{}),scales:{x:{grid:{display:false}},y:{stacked:!!stacked,...fmtAxis(fmt),...(fmt==='pct'&&!stacked?{}:{})},...(series.some(d=>d.axis==='y2')?{y2:{position:'right',grid:{display:false},...fmtAxis(series.find(d=>d.axis==='y2').fmt)}}:{})}}})}
 const byStage=(prefix,fmt)=>STAGES.map(s=>({label:STAGE[s],get:x=>x[prefix+s],color:stageColor()[s],fmt}));
+// Like byStage, but from the firms themselves so restaurants (Gastronomie) get their own line.
+const inYear=(f,y,strict)=>f.entry_year<=y&&(!f.exit_year||(strict?f.exit_year>y:f.exit_year>=y));
+const groupSum=(g,y,get,strict)=>Object.values(D.firms).filter(f=>fmGroup(f)===g&&inYear(f,y,strict)).reduce((a,f)=>{const r=f.yearly.find(r=>r.year===y);return a+(r?get(r):0)},0);
+// Stage totals stay as booked; only the retail total is split by the restaurants' share of it.
+const gastroShare=(y,get,strict)=>{const g=groupSum('restaurant',y,get,strict),a=g+groupSum('retailer',y,get,strict);return a?g/a:0};
+const byGroup=(prefix,get,fmt,strict)=>FM_GROUPS.map(g=>({label:fmGroupLabel(g),color:stageColor()[g],fmt,
+ get:x=>g==='restaurant'?x[prefix+'retailer']*gastroShare(x.year,get,strict):g==='retailer'?x[prefix+'retailer']*(1-gastroShare(x.year,get,strict)):x[prefix+g]}));
 
 // --- helpers -------------------------------------------------------------
 const sumBy=(arr,k)=>arr.reduce((a,x)=>a+(+x[k]||0),0);
@@ -358,7 +365,7 @@ function renderOverview(){const s=sys(),first=s[0],last=s.at(-1);const e=evs();
   kpi('Konkurse',nf(sumBy(s,'bankruptcies')),nf(sumBy(s,'takeovers'))+' Übernahmen'),kpi('Preisindex',nf(last.price_index,2),'Jahr 1 = 1.00')].join('');
  const ss=sys();chart('ov-profit',{type:'bar',data:{labels:ss.map(x=>x.year),datasets:[{label:'Gewinn',data:ss.map(x=>x.total_profit),backgroundColor:ss.map(x=>x.total_profit>=0?pal()[0]+'aa':css('--bad')+'aa'),yAxisID:'y',order:2},{type:'line',label:'Service-Level',data:ss.map(x=>x.service_level),borderColor:pal()[1],pointRadius:0,borderWidth:2,yAxisID:'y2',order:1}]},
   options:{scales:{x:{grid:{display:false}},y:fmtAxis('chf'),y2:{position:'right',min:0,max:1,grid:{display:false},...fmtAxis('pct')}}}});
- lines('ov-firms',byStage('active_firms_'),{});
+ lines('ov-firms',byGroup('active_firms_',()=>1,undefined,true),{});
  lines('ov-cats',Object.keys(CAT).map(c=>({label:CAT[c],get:x=>x['share_'+c],color:catColor()[c]})),{fmt:'pct',stacked:true,area:true});
  const ranked=Object.keys(D.firms).map(id=>[id,firmProfit(id)]).sort((a,b)=>b[1]-a[1]);
  const head='<thead><tr><th>Firma</th><th>Stufe</th><th class="num">Gewinn</th><th>Status</th></tr></thead>';
@@ -542,7 +549,7 @@ function renderStocks(){const ids=Object.keys(D.stocks?.prices||{});S.stockFirms
  $('#fi-stock-firms').innerHTML=ids.map(id=>`<button class="chip" data-stock="${esc(id)}" aria-pressed="${S.stockFirms.includes(id)}">${esc(fname(id))}</button>`).join('');
  $$('#fi-stock-firms button').forEach(b=>b.onclick=()=>{const id=b.dataset.stock;S.stockFirms=S.stockFirms.includes(id)?S.stockFirms.filter(x=>x!==id):[...S.stockFirms,id];render()});
  renderStockChart('fi-stocks',S.stockFirms,true,S.stockPeriod||'week')}
-function renderFinance(){renderBanks();renderStocks();renderHoldings();lines('fi-labor',[{label:'Offene Stellen',get:x=>x.open_positions},{label:'Abgeworben',get:x=>x.poached_workers},{label:'Lohnniveau',get:x=>x.wage_index_mean,axis:'y2'}]);lines('fi-negative',byStage('negative_interest_','chf'),{fmt:'chf'});lines('fi-debt',byStage('debt_','chf'),{fmt:'chf'});lines('fi-interest',byStage('interest_cost_','chf'),{fmt:'chf'});
+function renderFinance(){renderBanks();renderStocks();renderHoldings();lines('fi-labor',[{label:'Offene Stellen',get:x=>x.open_positions},{label:'Abgeworben',get:x=>x.poached_workers},{label:'Lohnniveau',get:x=>x.wage_index_mean,axis:'y2'}]);lines('fi-negative',byGroup('negative_interest_',r=>r.negative_interest_cost||0,'chf'),{fmt:'chf'});lines('fi-debt',byGroup('debt_',r=>Math.max(0,-(r.cash||0)),'chf',true),{fmt:'chf'});lines('fi-interest',byGroup('interest_cost_',r=>r.interest_cost||0,'chf'),{fmt:'chf'});
  const s=sys(),restr=y=>D.events.filter(e=>e.year===y&&e.event==='restructuring').length;
  chart('fi-churn',{type:'bar',data:{labels:s.map(x=>x.year),datasets:[{label:'Eintritte',data:s.map(x=>x.market_entries),backgroundColor:pal()[0]+'bb'},{label:'Konkurse',data:s.map(x=>x.bankruptcies),backgroundColor:css('--bad')+'bb'},{label:'Sanierungen',data:s.map(x=>restr(x.year)),backgroundColor:pal()[3]+'bb'},{type:'line',label:'Strategiewechsel',data:s.map(x=>x.strategy_changes),borderColor:pal()[4],pointRadius:0}]},options:{scales:{x:{grid:{display:false}}}}});
  lines('fi-hhi',[{label:'HHI',get:x=>x.market_concentration}])}
