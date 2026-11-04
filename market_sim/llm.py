@@ -173,12 +173,15 @@ def numbers_in(text: str) -> list[float]:
 
 
 def unchecked_numbers(text: str, facts: str, tolerance: float = 0.02) -> list[float]:
-    """Numbers in the text that do not appear in the facts (small integers like years 1-3 are allowed)."""
-    known = numbers_in(facts)
+    """Numbers in the text that do not appear in the facts (small integers like years 1-3 are allowed).
+
+    Signs are ignored: "-36 Mio. CHF Gewinn" in the facts may be written as "Verlust von 36 Mio. CHF".
+    """
+    known = [abs(k) for k in numbers_in(facts)]
     bad = []
     for value in numbers_in(text):
         if abs(value) <= 3 and float(value).is_integer():
             continue
-        if not any(abs(value - k) <= max(tolerance * abs(k), 0.051) for k in known):
+        if not any(abs(abs(value) - k) <= max(tolerance * k, 0.051) for k in known):
             bad.append(value)
     return bad
