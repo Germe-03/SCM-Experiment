@@ -85,6 +85,9 @@ td.num,th.num{text-align:right}tbody tr.click{cursor:pointer}tbody tr.click:hove
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
 @media(max-width:900px){.grid,.split{grid-template-columns:1fr}.card.wide{grid-column:auto}main{padding:12px}.bar{padding:10px 12px}}
 .compare-layout{display:grid;grid-template-columns:280px minmax(0,1fr);gap:20px}.compare-layout aside{max-height:760px;overflow:auto}.compare-layout label.firm-choice{display:block;padding:7px 0}.compare-layout input[type=search]{width:100%;margin:8px 0}.best{font-weight:700;background:var(--soft)}.structure svg{min-width:900px;width:100%}.structure svg text{fill:var(--ink)}.structure [data-firm]{cursor:pointer}.structure [data-firm]:focus rect{stroke:var(--ink);stroke-width:3}@media(max-width:900px){.compare-layout{grid-template-columns:1fr}}
+#flow{width:min(980px,96vw);max-height:92vh;border:1px solid var(--line);border-radius:14px;background:var(--panel);color:inherit;padding:18px 22px;box-shadow:0 8px 30px #0003}
+#flow::backdrop{background:#0006}.flow-head{display:flex;gap:8px;align-items:center}.flow-head h3{margin:0;margin-right:auto}
+#flow text{fill:currentColor}.flow-pick{cursor:pointer}.flow-pick:hover rect,.flow-pick:focus rect{stroke:currentColor;stroke-width:2}
 </style></head><body>
 <header class="top">
  <div class="bar">
@@ -237,6 +240,7 @@ td.num,th.num{text-align:right}tbody tr.click{cursor:pointer}tbody tr.click:hove
  <div id="ch-list"></div>
 </section>
 </main>
+<dialog id="flow" aria-labelledby="flow-title"><div class="flow-head"><h3 id="flow-title"></h3><button class="btn" id="flow-back" hidden>← Zurück</button><button class="btn" id="flow-close" aria-label="Schliessen">✕</button></div><p class="hint" id="flow-hint"></p><div id="flow-body"></div><p class="hint">Schliessen mit Esc. Breite der Bänder = Betrag.</p></dialog>
 <button id="chat-open" class="btn primary" aria-haspopup="dialog" aria-controls="chat" style="position:fixed;right:20px;bottom:20px;border-radius:999px;padding:12px 18px;box-shadow:var(--shadow);z-index:20">💬 Fragen</button>
 <div id="chat" role="dialog" aria-label="Fragen an die Daten" hidden style="position:fixed;right:20px;bottom:76px;width:min(380px,calc(100vw - 40px));max-height:70vh;display:none;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:0 8px 30px #0003;z-index:21">
  <div style="display:flex;align-items:center;padding:12px 14px;border-bottom:1px solid var(--line)"><b>Fragen an die Daten</b><button class="btn" id="chat-close" aria-label="Chat schliessen" style="margin-left:auto">✕</button></div>
@@ -327,7 +331,7 @@ const kpi=(label,value,note='',cls='')=>`<div class="kpi"><span>${esc(label)}</s
 function trend(a,b,fmt=pct){if(a==null||b==null||!isFinite(a)||!a)return['',''];const d=(b-a)/Math.abs(a);return[`${d>=0?'▲':'▼'} ${pct(Math.abs(d))} seit Jahr ${range.from}`,d>=0?'up':'down']}
 const evs=()=>D.events.filter(e=>inRange(e.year));
 const firmProfit=id=>firm(id).yearly.filter(y=>inRange(y.year)).reduce((a,y)=>a+(y.profit||0),0);
-const status=f=>f.exit_year?`<span class="badge off">ausgeschieden Jahr ${f.exit_year}</span>`:'<span class="badge ok">aktiv</span>';
+const status=f=>f.exit_year?`<span class="badge off">Jahr ${f.entry_year||1}–${f.exit_year}, ausgeschieden</span>`:`<span class="badge ok">aktiv seit Jahr ${f.entry_year||1}</span>`;
 const empty=msg=>`<div class="empty">${esc(msg)}</div>`;
 function firmRows(ids,cols){return ids.map(id=>`<tr class="click" data-firm="${esc(id)}">${cols(firm(id))}</tr>`).join('')}
 function wireFirmLinks(root){root.querySelectorAll('[data-firm]').forEach(r=>{r.tabIndex=0;const go=()=>{S.fmFirm=r.dataset.firm;openTab('firms');setTimeout(()=>$('#fm-detail').scrollIntoView(),50)};r.onclick=go;r.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();go()}}})}
@@ -426,7 +430,7 @@ function renderFirmDetail(){const root=$('#fm-detail');destroy();if(S.tab!=='fir
  const f=firm(id),y=f.yearly.filter(r=>inRange(r.year)),l=y.at(-1)||{};const inCmp=(S.cmp||[]).includes(id);
  root.innerHTML=`<div class="card"><div class="detail-head"><h2>${esc(f.name)}</h2><span class="badge">${stageLabel(f)}</span><span class="badge">${esc(CAT[f.category]||f.category)}${f.importer?' · Import':''}</span><span class="badge">${esc(REGION[f.region]||f.region||'')}</span>${status(f)}<button class="btn ${inCmp?'':'primary'}" id="fd-cmp" style="margin-left:auto">${inCmp?'Aus Vergleich entfernen':'Zum Vergleich hinzufügen'}</button></div>
  <div class="kpis">${kpi('Gewinn im Zeitraum',chf(firmProfit(id)))}${kpi('Cash am Ende',chf(l.cash))}${kpi('Reputation',pct(l.reputation))}${kpi('Qualität',pct(l.average_quality))}${kpi('Auslastung',pct(l.capacity_utilization))}${kpi('Marktanteil',pct(l.market_share))}${kpi('Lieferquote',pct(l.service_level))}</div>
- <div class="grid"><div class="card wide"><h3>Umsatz und Kosten pro Jahr</h3><p class="hint">Fahre über die Kostensäule, um die Kostenarten zu sehen.</p><div class="chart"><canvas id="fd-cost"></canvas></div></div>
+ <div class="grid"><div class="card wide"><h3>Umsatz und Kosten pro Jahr</h3><p class="hint">Fahre über eine Säule für die Kostenarten. Klicke auf ein Jahr, um zu sehen, wohin das Geld floss.</p><div class="chart"><canvas id="fd-cost"></canvas></div></div>
  <div class="card"><h3>Cash (Wochenschnitt)</h3><div class="chart"><canvas id="fd-cash"></canvas></div></div><div class="card"><h3>Lager und Rückstand (Wochenschnitt)</h3><div class="chart"><canvas id="fd-stock"></canvas></div></div>
  <div class="card"><h3>Reputation und Qualität</h3><div class="chart"><canvas id="fd-rep"></canvas></div></div><div class="card"><h3>Ereignisse dieser Firma</h3><ul class="list" id="fd-events" style="max-height:270px;overflow:auto"></ul></div>
  <div class="card wide" id="fd-story" hidden></div>
@@ -437,7 +441,7 @@ function renderFirmDetail(){const root=$('#fm-detail');destroy();if(S.tab!=='fir
  $('#fd-cmp').onclick=()=>{const c=new Set(S.cmp||[]);c.has(id)?c.delete(id):(c.size<6&&c.add(id));S.cmp=[...c];store.set('cmp',S.cmp);renderFirmDetail()};
  const lbl=y.map(r=>r.year),costs={purchase_cost:'Einkauf/Rohstoffe',wage_cost:'Löhne',fixed_cost:'Fixkosten',handling_cost:'Handling & Transport',rnd_cost:'F&E',holding_cost:'Lager',backlog_cost:'Rückstand',hiring_cost:'Einstellung',interest_cost:'Zinsen'};
  chart('fd-cost',{type:'bar',data:{labels:lbl,datasets:[{label:'Umsatz',data:y.map(r=>r.revenue),backgroundColor:pal()[0],stack:'rev'},...Object.entries(costs).map(([k,n],j)=>({label:n,data:y.map(r=>r[k]),backgroundColor:pal()[(j+1)%8]+'cc',stack:'cost'}))]},
-  options:{interaction:{mode:'stack'},plugins:{tooltip:{itemSort:(a,b)=>b.parsed.y-a.parsed.y,callbacks:{label:c=>`${c.dataset.label}: ${chf(c.parsed.y)}`,footer:it=>it.length>1?`Total Kosten: ${chf(it.reduce((a,c)=>a+c.parsed.y,0))}`:''}}},scales:{x:{stacked:true,grid:{display:false}},y:{stacked:true,...fmtAxis('chf')}}}});
+  options:{interaction:{mode:'stack'},onClick:(e,els,c)=>{const p=c.getElementsAtEventForMode(e,'index',{intersect:false},true);if(p.length)openFlow(id,+c.data.labels[p[0].index])},onHover:(e,els)=>{e.native.target.style.cursor=els.length?'pointer':'default'},plugins:{tooltip:{itemSort:(a,b)=>b.parsed.y-a.parsed.y,callbacks:{label:c=>`${c.dataset.label}: ${chf(c.parsed.y)}`,footer:it=>it.length>1?`Total Kosten: ${chf(it.reduce((a,c)=>a+c.parsed.y,0))}`:''}}},scales:{x:{stacked:true,grid:{display:false}},y:{stacked:true,...fmtAxis('chf')}}}});
  const weeks=D.meta.days_per_year/7,w=f.weekly,from=Math.floor((range.from-1)*weeks),to=Math.ceil(range.to*weeks);const wl=w.cash.slice(from,to).map((_,i)=>((from+i)/weeks+1).toFixed(1));
  chart('fd-cash',{type:'line',data:{labels:wl,datasets:[{label:'Cash',data:w.cash.slice(from,to),borderColor:pal()[2],pointRadius:0,borderWidth:1.5}]},options:{scales:{x:{ticks:{maxTicksLimit:10,callback:function(v){return'Jahr '+Math.floor(this.getLabelForValue(v))}}},y:fmtAxis('chf')}}});
  chart('fd-stock',{type:'line',data:{labels:wl,datasets:[{label:'Lager',data:w.inventory.slice(from,to),borderColor:pal()[0],pointRadius:0,borderWidth:1.5},{label:'Rückstand',data:w.backlog.slice(from,to),borderColor:pal()[1],pointRadius:0,borderWidth:1.5}]},options:{scales:{x:{ticks:{maxTicksLimit:10,callback:function(v){return'Jahr '+Math.floor(this.getLabelForValue(v))}}}}}});
@@ -580,6 +584,52 @@ function renderPeople(){const rows=(D.classes||[]).filter(r=>r.year<=range.to);i
  <p style="margin:10px 0 4px">«${esc(p.priority_de)}»</p><p class="hint">Einkommen ${nf(p.monthly_income_range[0])}–${nf(p.monthly_income_range[1])} CHF pro Monat · trinkt ${HABIT[p.drinking_habit]||p.drinking_habit} · kauft oft ${esc(pretty(p.typical_brand))}</p></div>`).join('')}</div></div>`}
 function renderChronicle(){const c=(D.texts||{}).chronicle||{};const yrs=Object.keys(c).map(Number).filter(inRange).sort((a,b)=>b-a);
  $('#ch-list').innerHTML=yrs.length?yrs.map(y=>`<div class="card" style="margin-bottom:12px"><h3>Jahr ${y} ${c[y].checked?'<span class="badge ok">Zahlen geprüft</span>':'<span class="badge">Kurzfassung aus den Fakten</span>'}</h3><p style="margin:0">${esc(pretty(c[y].text))}</p></div>`).join(''):empty('Noch keine Chronik. Erzeuge sie mit: python -m market_sim.dashboard --texts (dauert je nach Rechner eine halbe Stunde oder länger).')}
+// Money flow of one firm in one year: where the money came from and where it went.
+const FLOW_COST={wage_cost:['Löhne','Mitarbeitende'],fixed_cost:['Fixkosten','Miete, Maschinen, Abschreibungen'],handling_cost:['Handling & Transport',''],rnd_cost:['F&E','Forschungsprojekte'],holding_cost:['Lager',''],backlog_cost:['Rückstand','Strafkosten für offene Aufträge'],hiring_cost:['Einstellung',''],interest_cost:['Zinsen','an die Bank']};
+const FLOW_REASON={Gewinnsteuer:'Gewinnsteuer auf den Jahresgewinn',Alkoholsteuer:'Alkoholsteuer, steckt im Rohstoffpreis',Zoll:'Zoll auf importierte Ware',Schuldenschnitt:'Die Bank erlässt Schulden, damit die letzte Firma der Stufe bleibt'};
+const flowName=k=>{const [g,r]=k.split(':');if(k==='rohstoffe')return'Rohstoffe & Produktion';if(r===undefined)return D.firms[k]?fname(k):k;if(g==='staat')return r.startsWith('Busse')?'Busse: '+(OFFENCE[r.slice(6)]||r.slice(6)):r;
+ return({uebernahme:'Übernahme von ',uebernommen:'Kasse an Käufer ',dividende_an:'Dividende an ',dividende_von:'Dividende von ',beteiligung:'Beteiligung an ',beteiligung_verkauft:'Beteiligung verkauft: ',kapital_von:'Kapital von ',bank:''}[g]??'')+(D.firms[r]?fname(r):r||k)};
+function flowNodes(id,year){const r=firm(id).yearly.find(x=>x.year===year)||{};const paid=r.paid_to||{},cf=r.cash_flows||{};
+ const ins=[],outs=[],staat=[],invest=[],divs=[];const add=(a,n,v,info,kids)=>{if(v>0.5)a.push({n,v,info,kids})};
+ add(ins,'Umsatz',r.revenue,'Verkäufe an Kunden');
+ const buy=Object.entries(paid).filter(([k])=>!k.startsWith('staat:')).map(([k,v])=>({n:flowName(k),v,info:D.firms[k]?stageLabel(firm(k)):'eigene Produktion',firm:D.firms[k]?k:null})).sort((a,b)=>b.v-a.v);
+ Object.entries(paid).filter(([k])=>k.startsWith('staat:')).forEach(([k,v])=>add(staat,flowName(k),v,FLOW_REASON[k.slice(6)]||''));
+ const buySum=buy.reduce((a,x)=>a+x.v,0),other=(r.purchase_cost||0)-buySum-staat.reduce((a,x)=>a+x.v,0);if(other>0.5)buy.push({n:'Ohne Zuordnung',v:other,info:'ältere Daten'});
+ add(outs,'Einkauf',buySum+Math.max(0,other),'an Lieferanten',buy);
+ for(const [k,[n,info]] of Object.entries(FLOW_COST))add(outs,n,r[k],info);
+ for(const [k,v] of Object.entries(cf)){const g=k.split(':')[0];
+  if(v>0)add(ins,flowName(k),v,g==='bank'?FLOW_REASON.Schuldenschnitt:'');
+  else if(g==='staat')add(staat,flowName(k),-v,FLOW_REASON[k.slice(6)]||(k.includes('Busse')?'Straftat wurde entdeckt':''));
+  else if(g==='dividende_an')add(divs,flowName(k),-v,'Anteil am Gewinn für Beteiligte');
+  else add(invest,flowName(k),-v,'')}
+ if(staat.length)add(outs,'Staat',staat.reduce((a,x)=>a+x.v,0),'Steuern, Zoll und Bussen',staat.sort((a,b)=>b.v-a.v));
+ if(invest.length)add(outs,'Investitionen',invest.reduce((a,x)=>a+x.v,0),'Übernahmen und Beteiligungen',invest.sort((a,b)=>b.v-a.v));
+ if(divs.length)add(outs,'Dividenden',divs.reduce((a,x)=>a+x.v,0),'an Beteiligte',divs);
+ const tin=ins.reduce((a,x)=>a+x.v,0),tout=outs.reduce((a,x)=>a+x.v,0);
+ if(tin>tout)add(outs,'Bleibt in der Kasse',tin-tout,'Überschuss des Jahres');else add(ins,'Aus der Kasse',tout-tin,'Verlust, bezahlt aus Reserven oder Schulden');
+ return{ins,outs}}
+function sankey(ins,outs,onPick){const W=900,gap=8,nodeW=14,minH=3,total=Math.max(ins.reduce((a,x)=>a+x.v,0),1),scale=320/total;
+ // Every node gets at least room for its label; the bar itself stays true to the amount.
+ const slot=x=>Math.max(x.v*scale,minH,34);
+ const place=list=>{let y=0;return list.map(x=>{const n={...x,y,h:Math.max(minH,x.v*scale)};y+=slot(x)+gap;return n})};
+ const L=place(ins),R=place(outs),H=Math.max(...[L,R].map(a=>a.length?a.at(-1).y+slot(a.at(-1)):0)),x1=230,x2=560,col=i=>`var(--c${i%8+1})`;let svg='',ai=0,ao=0,li=0,ri=0,lo=0,ro=0;
+ // Bands: walk both sides in order and connect overlapping amounts.
+ while(li<L.length&&ri<R.length){const take=Math.min(L[li].v-lo,R[ri].v-ro);if(take>0){const h=take*scale,ya=L[li].y+lo*scale,yb=R[ri].y+ro*scale,m=(x1+x2)/2;
+   svg+=`<path d="M${x1+nodeW},${ya}C${m},${ya} ${m},${yb} ${x2},${yb}L${x2},${yb+h}C${m},${yb+h} ${m},${ya+h} ${x1+nodeW},${ya+h}Z" fill="${col(ri+1)}" fill-opacity=".28"><title>${esc(L[li].n)} → ${esc(R[ri].n)}: ${chf(take)}</title></path>`}
+  lo+=take;ro+=take;if(L[li].v-lo<=1e-6){li++;lo=0}if(R[ri].v-ro<=1e-6){ri++;ro=0}}
+ L.forEach(n=>svg+=`<rect x="${x1}" y="${n.y}" width="${nodeW}" height="${n.h}" fill="var(--c1)"/><text x="${x1-8}" y="${n.y+n.h/2}" text-anchor="end" dominant-baseline="middle" font-size="13"><tspan font-weight="600">${esc(n.n)}</tspan><tspan x="${x1-8}" dy="15" fill="var(--muted)">${chf(n.v)}</tspan></text>`);
+ R.forEach((n,i)=>{const pick=n.kids&&n.kids.length;svg+=`<g ${pick?`class="flow-pick" tabindex="0" role="button" data-i="${i}" aria-label="${esc(n.n)} aufschlüsseln"`:''}><rect x="${x2}" y="${n.y}" width="${nodeW}" height="${n.h}" fill="${col(i+1)}"/><text x="${x2+nodeW+8}" y="${n.y+n.h/2}" dominant-baseline="middle" font-size="13"><tspan font-weight="600">${esc(n.n)}${pick?' ›':''}</tspan> <tspan fill="var(--muted)">${chf(n.v)} · ${pct(n.v/total)}</tspan>${n.info?`<tspan x="${x2+nodeW+8}" dy="15" fill="var(--muted)" font-size="12">${esc(n.info)}</tspan>`:''}</text></g>`});
+ const box=$('#flow-body');box.innerHTML=`<svg viewBox="0 0 ${W} ${H+20}" width="100%" role="img" style="overflow:visible">${svg}</svg>`;
+ box.querySelectorAll('.flow-pick').forEach(g=>{const go=()=>onPick(R[+g.dataset.i]);g.onclick=go;g.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();go()}}})}
+function openFlow(id,year){const dlg=$('#flow'),{ins,outs}=flowNodes(id,year);
+ const top=()=>{$('#flow-title').textContent=`Geldfluss ${firm(id).name} – Jahr ${year}`;$('#flow-hint').textContent='Links woher das Geld kam, rechts wohin es ging. Klicke auf einen Posten mit › für die Empfänger.';$('#flow-back').hidden=true;sankey(ins,outs,detail)};
+ const detail=n=>{$('#flow-title').textContent=`${n.n} – ${firm(id).name}, Jahr ${year}`;$('#flow-hint').textContent=n.info||'';$('#flow-back').hidden=false;
+  sankey([{n:n.n,v:n.v}],n.kids,null);
+  const links=n.kids.filter(k=>k.firm);if(links.length)$('#flow-body').insertAdjacentHTML('beforeend',`<p class="hint">Lieferanten öffnen: ${links.map(k=>`<a href="#" data-go="${esc(k.firm)}">${esc(k.n)}</a>`).join(' · ')}</p>`);
+  $$('#flow-body [data-go]').forEach(a=>a.onclick=e=>{e.preventDefault();dlg.close();S.fmFirm=a.dataset.go;renderFirms();$('#fm-detail').scrollIntoView({block:'start'})})};
+ $('#flow-back').onclick=top;$('#flow-close').onclick=()=>dlg.close();top();if(!dlg.open)dlg.showModal()}
+$('#flow').addEventListener('click',e=>{if(e.target.id==='flow')e.target.close()});
+
 // Chat with the local model through python -m market_sim.serve.
 (function(){const box=$('#chat'),log=$('#chat-log'),input=$('#chat-input');
  const open=v=>{box.hidden=!v;box.style.display=v?'flex':'none';$('#chat-open').setAttribute('aria-expanded',v);if(v)input.focus()};

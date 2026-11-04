@@ -58,13 +58,13 @@ class Holdings:
             profit = summaries[target].profit if target in summaries else 0.0
             if profit > 0:
                 dividend = share * profit * cfg.payout_ratio
-                t_rt.adjust_cash(-dividend)
-                o_rt.adjust_cash(dividend)
+                t_rt.adjust_cash(-dividend, f"dividende_an:{owner}")
+                o_rt.adjust_cash(dividend, f"dividende_von:{target}")
                 self.paid[(owner, target)] = self.paid.get((owner, target), 0.0) + dividend
                 self.stats["dividends"] += dividend
             elif t_rt.consecutive_loss_years >= cfg.sell_after_loss_years:
                 price = share * self.value(runner, state, target)
-                o_rt.adjust_cash(price)
+                o_rt.adjust_cash(price, f"beteiligung_verkauft:{target}")
                 del self.stakes[(owner, target)]
                 self.stats["stakes_sold"] += 1
                 self._log(year, owner, target, "stake_sold", share, price)
@@ -89,8 +89,8 @@ class Holdings:
             price = share * self.value(runner, state, target.id)
             if share < cfg.min_stake or price <= 0 or o_rt.cash < cfg.cash_cover * price:
                 continue
-            o_rt.adjust_cash(-price)
-            env.runtimes[target.id].adjust_cash(price)  # fresh equity for the target
+            o_rt.adjust_cash(-price, f"beteiligung:{target.id}")
+            env.runtimes[target.id].adjust_cash(price, f"kapital_von:{owner.id}")  # fresh equity for the target
             self.stakes[(owner.id, target.id)] = share
             self.stats["stakes_bought"] += 1
             self._log(year, owner.id, target.id, "stake_bought", share, price)

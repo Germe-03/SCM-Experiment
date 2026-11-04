@@ -333,3 +333,18 @@ Symbol einen Hinweis, wie man ihn startet.
   des Endkundenumsatzes (2.8–11.7 %), Service Level 98.0 %. Im Reiter Firmen
   ist die Gastronomie ein eigener Filter; der Tooltip der Kostengrafik zeigt
   die Säule unter der Maus.
+- **2026-11-04, Geldfluss und Straftaten:** Jede Firma merkt sich, an wen
+  sie Einkaufsgeld zahlt (Lieferant, Rohstoffe, Alkoholsteuer, Zoll) und
+  welche Geldflüsse ausserhalb des Gewinns welchen Grund haben
+  (Gewinnsteuer, Bussen, Übernahmen, Beteiligungen, Dividenden,
+  Schuldenschnitt). Steuern und Bussen fallen nach dem Jahresabschluss an
+  und werden trotzdem dem richtigen Jahr zugeordnet. Im Dashboard öffnet ein
+  Klick auf ein Jahr der Kostengrafik ein Geldflussdiagramm mit
+  Aufschlüsselung nach Empfänger. Straftaten: Nur 35 % der Firmen wägen
+  überhaupt eine Straftat ab (fest pro Firma), der Staat entdeckt öfter
+  (Lohndumping 30 %, Pfusch 35 %, Steuerhinterziehung 25 %), der Rufschaden
+  zählt halb so stark (0.25). Ergebnis (10 Seeds, 50 Jahre, ohne die ersten
+  2 Jahre): 363 statt 1'155 Straftaten pro Lauf (10.7 % statt 30.2 % der
+  Firmenjahre), erwischt 30–41 % statt 12–22 %; erwischt und trotzdem
+  gelohnt: Pfusch 238 von 430, Steuerhinterziehung 48 von 618, Lohndumping
+  1 von 186. Gewinn 6.5 % des Endkundenumsatzes, Service Level 98.9 %.

@@ -11,6 +11,7 @@ from market_sim.run import build_runner, write_outputs
 @pytest.mark.parametrize("caught", [False, True])
 def test_ledger_gain_fine_damage_and_verdict(kind, caught):
     runner, _ = build_runner(1, 0, days_per_year=10)
+    runner.config.state.willing_share = 1.0  # every firm weighs the offence
     state = runner.start()
     runner.continue_run(state, 1)
     actor, env = runner.state_actor, runner.env
@@ -27,13 +28,14 @@ def test_ledger_gain_fine_damage_and_verdict(kind, caught):
     expected_gain = {"wage": 1234, "material": 5678, "tax": max(0, state.summaries[-1][firm.id].profit) * actor.cfg.profit_tax * offence.benefit}[kind]
     assert row["gain"] == pytest.approx(expected_gain)
     assert row["fine"] == pytest.approx(offence.fine_fixed * runner.long_run.price_index + offence.fine_revenue_share * state.summaries[-1][firm.id].revenue if caught else 0)
-    assert row["damage"] == pytest.approx(offence.reputation_hit * 200e6 * 0.5 if caught else 0)
+    assert row["damage"] == pytest.approx(offence.reputation_hit * 200e6 * actor.cfg.reputation_value_factor if caught else 0)
     assert row["net"] == pytest.approx(row["gain"] - row["fine"] - row["damage"])
     assert row["paid_off"] == (row["net"] > 0)
 
 
 def test_material_savings_count_produced_units_only():
     runner, _ = build_runner(1, 0, days_per_year=10)
+    runner.config.state.willing_share = 1.0  # every firm weighs the offence
     runner.start()
     env, firm = runner.env, runner.network.firm("factory_01")
     base = env.unit_production_cost(firm)
@@ -46,6 +48,7 @@ def test_material_savings_count_produced_units_only():
 
 def test_actual_wage_savings_and_ledger_export(tmp_path):
     runner, _ = build_runner(1, 0, days_per_year=10)
+    runner.config.state.willing_share = 1.0  # every firm weighs the offence
     state = runner.start()
     actor, env = runner.state_actor, runner.env
     rt = env.runtimes["retailer_01"]

@@ -8,6 +8,7 @@ from market_sim.runner import YearSummary
 
 def _runner(days=10, years=1):
     runner, _ = build_runner(years, 0, days_per_year=days)
+    runner.config.state.willing_share = 1.0  # every firm weighs offences
     state = runner.start()
     runner.continue_run(state, years)
     return runner, state

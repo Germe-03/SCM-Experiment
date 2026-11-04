@@ -343,11 +343,13 @@ geography:
 state:
   enabled: true
   profit_tax: 0.15
-  reputation_value_factor: 0.5
+  reputation_value_factor: 0.25
+  # Only about a third of the firms ever weigh an offence; the others stay honest.
+  willing_share: 0.35
   offences:
-    - {name: lohndumping, kind: wage, benefit: 0.08, detection_probability: 0.15, fine_fixed: 2000000, fine_revenue_share: 0.005, reputation_hit: 0.08}
-    - {name: pfusch, kind: material, benefit: 0.10, detection_probability: 0.20, fine_fixed: 5000000, fine_revenue_share: 0.02, reputation_hit: 0.15}
-    - {name: steuerhinterziehung, kind: tax, benefit: 0.60, detection_probability: 0.10, fine_fixed: 1000000, fine_revenue_share: 0.003, reputation_hit: 0.05}
+    - {name: lohndumping, kind: wage, benefit: 0.08, detection_probability: 0.30, fine_fixed: 2000000, fine_revenue_share: 0.005, reputation_hit: 0.08}
+    - {name: pfusch, kind: material, benefit: 0.10, detection_probability: 0.35, fine_fixed: 5000000, fine_revenue_share: 0.02, reputation_hit: 0.15}
+    - {name: steuerhinterziehung, kind: tax, benefit: 0.60, detection_probability: 0.25, fine_fixed: 1000000, fine_revenue_share: 0.003, reputation_hit: 0.05}
   belief_spread: 1.0
   aversion: 1.0
   learning_rate: 0.3

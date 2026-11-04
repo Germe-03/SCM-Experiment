@@ -23,6 +23,7 @@ class StateActor:
     def __init__(self, runner: SimulationRunner, seed: int) -> None:
         self.cfg = runner.config.state
         self.rng = random.Random(f"state-{seed}")
+        self.seed = seed
         self.beliefs: dict[str, dict[str, list[float]]] = {}
         self.active: dict[str, set[str]] = {}
         self.offence_ledger: list[dict[str, object]] = []
@@ -63,6 +64,8 @@ class StateActor:
                 continue
             if firm.id not in self.beliefs:
                 self._new_beliefs(firm.id)
+            if not self.willing(firm.id):
+                continue
             risk = runner.strategies[firm.id].risk_tolerance if firm.id in runner.strategies else 0.5
             last_revenue = max(1.0, runtime.last_year_revenue)
             for offence in self.cfg.offences:
@@ -88,6 +91,10 @@ class StateActor:
                         env.wage_saving_ratio[firm.id] = before / firm.wage_level - 1 if firm.wage_level else 0.0
                     elif offence.kind == "material":
                         env.firm_material_factor[firm.id] = 1 - offence.benefit
+
+    def willing(self, firm_id: str) -> bool:
+        """Only some firms consider breaking the law at all; the rest never weigh it."""
+        return random.Random(f"honesty-{self.seed}-{firm_id}").random() < self.cfg.willing_share
 
     def _base(self, kind: str, runtime, revenue: float) -> float:
         """Last year's money the offence acts on (wages, materials or profit tax)."""
@@ -128,7 +135,7 @@ class StateActor:
             tax = max(0.0, summary.profit) * cfg.profit_tax
             if evading and tax_offence is not None:
                 tax *= 1 - tax_offence.benefit
-            runtime.adjust_cash(-tax)
+            runtime.adjust_cash(-tax, "staat:Gewinnsteuer")
             self.stats["taxes"] += tax
             for offence, roll in zip(cfg.offences, rolls):
                 if offence.name not in self.active.get(firm.id, ()):
@@ -142,7 +149,7 @@ class StateActor:
                 belief[0] += cfg.learning_rate * ((1.0 if caught else 0.0) - belief[0])
                 if caught:
                     fine = offence.fine_fixed * runner.long_run.price_index + offence.fine_revenue_share * summary.revenue
-                    runtime.adjust_cash(-fine)
+                    runtime.adjust_cash(-fine, f"staat:Busse {offence.name}")
                     damage = offence.reputation_hit * self.previous_revenue.get(firm.id, 0.0) * cfg.reputation_value_factor
                     firm.reputation = max(0.0, firm.reputation - offence.reputation_hit)
                     self.stats["offences_detected"] += 1
@@ -246,7 +253,7 @@ class StateActor:
     def _merge(self, runner, state, buyer, target, price, year, day) -> None:
         env = runner.env
         b_rt, t_rt = env.runtimes[buyer.id], env.runtimes[target.id]
-        b_rt.adjust_cash(-price + min(0.0, t_rt.cash))  # the buyer also takes over the debt
+        b_rt.adjust_cash(-price + min(0.0, t_rt.cash), f"uebernahme:{target.id}")  # the buyer also takes over the debt
         buyer.capacity += target.capacity
         buyer.machine_capacity += target.machine_capacity
         buyer.employees += target.employees
@@ -264,7 +271,7 @@ class StateActor:
         b_rt.inventory += t_rt.inventory
         t_rt.stock = {}
         t_rt.inventory = 0
-        t_rt.adjust_cash(-t_rt.cash)
+        t_rt.adjust_cash(-t_rt.cash, f"uebernommen:{buyer.id}")
         runner.close_firm_now(target.id, year, state, "takeover", f"gekauft von {buyer.id} für {chf(price)}")
         runner.decision_log.record(year, buyer.id, "takeover_bought", {"target": target.id, "price": price}, "Übernahme eines finanziell angeschlagenen Konkurrenten")
         self.stats["takeovers"] += 1

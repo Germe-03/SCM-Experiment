@@ -588,7 +588,11 @@ class SimulationRunner:
                     "backlog_cost", "wage_cost", "hiring_cost",
                     "rnd_cost", "handling_cost", "fixed_cost", "interest_cost", "negative_interest_cost", "investment_depreciation", "profit",
                 )
-            } | {"cash": end["cash"]})
+            } | {"cash": end["cash"]} | {
+                key: {k: round(v - start[key].get(k, 0.0), 2) for k, v in end[key].items()
+                      if abs(v - start[key].get(k, 0.0)) >= 0.5}
+                for key in ("paid_to", "cash_flows")
+            })
         # P4b fix: exits are deterministic year-end events; cash freezes
         # from the following tick after the configured grace period.
         exits_before = len(self.exits)
@@ -637,6 +641,14 @@ class SimulationRunner:
             self.holdings.year_end(self, state)
         if self.laws is not None:
             self.laws.year_end(self, state)
+        # Taxes, fines, dividends and takeovers are booked after the accounts close: count them in this year.
+        for firm in self._firms():
+            if not financial_breakdown.get(firm.id):
+                continue
+            begin = financial_starts.get(firm.id, {}).get("cash_flows", {})
+            now = getattr(self.env.runtimes[firm.id], "cash_flows", {})
+            financial_breakdown[firm.id][-1]["cash_flows"] = {
+                k: round(v - begin.get(k, 0.0), 2) for k, v in now.items() if abs(v - begin.get(k, 0.0)) >= 0.5}
         for event in state.events[event_start:]:
             if event["event"] in ("expand_started", "site_started", "rnd_started", "strategy_change", "transport_switch"):
                 self.decision_log.record(event["year"], event["firm"], event["event"], event["details"], event["details"])
@@ -1113,7 +1125,7 @@ class SimulationRunner:
                 runtime = self.env.runtimes[firm_id]
                 if bank.enabled and bank.restructuring and runtime.cash < 0:
                     written_off = -runtime.cash
-                    runtime.adjust_cash(written_off)
+                    runtime.adjust_cash(written_off, "bank:Schuldenschnitt")
                     runtime.consecutive_loss_years = 0
                     firm = self.network.firm(firm_id)
                     firm.reputation = self._clamp(firm.reputation - bank.restructuring_reputation_hit)
@@ -1243,6 +1255,8 @@ class SimulationRunner:
                 "negative_interest_cost": runtime.negative_interest_cost,
                 "profit": float(getattr(runtime, "profit", 0.0)),
                 "cash": float(getattr(runtime, "cash", 0.0)),
+                "paid_to": dict(getattr(runtime, "paid_to", {})),
+                "cash_flows": dict(getattr(runtime, "cash_flows", {})),
             }
             for firm_id, runtime in self.env.runtimes.items()
         }

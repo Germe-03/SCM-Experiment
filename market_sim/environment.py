@@ -74,6 +74,10 @@ class FirmRuntime:
     cash: float = 0.0
     revenue: float = 0.0
     purchase_cost: float = 0.0
+    # Money flow: purchase cost per recipient (supplier id, "rohstoffe", "staat:<reason>").
+    paid_to: dict[str, float] = field(default_factory=dict)
+    # Cash flows outside the profit by reason ("staat:Gewinnsteuer", "uebernahme:<firm>", ...).
+    cash_flows: dict[str, float] = field(default_factory=dict)
     wage_cost: float = 0.0
     hiring_cost: float = 0.0
     rnd_spend: float = 0.0
@@ -137,10 +141,18 @@ class FirmRuntime:
         self.cash = self.initial_cash + self.profit + self.cash_adjustment
         return holding, backlog
 
-    def adjust_cash(self, delta: float) -> None:
+    def adjust_cash(self, delta: float, reason: str = "sonstiges") -> None:
         """Book a cash flow outside the profit (taxes, fines, write-offs, purchase prices)."""
         self.cash_adjustment += delta
         self.cash += delta
+        if delta:
+            self.cash_flows[reason] = self.cash_flows.get(reason, 0.0) + delta
+
+    def pay(self, recipient: str, amount: float) -> None:
+        """Book purchase cost and remember who received it."""
+        self.purchase_cost += amount
+        if amount:
+            self.paid_to[recipient] = self.paid_to.get(recipient, 0.0) + amount
 
 
 @dataclass(frozen=True)
@@ -457,7 +469,7 @@ class MarketEnvironment:
                             runtime.handling_cost += self.config.costs.handling_cost_per_unit * (
                                 self.brand_book.parcel_value(parcel, 1.0) - sum(parcel.values()))
                     runtime.revenue += trade_value
-                    self.runtimes[downstream_id].purchase_cost += trade_value
+                    self.runtimes[downstream_id].pay(supplier_id, trade_value)
                     self.runtimes[downstream_id].incoming_shipments[-1] += quantity
 
         if self.brand_book.categories_on:
@@ -484,7 +496,7 @@ class MarketEnvironment:
                         quantity = min(quantity, self._effective_capacity(firm.id))
                     if self._harvest_producer(firm):
                         continue
-                    self.runtimes[firm.id].purchase_cost += quantity * self.unit_production_cost(firm, quantity)
+                    self._book_production(firm, self.runtimes[firm.id], quantity * self.unit_production_cost(firm, quantity))
                     # P1 fix: a factory production start is its replenishment order.
                     self.runtimes[firm.id].on_order += quantity
                     self.runtimes[firm.id].incoming_shipments[-1] += quantity
@@ -612,6 +624,18 @@ class MarketEnvironment:
             self.material_savings[firm.id] = self.material_savings.get(firm.id, 0.0) + quantity * cost * (1 - factor)
         return cost * factor
 
+    def _book_production(self, firm: Firm, runtime: FirmRuntime, amount: float) -> None:
+        """Production cost split into excise tax, import duty and raw materials (see unit_production_cost)."""
+        excise = self.excise.get(firm.category, 0.0)
+        tax = amount * excise / (1 + excise)
+        duty = 0.0
+        if firm.importer and self.brand_book is not None and self.brand_book.categories_on:
+            tariff = self.config.categories.imports.tariff
+            duty = (amount - tax) * tariff / (1 + tariff)
+        runtime.pay("staat:Alkoholsteuer", tax)
+        runtime.pay("staat:Zoll", duty)
+        runtime.pay("rohstoffe", amount - tax - duty)
+
     def _harvest_producer(self, firm: Firm) -> bool:
         """Wineries press grapes once a year; the wine matures before it can be sold."""
         book = self.brand_book
@@ -626,7 +650,7 @@ class MarketEnvironment:
         delivered = sum(runtime.shipment_history[-days:])
         yield_factor = max(0.3, self._wine_rng.gauss(1.0, cfg.yield_sd))
         batch = round(min(self._effective_capacity(firm.id) * days, delivered * cfg.wine_forecast_buffer) * yield_factor)
-        runtime.purchase_cost += batch * self.unit_production_cost(firm, batch)
+        self._book_production(firm, runtime, batch * self.unit_production_cost(firm, batch))
         bonus = max(-0.1, min(0.1, (yield_factor - 1) * cfg.vintage_quality_slope))
         for brand_id, units in book.production_mix(firm.id, batch).items():
             brand = book.brands[brand_id]

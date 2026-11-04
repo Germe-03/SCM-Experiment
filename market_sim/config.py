@@ -501,6 +501,8 @@ class StateConfig(ConfigModel):
 
     enabled: bool = False
     reputation_value_factor: float = Field(default=0.5, ge=0)
+    # Share of firms that weigh offences at all (fixed per firm); the others stay honest.
+    willing_share: float = Field(default=1.0, ge=0, le=1)
     profit_tax: float = Field(default=0.15, ge=0, le=1)
     offences: list[OffenceConfig] = Field(default_factory=list)
     # Firms start with guesses between true value x e^-spread and x e^spread.
