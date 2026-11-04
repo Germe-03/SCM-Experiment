@@ -18,7 +18,8 @@ EXIT_DE = {"bankruptcy": "Konkurs", "takeover": "Übernahme", "poisoning": "Verg
 KEY_EVENTS = {"takeover", "poisoning", "offence_detected", "rnd_success", "site_finished", "expand_finished",
               "restructuring", "strategy_change", "bankruptcy", "stake_bought", "breakup", "spin_off"}
 YEAR_EVENTS = {"recession", "raw_material_shortage", "cost_shock", "wage_push", "trend_change", "poisoning",
-               "law_enacted", "breakup", "heat_summer", "harvest_failure"}
+               "law_enacted", "breakup", "heat_summer", "harvest_failure",
+               "bank_failed", "bank_entry", "exchange_opened"}
 
 SYSTEM = (
     "Du bist Wirtschaftsjournalist und schreibst auf Deutsch (Schweizer Rechtschreibung, kein ß). "
@@ -38,11 +39,11 @@ def _mio(value: float) -> str:
 
 
 def _readable(details: str) -> str:
-    """Write amounts like 51'609'492 CHF as 52 Mio. CHF, as a journalist would."""
+    """Write amounts like 51'609'492 CHF (or 51,609,492 CHF from the bank events) as 52 Mio. CHF."""
     def to_mio(match: re.Match) -> str:
-        value = float(match.group(1).replace("'", ""))
+        value = float(match.group(1).replace("'", "").replace(",", ""))
         return f"{_mio(value)} Mio. CHF" if abs(value) >= 1e6 else match.group(0)
-    return re.sub(r"(-?\d[\d']*) CHF", to_mio, str(details))
+    return re.sub(r"(-?\d{1,3}(?:['’,]\d{3})+|-?\d+) CHF", to_mio, str(details))
 
 
 def firm_facts(data: dict, firm_id: str) -> str:
@@ -91,6 +92,23 @@ def year_facts(data: dict, year: int) -> str:
     ]
     if kpi.get("trend"):
         lines.append(f"Aktueller Trend: {kpi['trend']}")
+    # Phase 13-17: SNB, commercial banks and the stock exchange.
+    if kpi.get("policy_rate") is not None:
+        lines.append(f"Leitzins der SNB für das nächste Jahr: {kpi['policy_rate'] * 100:.2f} Prozent, "
+                     f"Teuerung: {kpi.get('inflation', 0) * 100:.1f} Prozent")
+    banks = [b for b in data.get("banks", []) if b["year"] == year]
+    if banks:
+        active_banks = [b for b in banks if b["active"]]
+        lines.append(f"Banken: {len(active_banks)} aktiv, Eigenkapital zusammen "
+                     f"{_mio(sum(b['equity'] for b in active_banks))} Mio. CHF, Kredite "
+                     f"{_mio(sum(b['loans'] for b in active_banks))} Mio. CHF, Einlagen "
+                     f"{_mio(sum(b['deposits'] for b in active_banks))} Mio. CHF")
+        for b in sorted(banks, key=lambda b: -b["equity"]):
+            status = "" if b["active"] else ", in diesem Jahr pleite gegangen"
+            lines.append(f"Bank {b['name']}: {b['customers']} Kunden, Eigenkapital {_mio(b['equity'])} Mio. CHF, "
+                         f"Gewinn {_mio(b['profit'])} Mio. CHF{status}")
+    if kpi.get("stock_index"):
+        lines.append(f"Börsenindex: {kpi['stock_index']:.0f} Punkte, {kpi.get('listed_firms', 0)} Firmen an der Börse")
     profits = []
     for firm_id, firm in data["firms"].items():
         row = next((y for y in firm.get("yearly", []) if y["year"] == year), None)
