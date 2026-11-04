@@ -356,6 +356,8 @@ class BankingConfig(ConfigModel):
     random_weight: float = Field(default=0.05, ge=0)
     # Phase 16: failure (negative equity), deposit insurance and new banks.
     insured_share: float = Field(default=0.3, ge=0, le=1)
+    # Share of excess reserves exempt from a negative SNB rate (Freibetrag, as 2015-2022).
+    reserve_exemption: float = Field(default=0.0, ge=0, le=1)
     max_failure_rounds: int = Field(default=3, ge=1)
     entry_enabled: bool = False
     max_banks: int = Field(default=6, ge=1)
@@ -700,6 +702,13 @@ class HoldingsConfig(ConfigModel):
     profit_multiple: float = Field(default=4.0, ge=0)
     payout_ratio: float = Field(default=0.5, ge=0, le=1)
     sell_after_loss_years: int = Field(default=2, ge=1)
+    # Phase 18: stakes below small_stake_limit are bought on the exchange through the owner's bank
+    # (broker fee, shares in the bank's custody); larger stakes stay direct deals and may be credit-financed.
+    via_bank: bool = False
+    small_stake_limit: float = Field(default=0.10, gt=0, lt=1)
+    broker_fee: float = Field(default=0.005, ge=0)
+    control_premium: float = Field(default=0.2, ge=0)
+    price_impact: float = Field(default=0.5, ge=0)
     # Stakes from this size count for antitrust like own market share.
     antitrust_stake: float = Field(default=0.25, ge=0, le=1)
 

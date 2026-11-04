@@ -22,6 +22,7 @@ class CommercialBank:
     operating_cost: float = 0.0
     write_offs: float = 0.0
     credit_rejections: int = 0
+    fee_income: float = 0.0
     active: bool = True
     founded_year: int = 0
     failed_year: int = 0
@@ -184,7 +185,11 @@ class BankingSystem:
         self.aggregate(runtimes)
         for bank in self.banks.values():
             if bank.active:
-                bank.refinancing_cost += (bank.loans - bank.deposits - bank.equity) * policy_rate / 365
+                gap = bank.loans - bank.deposits - bank.equity
+                if gap < 0 and policy_rate < 0:
+                    # SNB exemption (Freibetrag): most reserves are spared the negative rate.
+                    gap *= 1 - self.cfg.reserve_exemption
+                bank.refinancing_cost += gap * policy_rate / 365
                 bank.operating_cost += (bank.loans + bank.deposits) * self.cfg.operating_cost_rate / 365
 
     def fail_bank(self, bank, runtimes: dict, year: int, day: int, events: list) -> None:
@@ -277,7 +282,7 @@ class BankingSystem:
         if not entry_enabled:
             return
         active = [bank for bank in self.banks.values() if bank.active]
-        if len(self.banks) >= max_banks:
+        if len(active) >= max_banks:
             return
         rejections = sum(bank.credit_rejections for bank in active)
         profitable = [bank for bank in active if bank.equity > 0]
@@ -306,7 +311,7 @@ class BankingSystem:
         self.credit_events.clear()
         self.aggregate(runtimes)
         for bank in self.banks.values():
-            bank.year_profit = (bank.interest_income - bank.interest_expense - bank.refinancing_cost
+            bank.year_profit = (bank.interest_income + bank.fee_income - bank.interest_expense - bank.refinancing_cost
                                 - bank.operating_cost - bank.write_offs)
             bank.equity += bank.year_profit
             surplus = max(0.0, bank.equity - self.cfg.target_capital_ratio * bank.loans)
@@ -327,11 +332,13 @@ class BankingSystem:
             write_offs=b.write_offs, customers=sum(b.id in a for a in self.accounts.values()),
             active=b.active,
             credit_rejections=b.credit_rejections,
+            fee_income=b.fee_income,
         ) for b in self.banks.values() if b.active or b.failed_year == year]
         for bank in self.banks.values():
             bank.interest_income = bank.interest_expense = bank.refinancing_cost = 0.0
             bank.operating_cost = bank.write_offs = 0.0
             bank.credit_rejections = 0
+            bank.fee_income = 0.0
         return reports
 
     def open_second_accounts(self, runtimes: dict, bank_config, price_index: float,

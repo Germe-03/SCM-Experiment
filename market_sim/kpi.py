@@ -51,6 +51,7 @@ class AnnualReport(BaseModel):
 
 class BankAnnualReport(BaseModel):
     credit_rejections: int = 0
+    fee_income: float = 0.0
     year: int
     bank_id: str
     name: str

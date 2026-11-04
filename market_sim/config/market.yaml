@@ -67,6 +67,8 @@ banking:
   random_weight: 0.05
   # Phase 16: Bankpleite bei negativem Eigenkapital; Einlagen nur zu 30 % gesichert (pro Bank).
   insured_share: 0.3
+  # Freibetrag der SNB: dieser Anteil der Reserven ist vom Negativzins befreit.
+  reserve_exemption: 0.8
   max_failure_rounds: 3
   # Neue Banken: höchstens eine pro Jahr, insgesamt höchstens max_banks.
   entry_enabled: true
@@ -493,13 +495,20 @@ restaurants:
 # Phase 10: minority stakes; dividends flow to the owners, antitrust counts big stakes.
 holdings:
   enabled: true
-  min_stake: 0.10
+  min_stake: 0.02
   max_stake: 0.49
   buy_probability: 0.3
   cash_cover: 2.0
   profit_multiple: 4.0
   payout_ratio: 0.5
   sell_after_loss_years: 2
+  # Phase 18: kleine Beteiligungen (unter 10 %) nur über die Börse und die Hausbank (Gebühr, Depot);
+  # grosse Beteiligungen direkt, bei fehlendem Geld mit Kredit der Hausbank.
+  via_bank: true
+  small_stake_limit: 0.10
+  broker_fee: 0.005
+  control_premium: 0.2
+  price_impact: 0.5
   antitrust_stake: 0.25
 
 # Phase 10: new laws at random times. Firms are not told the effect; the dashboard only

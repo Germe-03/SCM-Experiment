@@ -19,13 +19,30 @@ class Holdings:
         self.rng = random.Random(f"holdings-{seed}")
         self.stakes: dict[tuple[str, str], float] = {}
         self.paid: dict[tuple[str, str], float] = {}
+        self.depot: dict[tuple[str, str], str] = {}
         self.history: list[dict[str, object]] = []
-        self.stats = {"dividends": 0.0, "stakes_bought": 0, "stakes_sold": 0}
+        self.stats = {"dividends": 0.0, "stakes_bought": 0, "stakes_sold": 0, "broker_fees": 0.0}
 
     def value(self, runner: SimulationRunner, state: RunState, firm_id: str) -> float:
         profits = [s[firm_id].profit for s in state.summaries[-2:] if firm_id in s]
         mean_profit = sum(profits) / len(profits) if profits else 0.0
         return max(0.0, self.cfg.profit_multiple * mean_profit + max(0.0, runner.env.runtimes[firm_id].cash))
+
+    def market_value(self, runner: SimulationRunner, state: RunState, firm_id: str) -> float:
+        market = runner.stock_market
+        if self.cfg.via_bank and market is not None and market.price(firm_id) is not None:
+            return market.price(firm_id) * market.cfg.shares_per_firm
+        return self.value(runner, state, firm_id)
+
+    def _broker(self, runner: SimulationRunner, owner_id: str, amount: float) -> tuple[float, str | None]:
+        banking = runner.env.banking
+        if self.cfg.via_bank and banking is not None and banking.accounts.get(owner_id):
+            bank = banking.primary_bank(owner_id)
+            fee = amount * self.cfg.broker_fee
+            bank.fee_income += fee
+            self.stats["broker_fees"] = self.stats.get("broker_fees", 0.0) + fee
+            return fee, bank.id
+        return 0.0, None
 
     def held_share(self, owner: str, target: str) -> float:
         return self.stakes.get((owner, target), 0.0)
@@ -48,9 +65,11 @@ class Holdings:
             o_rt, t_rt = env.runtimes[owner], env.runtimes[target]
             if not o_rt.active:
                 del self.stakes[(owner, target)]
+                self.depot.pop((owner, target), None)
                 continue
             if not t_rt.active:
                 del self.stakes[(owner, target)]
+                self.depot.pop((owner, target), None)
                 self._log(year, owner, target, "stake_lost", share, 0.0)
                 state.events.append({"year": year, "day": day, "firm": owner, "event": "stake_lost",
                                      "details": f"Beteiligung an {target} ({share:.0%}) wertlos"})
@@ -63,13 +82,25 @@ class Holdings:
                 self.paid[(owner, target)] = self.paid.get((owner, target), 0.0) + dividend
                 self.stats["dividends"] += dividend
             elif t_rt.consecutive_loss_years >= cfg.sell_after_loss_years:
-                price = share * self.value(runner, state, target)
-                o_rt.adjust_cash(price, f"beteiligung_verkauft:{target}")
+                price = share * self.market_value(runner, state, target)
+                market = runner.stock_market
+                if (cfg.via_bank and market is not None and market.price(target) is not None
+                        and share < cfg.small_stake_limit):
+                    fee, bank_id = self._broker(runner, owner, price)
+                    o_rt.adjust_cash(price - fee, f"beteiligung_verkauft:{target}")
+                    bank_name = env.banking.banks[bank_id].name if bank_id is not None else None
+                    details = (f"verkauft {share:.0%} an {target} über {bank_name} an der Börse "
+                               f"für {chf(price)}" if bank_name is not None
+                               else f"verkauft {share:.0%} an {target} für {chf(price)}")
+                else:
+                    o_rt.adjust_cash(price, f"beteiligung_verkauft:{target}")
+                    details = f"verkauft {share:.0%} an {target} für {chf(price)}"
                 del self.stakes[(owner, target)]
+                self.depot.pop((owner, target), None)
                 self.stats["stakes_sold"] += 1
                 self._log(year, owner, target, "stake_sold", share, price)
                 state.events.append({"year": year, "day": day, "firm": owner, "event": "stake_sold",
-                                     "details": f"verkauft {share:.0%} an {target} für {chf(price)}"})
+                                     "details": details})
         # New stakes: rich, profitable firms buy into profitable firms they do not own yet.
         candidates = [f for f in runner._firms() if env.runtimes[f.id].active and f.id in summaries
                       and summaries[f.id].profit > 0]
@@ -86,23 +117,62 @@ class Holdings:
             share = round(cfg.min_stake + size_roll * (cfg.max_stake - cfg.min_stake), 2)
             owned = sum(s for (o, t), s in self.stakes.items() if t == target.id)
             share = min(share, 0.99 - owned)
-            price = share * self.value(runner, state, target.id)
-            if share < cfg.min_stake or price <= 0 or o_rt.cash < cfg.cash_cover * price:
+            market = runner.stock_market
+            listed = market is not None and market.price(target.id) is not None
+            small = cfg.via_bank and listed and share < cfg.small_stake_limit
+            if cfg.via_bank and not listed and share < cfg.small_stake_limit:
                 continue
-            if not env.can_spend(owner.id, price):
-                continue
-            o_rt.adjust_cash(-price, f"beteiligung:{target.id}")
-            env.runtimes[target.id].adjust_cash(price, f"kapital_von:{owner.id}")  # fresh equity for the target
+            market_value = self.market_value(runner, state, target.id)
+            if small:
+                price = share * market_value
+                banking = env.banking
+                expected_fee = (price * cfg.broker_fee
+                                if banking is not None and banking.accounts.get(owner.id) else 0.0)
+                if (share < cfg.min_stake or price <= 0
+                        or o_rt.cash < cfg.cash_cover * (price + expected_fee)
+                        or not env.can_spend(owner.id, price + expected_fee)):
+                    continue
+                fee, bank_id = self._broker(runner, owner.id, price)
+                o_rt.adjust_cash(-(price + fee), f"beteiligung:{target.id}")
+                market.sentiment[target.id] += cfg.price_impact * share
+                self.depot[(owner.id, target.id)] = bank_id or ""
+                bank_name = env.banking.banks[bank_id].name if bank_id is not None else "die Bank"
+                details = (f"kauft {share:.0%} an {target.id} über {bank_name} an der Börse "
+                           f"für {chf(price)} (Gebühr {chf(fee)}, Aktien im Depot)")
+            else:
+                price = (share * market_value * (1 + cfg.control_premium)
+                         if cfg.via_bank else share * self.value(runner, state, target.id))
+                credit_financed = False
+                if cfg.via_bank:
+                    if o_rt.cash < cfg.cash_cover * price:
+                        if not (o_rt.cash < price and env.can_spend(owner.id, price)):
+                            continue
+                        credit_financed = True
+                    if not env.can_spend(owner.id, price):
+                        continue
+                else:
+                    if share < cfg.min_stake or price <= 0 or o_rt.cash < cfg.cash_cover * price:
+                        continue
+                    if not env.can_spend(owner.id, price):
+                        continue
+                if share < cfg.min_stake or price <= 0:
+                    continue
+                o_rt.adjust_cash(-price, f"beteiligung:{target.id}")
+                env.runtimes[target.id].adjust_cash(price, f"kapital_von:{owner.id}")  # fresh equity for the target
+                details = f"kauft {share:.0%} an {target.id} für {chf(price)}"
+                if credit_financed:
+                    details += " (mit Kredit der Hausbank finanziert)"
             self.stakes[(owner.id, target.id)] = share
             self.stats["stakes_bought"] += 1
             self._log(year, owner.id, target.id, "stake_bought", share, price)
             state.events.append({"year": year, "day": day, "firm": owner.id, "event": "stake_bought",
-                                 "details": f"kauft {share:.0%} an {target.id} für {chf(price)}"})
+                                 "details": details})
 
     def _log(self, year, owner, target, action, share, price) -> None:
         self.history.append({"year": year, "owner": owner, "target": target, "action": action,
                              "share": share, "price": price, "dividends": self.paid.get((owner, target), 0.0)})
 
     def snapshot(self, year: int) -> list[dict[str, object]]:
-        return [{"year": year, "owner": o, "target": t, "share": s, "dividends": self.paid.get((o, t), 0.0)}
+        return [{"year": year, "owner": o, "target": t, "share": s,
+                 "dividends": self.paid.get((o, t), 0.0), "custodian": self.depot.get((o, t), "")}
                 for (o, t), s in sorted(self.stakes.items())]
