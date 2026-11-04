@@ -38,6 +38,8 @@ class Marketing:
             runtime = env.runtimes[firm_id]
             if not runtime.active or amount <= 0:
                 continue
+            if not env.can_spend(firm_id, amount):
+                continue
             runtime.fixed_cost += amount
             runtime.marketing_cost += amount
             self.spent[firm_id] = self.spent.get(firm_id, 0.0) + amount

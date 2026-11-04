@@ -89,6 +89,8 @@ class Holdings:
             price = share * self.value(runner, state, target.id)
             if share < cfg.min_stake or price <= 0 or o_rt.cash < cfg.cash_cover * price:
                 continue
+            if not env.can_spend(owner.id, price):
+                continue
             o_rt.adjust_cash(-price, f"beteiligung:{target.id}")
             env.runtimes[target.id].adjust_cash(price, f"kapital_von:{owner.id}")  # fresh equity for the target
             self.stakes[(owner.id, target.id)] = share

@@ -77,6 +77,8 @@ class ResearchLab:
             cost = project.cost * runner.long_run.price_index
             if runtime.cash < self.cfg.cash_cover * cost:
                 continue
+            if not env.can_spend(firm.id, cost):
+                continue
             self.running[firm.id] = (project.name, env.period, env.period + project.duration_days,
                                      cost / project.duration_days, state.year)
             self.stats["rnd_started"] += 1

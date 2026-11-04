@@ -50,6 +50,7 @@ class AnnualReport(BaseModel):
 
 
 class BankAnnualReport(BaseModel):
+    credit_rejections: int = 0
     year: int
     bank_id: str
     name: str
@@ -68,6 +69,7 @@ class BankAnnualReport(BaseModel):
 
 
 class SystemKPIs(BaseModel):
+    credit_rejections: int = 0
     total_loans: float = 0.0
     total_deposits: float = 0.0
     bank_equity: float = 0.0

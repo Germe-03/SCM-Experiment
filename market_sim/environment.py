@@ -331,6 +331,8 @@ class MarketEnvironment:
         self.inventory_history = {firm_id: [] for firm_id in self.runtimes}
         self.banking = (BankingSystem(self.config.banking, self.seed, self.runtimes)
                         if self.config.banking.enabled else None)
+        self._credit_profit_marks: dict[str, float] = {}
+        self.credit_year = 1
         self.backlog_history = {firm_id: [] for firm_id in self.runtimes}
         self._orders_received_this_period = {firm_id: 0 for firm_id in self.runtimes}
 
@@ -379,6 +381,9 @@ class MarketEnvironment:
     def step(self, total_consumer_demand: int, orders: dict[str, int]) -> tuple[bool, dict]:
         if not self.runtimes:
             raise RuntimeError("Must call reset() before step()")
+
+        if self.banking is not None:
+            self._credit_profit_marks = {fid: rt.profit for fid, rt in self.runtimes.items()}
 
         self._update_commodity_index()
         active_ids = {
@@ -444,20 +449,43 @@ class MarketEnvironment:
             if self.enforce_capacity:
                 available = min(available, self._effective_capacity(supplier_id))
             allocations = proportional_integer_allocation(available, requested)
-            shipped = sum(allocations.values())
-            runtime.inventory -= shipped
-            runtime.backlog_by_downstream = {
-                key: requested[key] - allocations.get(key, 0)
-                for key in requested if requested[key] - allocations.get(key, 0) > 0
-            }
-            runtime.backlog = sum(runtime.backlog_by_downstream.values())
-            self._cancel_stale_backlog(supplier_id)
-            runtime.shipment_history.append(shipped)
-            runtime.handling_cost += shipped * self.config.costs.handling_cost_per_unit
+            if self.banking is None:
+                shipped = sum(allocations.values())
+                runtime.inventory -= shipped
+                runtime.backlog_by_downstream = {
+                    key: requested[key] - allocations.get(key, 0)
+                    for key in requested if requested[key] - allocations.get(key, 0) > 0
+                }
+                runtime.backlog = sum(runtime.backlog_by_downstream.values())
+                self._cancel_stale_backlog(supplier_id)
+                runtime.shipment_history.append(shipped)
+                runtime.handling_cost += shipped * self.config.costs.handling_cost_per_unit
             shipped_this_period[supplier_id] = allocations
             for downstream_id, quantity in allocations.items():
                 if downstream_id in self.runtimes:
                     price = self.network.firm(supplier_id).sell_price
+                    if self.banking is not None and quantity:
+                        customer = self.network.firm(downstream_id)
+                        def cost(units):
+                            if not self.brand_book.categories_on:
+                                return self._trade_value(units, price)
+                            parcel = self.brand_book.take_for(customer, dict(runtime.stock), units)
+                            return self._trade_value(1, self.brand_book.parcel_value(parcel, price))
+                        budget = self.spending_budget(downstream_id, cost(quantity))
+                        if cost(quantity) > budget:
+                            low, high = 0, quantity
+                            while low < high:
+                                mid = (low + high + 1) // 2
+                                if cost(mid) <= budget:
+                                    low = mid
+                                else:
+                                    high = mid - 1
+                            quantity = low
+                            cancelled = requested[downstream_id] - quantity
+                            self.runtimes[downstream_id].on_order = max(
+                                0, self.runtimes[downstream_id].on_order - cancelled)
+                            requested[downstream_id] = quantity
+                            allocations[downstream_id] = quantity
                     trade_value = self._trade_value(quantity, price)
                     if quantity:
                         parcel = self.brand_book.take_for(
@@ -480,6 +508,17 @@ class MarketEnvironment:
                     runtime.revenue += trade_value
                     self.runtimes[downstream_id].pay(supplier_id, trade_value)
                     self.runtimes[downstream_id].incoming_shipments[-1] += quantity
+            if self.banking is not None:
+                shipped = sum(allocations.values())
+                runtime.inventory -= shipped
+                runtime.backlog_by_downstream = {
+                    key: requested[key] - allocations.get(key, 0)
+                    for key in requested if requested[key] - allocations.get(key, 0) > 0
+                }
+                runtime.backlog = sum(runtime.backlog_by_downstream.values())
+                self._cancel_stale_backlog(supplier_id)
+                runtime.shipment_history.append(shipped)
+                runtime.handling_cost += shipped * self.config.costs.handling_cost_per_unit
 
         if self.brand_book.categories_on:
             self._export()
@@ -505,6 +544,7 @@ class MarketEnvironment:
                         quantity = min(quantity, self._effective_capacity(firm.id))
                     if self._harvest_producer(firm):
                         continue
+                    quantity = self.affordable_units(firm.id, quantity, self.unit_production_cost(firm))
                     self._book_production(firm, self.runtimes[firm.id], quantity * self.unit_production_cost(firm, quantity))
                     # P1 fix: a factory production start is its replenishment order.
                     self.runtimes[firm.id].on_order += quantity
@@ -516,6 +556,12 @@ class MarketEnvironment:
                         )
                     continue
                 candidates = self.supplier_candidates(firm.id)
+                if self.banking is not None and candidates and quantity:
+                    factor = max((self.brand_book.value_factor(b) for b in self.brand_book.brands), default=1.0) if self.brand_book.categories_on else 1.0
+                    unit_cost = max(self._trade_value(1, s.sell_price) for s in candidates) * factor
+                    pending = self.runtimes[firm.id].on_order
+                    affordable = self.affordable_units(firm.id, quantity + pending, unit_cost)
+                    quantity = min(quantity, max(0, affordable - pending))
                 allocations = self._split_by_category(firm, candidates, quantity)
                 split_orders[firm.id] = allocations
                 if allocations:
@@ -560,10 +606,13 @@ class MarketEnvironment:
             runtime.calculate_period_cost(daily_wage)
             self.wage_savings[firm_id] = self.wage_savings.get(firm_id, 0.0) + daily_wage * self.wage_saving_ratio.get(firm_id, 0.0)
             self._apply_interest(runtime, firm_id)
+            if self.banking is not None:
+                self._credit_profit_marks[firm_id] = runtime.profit
         if self.banking is not None:
             policy_rate = (self.central_bank.policy_rate if self.config.central_bank.enabled
                            else self.config.bank.base_rate)
             self.banking.daily(self.runtimes, policy_rate)
+            self._credit_profit_marks.clear()
         self.period += 1
         firm_financials = {
             firm_id: self._financial_snapshot(runtime)
@@ -587,6 +636,27 @@ class MarketEnvironment:
             "total_cash": sum(r.cash for r in self.runtimes.values()),
         }
         return self.period >= self.horizon, info
+
+    def spending_budget(self, firm_id: str, amount: float) -> float:
+        if self.banking is None:
+            return float("inf")
+        balances = {fid: rt.cash + rt.profit - self._credit_profit_marks.get(fid, rt.profit)
+                    for fid, rt in self.runtimes.items()}
+        days = self.config.simulation.days_per_year
+        day = min(days, self.period - (self.credit_year - 1) * days + 1)
+        return self.banking.spending_limit(firm_id, self.runtimes, balances, amount, self.credit_year, day)
+
+    def can_spend(self, firm_id: str, amount: float) -> bool:
+        if self.banking is None:
+            return True
+        budget = self.spending_budget(firm_id, max(amount, 1e-9))
+        return budget > 0 and amount <= budget
+
+    def affordable_units(self, firm_id: str, quantity: int, unit_cost: float) -> int:
+        if self.banking is None or quantity <= 0 or unit_cost <= 0:
+            return quantity
+        budget = self.spending_budget(firm_id, quantity * unit_cost)
+        return min(quantity, max(0, int(budget / unit_cost)))
 
     def _split_order(self, firm: Firm, candidates: list[Firm], quantity: int) -> dict[str, int]:
         lead_times = {candidate.id: self.config.logistics.default_lead_time_days for candidate in candidates}
@@ -663,6 +733,7 @@ class MarketEnvironment:
         delivered = sum(runtime.shipment_history[-days:])
         yield_factor = max(0.3, self._wine_rng.gauss(1.0, cfg.yield_sd))
         batch = round(min(self._effective_capacity(firm.id) * days, delivered * cfg.wine_forecast_buffer) * yield_factor)
+        batch = self.affordable_units(firm.id, batch, self.unit_production_cost(firm))
         self._book_production(firm, runtime, batch * self.unit_production_cost(firm, batch))
         bonus = max(-0.1, min(0.1, (yield_factor - 1) * cfg.vintage_quality_slope))
         for brand_id, units in book.production_mix(firm.id, batch).items():
@@ -799,7 +870,9 @@ class MarketEnvironment:
             if firm_id is None:
                 firm_id = next(fid for fid, rt in self.runtimes.items() if rt is runtime)
             base_rate = (self.central_bank.policy_rate if self.config.central_bank.enabled else cfg.base_rate)
-            base_rate += self.banking.primary_bank(firm_id).margin
+            # Without any active bank (all failed) the old generic margin applies.
+            base_rate += (self.banking.primary_bank(firm_id).margin if self.banking.accounts.get(firm_id)
+                          else cfg.loan_margin)
         rate = min(cfg.max_rate, base_rate
                    + cfg.risk_premium_per_loss_year * runtime.consecutive_loss_years
                    + cfg.leverage_premium * min(1.0, debt / max(1.0, runtime.last_year_revenue)))
@@ -874,6 +947,8 @@ class MarketEnvironment:
         runtime = self.runtimes[firm_id]
         cfg = self.config.rnd
         daily_spend = firm.r_and_d_budget / 365
+        if not self.can_spend(firm_id, daily_spend * self.config.costs.personnel_cost_scale):
+            daily_spend = 0.0
         # Cash cost lives on the scaled money scale; the quality effect does not.
         runtime.rnd_spend += daily_spend * self.config.costs.personnel_cost_scale
         runtime.pending_rnd_effects.append(

@@ -342,15 +342,29 @@ class BankingConfig(ConfigModel):
         CommercialBankConfig(id="B3", name="Mittelland Kantonalbank", margin=0.025),
     ], min_length=1)
     start_equity_fraction: float = Field(default=0.15, ge=0)
+    # Share of a defaulted debt the bank loses; the rest is recovered from the bankrupt estate.
+    loss_given_default: float = Field(default=1.0, ge=0, le=1)
     max_accounts: int = Field(default=2, ge=1, le=2)
     operating_cost_rate: float = Field(default=0.003, ge=0)
     payout_ratio: float = Field(default=0.5, ge=0, le=1)
     target_capital_ratio: float = Field(default=0.15, ge=0)
+    min_capital_ratio: float = Field(default=0.10, gt=0, le=1)
     second_account_enabled: bool = True
     second_account_share: float = Field(default=0.5, gt=0, lt=1)
     interest_weight: float = Field(default=1.0, ge=0)
     safety_weight: float = Field(default=1.0, ge=0)
     random_weight: float = Field(default=0.05, ge=0)
+    # Phase 16: failure (negative equity), deposit insurance and new banks.
+    insured_share: float = Field(default=0.3, ge=0, le=1)
+    max_failure_rounds: int = Field(default=3, ge=1)
+    entry_enabled: bool = False
+    max_banks: int = Field(default=6, ge=1)
+    entry_probability: float = Field(default=0.3, ge=0, le=1)
+    entry_min_roe: float = 0.08
+    entry_rejections: int = Field(default=5, ge=0)
+    entry_names: list[str] = Field(default_factory=lambda: [
+        "Zürcher Privatbank", "Gotthard Bank", "Rhein Bank", "Léman Banque"])
+    entry_margin: float = Field(default=0.02, ge=0)
 
     @model_validator(mode="after")
     def _unique_banks(self) -> Self:

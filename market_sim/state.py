@@ -243,6 +243,8 @@ class StateActor:
                         state.events.append({"year": year, "day": day, "firm": buyer.id, "event": "takeover_blocked",
                                              "details": f"{target.id}, gemeinsamer Marktanteil {combined:.0%}"})
                         continue
+                    if not env.can_spend(buyer.id, price + max(0.0, -t_rt.cash)):
+                        continue
                     self._merge(runner, state, buyer, target, price, year, day)
                     share[buyer.id] = combined
                     share[target.id] = 0.0

@@ -52,16 +52,30 @@ banking:
     - {id: B1, name: Helvetia Bank, margin: 0.015}
     - {id: B2, name: Alpenbank, margin: 0.02}
     - {id: B3, name: Mittelland Kantonalbank, margin: 0.025}
-  start_equity_fraction: 0.15
+  start_equity_fraction: 0.6
+  # Konkursdividende: die Bank verliert nur diesen Anteil einer ausgefallenen Schuld.
+  loss_given_default: 0.3
   max_accounts: 2
-  operating_cost_rate: 0.003
+  operating_cost_rate: 0.001
   payout_ratio: 0.5
   target_capital_ratio: 0.15
+  min_capital_ratio: 0.10
   second_account_enabled: true
   second_account_share: 0.5
   interest_weight: 1.0
   safety_weight: 1.0
   random_weight: 0.05
+  # Phase 16: Bankpleite bei negativem Eigenkapital; Einlagen nur zu 30 % gesichert (pro Bank).
+  insured_share: 0.3
+  max_failure_rounds: 3
+  # Neue Banken: höchstens eine pro Jahr, insgesamt höchstens max_banks.
+  entry_enabled: true
+  max_banks: 6
+  entry_probability: 0.3
+  entry_min_roe: 0.08
+  entry_rejections: 5
+  entry_names: [Zürcher Privatbank, Gotthard Bank, Rhein Bank, Léman Banque]
+  entry_margin: 0.02
 
 bank:
   loan_margin: 0.02

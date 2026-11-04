@@ -429,6 +429,7 @@ class SimulationRunner:
     def run_year(self, state: RunState) -> None:
         """Simulate one full year and append its reports to ``state``."""
         year = state.year
+        self.env.credit_year = year + 1
         event_start = len(state.events)
         self.region_reporter.start_year(self)
         summaries, annual_reports, system_kpis = (
@@ -672,6 +673,7 @@ class SimulationRunner:
                 "total_loans": sum(b.loans for b in banking.banks.values()),
                 "total_deposits": sum(b.deposits for b in banking.banks.values()),
                 "bank_equity": sum(b.equity for b in banking.banks.values()),
+                "credit_rejections": sum(b.credit_rejections for b in state.bank_history if b.year == state.year),
             })
         # Taxes, fines, dividends and takeovers are booked after the accounts close: count them in this year.
         for firm in self._firms():

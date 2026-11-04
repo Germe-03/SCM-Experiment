@@ -165,6 +165,8 @@ class Geography:
                 self._start(env, firm, "site", (region, units), units * unit_cost, days, state)
 
     def _start(self, env, firm, kind, payload, cost, days, state) -> None:
+        if not env.can_spend(firm.id, cost):
+            return
         cfg = self.cfg
         build = cfg.build_days.get(firm.stage, days)
         finish = env.period + build

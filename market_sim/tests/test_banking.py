@@ -157,6 +157,7 @@ def test_bankruptcy_write_off_exactly_once(restructure):
     runner.config.bankruptcy.min_firms_per_stage = 1000 if restructure else 0
     runner.config.bankruptcy.min_years_before_exit = 0
     runner.config.bank.restructuring = True
+    runner.config.banking.loss_given_default = 1.0
     runner.start()
     fid = "retailer_01"
     rt = runner.env.runtimes[fid]
@@ -183,7 +184,8 @@ def test_immediate_exit_and_entry_accounts():
     runner.env.runtimes[fid].cash = -123
     runner.close_firm_now(fid, 1, state, "poisoning", "Test")
     runner.close_firm_now(fid, 1, state, "poisoning", "Test")
-    assert bank.write_offs == 123
+    # Only the loss given default is written off; the rest comes from the bankrupt estate.
+    assert bank.write_offs == pytest.approx(123 * runner.config.banking.loss_given_default)
     assert fid not in runner.env.banking.accounts
     firm = runner.network.firm(fid).model_copy(deep=True, update={"id": "new_retailer"})
     runner.env.add_firm(firm)
