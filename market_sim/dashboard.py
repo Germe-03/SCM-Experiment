@@ -198,6 +198,7 @@ td.num,th.num{text-align:right}tbody tr.click{cursor:pointer}tbody tr.click:hove
   <div class="card"><h3>Nettozinsen pro Stufe</h3><div class="chart"><canvas id="fi-interest"></canvas></div></div>
   <div class="card"><h3>Eintritte, Konkurse, Strategiewechsel</h3><div class="chart"><canvas id="fi-churn"></canvas></div></div>
   <div class="card"><h3>Konzentration (HHI der Händler)</h3><div class="chart"><canvas id="fi-hhi"></canvas></div></div>
+  <div class="card"><h3>Arbeitsmarkt</h3><p class="hint">Offene Stellen, abgeworbene Arbeitskräfte und Lohnniveau (1 = ohne Knappheit).</p><div class="chart"><canvas id="fi-labor"></canvas></div></div>
   <div class="card"><h3>Beteiligungen und Dividenden</h3><div class="chart"><canvas id="fi-stakes"></canvas></div></div>
   <div class="card"><h3>Wer hält was (Ende des Zeitraums)</h3><div class="table-wrap"><table id="fi-holdings"></table></div></div>
  </div>
@@ -479,7 +480,7 @@ function renderChain(){lines('ch-margin',byStage('margin_'),{fmt:'pct'});lines('
 function renderHoldings(){lines('fi-stakes',[{label:'Gehaltene Beteiligungen',get:x=>x.stakes_held},{label:'Dividenden',get:x=>x.dividends,axis:'y2',fmt:'chf'}]);
  const end=(D.holdings||[]).filter(h=>h.action==null&&h.year===Math.max(...(D.holdings||[]).filter(x=>x.action==null).map(x=>x.year),0));
  $('#fi-holdings').innerHTML='<thead><tr><th>Eigentümer</th><th>Beteiligung an</th><th class="num">Anteil</th><th class="num">Dividenden</th></tr></thead><tbody>'+(end.length?end.sort((a,b)=>b.share-a.share).map(h=>`<tr class="click" data-firm="${esc(h.owner)}"><td>${esc(fname(h.owner))}</td><td>${esc(fname(h.target))}</td><td class="num">${pct(h.share)}</td><td class="num">${chf(h.dividends)}</td></tr>`).join(''):`<tr><td colspan="4">${empty('Am Ende des Laufs hält keine Firma Anteile an einer anderen.')}</td></tr>`)+'</tbody>';wireFirmLinks($('#fi-holdings'))}
-function renderFinance(){renderHoldings();lines('fi-negative',byStage('negative_interest_','chf'),{fmt:'chf'});lines('fi-debt',byStage('debt_','chf'),{fmt:'chf'});lines('fi-interest',byStage('interest_cost_','chf'),{fmt:'chf'});
+function renderFinance(){renderHoldings();lines('fi-labor',[{label:'Offene Stellen',get:x=>x.open_positions},{label:'Abgeworben',get:x=>x.poached_workers},{label:'Lohnniveau',get:x=>x.wage_index_mean,axis:'y2'}]);lines('fi-negative',byStage('negative_interest_','chf'),{fmt:'chf'});lines('fi-debt',byStage('debt_','chf'),{fmt:'chf'});lines('fi-interest',byStage('interest_cost_','chf'),{fmt:'chf'});
  const s=sys(),restr=y=>D.events.filter(e=>e.year===y&&e.event==='restructuring').length;
  chart('fi-churn',{type:'bar',data:{labels:s.map(x=>x.year),datasets:[{label:'Eintritte',data:s.map(x=>x.market_entries),backgroundColor:pal()[0]+'bb'},{label:'Konkurse',data:s.map(x=>x.bankruptcies),backgroundColor:css('--bad')+'bb'},{label:'Sanierungen',data:s.map(x=>restr(x.year)),backgroundColor:pal()[3]+'bb'},{type:'line',label:'Strategiewechsel',data:s.map(x=>x.strategy_changes),borderColor:pal()[4],pointRadius:0}]},options:{scales:{x:{grid:{display:false}}}}});
  lines('fi-hhi',[{label:'HHI',get:x=>x.market_concentration}])}
@@ -519,15 +520,15 @@ const CH_OUTLINE=[[485,118],[497,128],[506,136],[520,153],[537,168],[553,187],[5
 function clipHalf(poly,a,b){const out=[],mx=(a[0]+b[0])/2,my=(a[1]+b[1])/2,nx=b[0]-a[0],ny=b[1]-a[1],side=p=>(p[0]-mx)*nx+(p[1]-my)*ny;
  for(let i=0;i<poly.length;i++){const p=poly[i],q=poly[(i+1)%poly.length],sp=side(p),sq=side(q);if(sp<=0)out.push(p);if((sp<0)!==(sq<0)){const t=sp/(sp-sq);out.push([p[0]+t*(q[0]-p[0]),p[1]+t*(q[1]-p[1])])}}return out}
 function regionCells(){const regs=D.regions||[];return Object.fromEntries(regs.map(r=>{let poly=CH_OUTLINE;for(const o of regs)if(o!==r)poly=clipHalf(poly,[r.x,r.y],[o.x,o.y]);return[r.name,poly]}))}
-const MAP_LAYERS={population:'Bevölkerung',firms:'Firmen',capacity:'Händler pro Kopf',margin:'Händlermarge',revenue:'Umsatz pro Region'};
+const MAP_LAYERS={population:'Bevölkerung',firms:'Firmen',capacity:'Händler pro Kopf',margin:'Händlermarge',revenue:'Umsatz pro Region',wage:'Lohnniveau',labor:'Arbeitsmarkt'};
 S.mapLayer='population';
 function renderMap(){const regs=D.regions||[];const root=$('#map-svg');
  $('#map-layers').innerHTML=Object.entries(MAP_LAYERS).map(([k,l])=>`<button class="chip" data-l="${k}" aria-pressed="${S.mapLayer===k}">${l}</button>`).join('');
  $$('#map-layers .chip').forEach(c=>c.onclick=()=>{S.mapLayer=c.dataset.l;renderMap()});
  if(!regs.length){root.innerHTML=empty('Dieser Lauf hat keine Regionen.');return}
  const year=range.to,rows=Object.fromEntries((D.region_reports||[]).filter(r=>r.year===year).map(r=>[r.region,r]));
- const val={population:r=>r?.population_share,firms:r=>r?.population_share,capacity:r=>r&&r.population?r.retail_capacity/r.population*1e6:null,margin:r=>r?.mean_retail_margin,revenue:r=>r?.consumer_revenue}[S.mapLayer];
- const fmt={population:pct,firms:pct,capacity:v=>nf(v,1)+' pro Mio.',margin:pct,revenue:chf}[S.mapLayer];
+ const val={population:r=>r?.population_share,firms:r=>r?.population_share,capacity:r=>r&&r.population?r.retail_capacity/r.population*1e6:null,margin:r=>r?.mean_retail_margin,revenue:r=>r?.consumer_revenue,wage:r=>r?.wage_index,labor:r=>r?.labor_tightness}[S.mapLayer];
+ const fmt={population:pct,firms:pct,capacity:v=>nf(v,1)+' pro Mio.',margin:pct,revenue:chf,wage:v=>v==null?'—':'Index '+nf(v,2),labor:v=>v==null?'—':pct(v)+' belegt'}[S.mapLayer];
  const vals=regs.map(r=>val(rows[r.name])).filter(v=>v!=null&&isFinite(v));const lo=Math.min(...vals,0),hi=Math.max(...vals,1e-9);
  const shade=v=>v==null?css('--soft'):S.mapLayer==='margin'&&v<0?css('--bad'):css('--brand');
  const alpha=v=>v==null?1:0.15+0.75*Math.abs((v-(S.mapLayer==='margin'?0:lo))/((S.mapLayer==='margin'?Math.max(Math.abs(lo),Math.abs(hi)):hi-lo)||1));

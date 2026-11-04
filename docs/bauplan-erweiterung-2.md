@@ -288,3 +288,18 @@ Symbol einen Hinweis, wie man ihn startet.
   Endkundenumsatzes (5.8–12.5 %), Service Level 99.2 %, Restaurants am Ende
   mit 15–22 % der Menge. Einzelne Seeds haben späte Einbrüche (Seed 1 in
   Jahr 45 auf 7 %, erholt sich danach wieder teilweise). 185 Tests bestanden.
+- **2026-11-04, Phase 11:** Regionaler Arbeitsmarkt. Jede Region hat einen
+  Bestand an Arbeitskräften, verteilt nach der Bevölkerung und mit ihr
+  wachsend. Eingestellt wird nur, wenn in der Region Leute frei sind, die
+  besser zahlenden Firmen zuerst; der Rest bleibt als offene Stelle stehen.
+  Ein enger Markt hebt das regionale Lohnniveau, ein lockerer senkt es
+  langsam. Firmen, die mehr als 5 % unter dem regionalen Schnitt zahlen,
+  verlieren jedes Jahr 5 % ihres Personals an den besten Zahler der Region.
+  Neue Kartenebenen «Lohnniveau» und «Arbeitsmarkt», ein Diagramm im Reiter
+  Finanzen. Erste Fassung (Arbeitskräfte nach Firmen verteilt, 10 % Reserve,
+  starker Lohndruck) war zu eng: Gewinn 5.2 %, Service Level 94.1 %. Angepasst:
+  Arbeitskräfte nach Bevölkerung, 80 % Reserve, Lohndruck 0.15, Lohnniveau
+  höchstens 1.2. Ergebnis (10 Seeds, 50 Jahre, ohne die ersten 2 Jahre):
+  Gewinn 6.7 % des Endkundenumsatzes (3.9–9.9 %), Service Level 97.7 %,
+  pro Lauf 130–300 offene Stellen und 14–36 abgeworbene Arbeitskräfte,
+  Lohnniveau am Ende 0.98–1.08.

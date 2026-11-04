@@ -112,6 +112,11 @@ class SystemKPIs(BaseModel):
     stakes_sold: int = 0
     stakes_held: int = 0
     laws_enacted: int = 0
+    open_positions: int = 0
+    poached_workers: int = 0
+    hires: int = 0
+    wage_index_mean: float = 1.0
+    labor_tightness: float = 0.0
     rnd_started: int = 0
     rnd_successes: int = 0
     rnd_failures: int = 0

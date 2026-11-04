@@ -154,7 +154,7 @@ def write_outputs(result: RunResult, out_dir: str | Path) -> list[Path]:
     paths.append(path)
     for name, rows, fields in (
         ("decisions.csv", result.decisions, ["year", "month", "firm", "decision", "value", "reason"]),
-        ("region_report.csv", result.region_reports, ["year", "region", "consumer_revenue", "retail_capacity", "retailers", "population_share", "population", "mean_retail_margin"]),
+        ("region_report.csv", result.region_reports, ["year", "region", "consumer_revenue", "retail_capacity", "retailers", "population_share", "population", "mean_retail_margin", "wage_index", "labor_tightness"]),
     ):
         path = directory / name
         with path.open("w", newline="", encoding="utf-8") as output:

@@ -51,4 +51,6 @@ class RegionReporter:
                                   retail_capacity=sum(runner.env._effective_capacity(f.id) / len(geo.sites(f)) for f in retailers),
                                   retailers=len(retailers), population_share=geo.population[region],
                                   population=population * geo.population[region],
-                                  mean_retail_margin=sum(summaries[f.id].profit / summaries[f.id].revenue for f in home) / len(home) if home else 0.0))
+                                  mean_retail_margin=sum(summaries[f.id].profit / summaries[f.id].revenue for f in home) / len(home) if home else 0.0,
+                                  wage_index=runner.labor.wage_index.get(region, 1.0) if getattr(runner, "labor", None) else 1.0,
+                                  labor_tightness=runner.labor.tightness(runner, region) if getattr(runner, "labor", None) else 0.0))

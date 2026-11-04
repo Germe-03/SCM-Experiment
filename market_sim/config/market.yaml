@@ -440,3 +440,16 @@ laws:
     - {name: mehrwegpflicht, title_de: Mehrwegpflicht für Flaschen, kind: packaging, probability_per_year: 0.03, earliest_year: 10, strength: 0.15, watch: [margin_factory, average_customer_price]}
     - {name: kontrollen, title_de: Strengere Kontrollen, kind: controls, probability_per_year: 0.04, earliest_year: 6, strength: 1.5, watch: [offences, offences_detected]}
     - {name: importzoll, title_de: Höherer Importzoll, kind: import_tariff, probability_per_year: 0.03, earliest_year: 10, strength: 0.10, watch: [share_wine, margin_factory]}
+
+# Phase 11: regional labour markets. Hiring needs free workers in the firm's region;
+# tight markets push wages up, and firms paying clearly less lose staff to the best payer.
+labor:
+  enabled: true
+  initial_slack: 0.8
+  tight_threshold: 0.95
+  wage_pressure: 0.15
+  wage_relief: 0.05
+  wage_index_min: 0.9
+  wage_index_max: 1.2
+  poach_gap: 0.05
+  poach_rate: 0.05

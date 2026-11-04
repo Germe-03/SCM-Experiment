@@ -631,6 +631,22 @@ class LawsConfig(ConfigModel):
     clear_effect_sigma: float = Field(default=2.0, gt=0)
 
 
+class LaborConfig(ConfigModel):
+    """Phase 11: one pool of workers per region; scarcity raises wages and invites poaching."""
+
+    enabled: bool = False
+    # Pool at the start = employees of the region x (1 + slack); grows with the population.
+    initial_slack: float = Field(default=0.10, ge=0)
+    tight_threshold: float = Field(default=0.95, gt=0)
+    wage_pressure: float = Field(default=0.5, ge=0)
+    wage_relief: float = Field(default=0.05, ge=0)
+    wage_index_min: float = Field(default=0.9, gt=0)
+    wage_index_max: float = Field(default=1.5, gt=0)
+    # Firms paying this much below the regional average lose this share of staff per year.
+    poach_gap: float = Field(default=0.05, ge=0)
+    poach_rate: float = Field(default=0.05, ge=0, le=1)
+
+
 class TrendConfig(ConfigModel):
     name: str
     trait: str
@@ -708,6 +724,7 @@ class MarketConfig(ConfigModel):
     restaurants: RestaurantConfig = Field(default_factory=RestaurantConfig)
     holdings: HoldingsConfig = Field(default_factory=HoldingsConfig)
     laws: LawsConfig = Field(default_factory=LawsConfig)
+    labor: LaborConfig = Field(default_factory=LaborConfig)
 
     @model_validator(mode="after")
     def _validate_stage_prices(self) -> Self:

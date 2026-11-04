@@ -17,6 +17,7 @@ from market_sim.research import ResearchLab
 from market_sim.marketing import Marketing
 from market_sim.holdings import Holdings
 from market_sim.laws import LawBook, assess_laws
+from market_sim.labor import LaborMarket
 from market_sim.config import MarketConfig, MarketEventTypeConfig
 from market_sim.environment import MarketEnvironment, MarketResult
 from market_sim.kpi import ARCHETYPE_DE, REGION_DE, STAGE_DE, chf
@@ -165,6 +166,7 @@ class SimulationRunner:
         self.marketing = Marketing(self) if config.marketing.enabled else None
         self.holdings = Holdings(self, seed) if config.holdings.enabled else None
         self.laws = LawBook(self, seed) if config.laws.enabled else None
+        self.labor = LaborMarket(self) if config.labor.enabled else None
         self._phase1_rng = random.Random(f"phase1-{seed}")
         self._entry_counters = {stage: 0 for stage in STAGES}
         self._entry_cash = {
@@ -470,6 +472,8 @@ class SimulationRunner:
             self.state_actor.apply_offences(self)
         if self.laws is not None:
             self.laws.apply_yearly(self)
+        if self.labor is not None:
+            self.labor.year_start(self)
         if self.marketing is not None:
             self.marketing.year_start(self)
 
@@ -672,6 +676,13 @@ class SimulationRunner:
             self.holdings.stats = {"dividends": 0.0, "stakes_bought": 0, "stakes_sold": 0}
         if self.laws is not None:
             out["laws_enacted"] = len(self.laws.enacted)
+        if self.labor is not None:
+            out.update(self.labor.stats)
+            self.labor.stats = {"open_positions": 0, "poached_workers": 0, "hires": 0}
+            index = self.labor.wage_index
+            out["wage_index_mean"] = sum(index.values()) / len(index) if index else 1.0
+            regions = list(self.labor.pool)
+            out["labor_tightness"] = (sum(self.labor.tightness(self, r) for r in regions) / len(regions)) if regions else 0.0
         return out
 
     def _research_kpis(self) -> dict[str, float]:
@@ -1052,7 +1063,9 @@ class SimulationRunner:
         firm.r_and_d_budget = strategy.r_and_d_budget
         firm.overtime_level = strategy.overtime_level
         firm.supplier_priority = strategy.supplier_priority
-        firm.employees = max(self.config.workforce.min_employees, firm.employees + strategy.hiring_plan)
+        if self.labor is None:
+            firm.employees = max(self.config.workforce.min_employees, firm.employees + strategy.hiring_plan)
+        # With a labour market, hiring happens in LaborMarket.year_start, best payers first.
         runtime = self.env.runtimes[firm.id]
         runtime.wage_level = firm.wage_level
         runtime.employees = firm.employees
