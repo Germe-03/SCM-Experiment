@@ -328,6 +328,37 @@ class CentralBankConfig(ConfigModel):
         return self
 
 
+class CommercialBankConfig(ConfigModel):
+    id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    margin: float = Field(default=0.02, ge=0)
+
+
+class BankingConfig(ConfigModel):
+    enabled: bool = False
+    banks: list[CommercialBankConfig] = Field(default_factory=lambda: [
+        CommercialBankConfig(id="B1", name="Helvetia Bank", margin=0.015),
+        CommercialBankConfig(id="B2", name="Alpenbank", margin=0.02),
+        CommercialBankConfig(id="B3", name="Mittelland Kantonalbank", margin=0.025),
+    ], min_length=1)
+    start_equity_fraction: float = Field(default=0.15, ge=0)
+    max_accounts: int = Field(default=2, ge=1, le=2)
+    operating_cost_rate: float = Field(default=0.003, ge=0)
+    payout_ratio: float = Field(default=0.5, ge=0, le=1)
+    target_capital_ratio: float = Field(default=0.15, ge=0)
+    second_account_enabled: bool = True
+    second_account_share: float = Field(default=0.5, gt=0, lt=1)
+    interest_weight: float = Field(default=1.0, ge=0)
+    safety_weight: float = Field(default=1.0, ge=0)
+    random_weight: float = Field(default=0.05, ge=0)
+
+    @model_validator(mode="after")
+    def _unique_banks(self) -> Self:
+        if len({bank.id for bank in self.banks}) != len(self.banks):
+            raise ValueError("bank ids must be unique")
+        return self
+
+
 class BankConfig(ConfigModel):
     enabled: bool = False
     base_rate: float = Field(default=0.03, ge=0)
@@ -756,6 +787,7 @@ class MarketConfig(ConfigModel):
     supplier_discovery: SupplierDiscoveryConfig = Field(default_factory=SupplierDiscoveryConfig)
     market_entry: MarketEntryConfig = Field(default_factory=MarketEntryConfig)
     bank: BankConfig = Field(default_factory=BankConfig)
+    banking: BankingConfig = Field(default_factory=BankingConfig)
     central_bank: CentralBankConfig = Field(default_factory=CentralBankConfig)
     strategy_change: StrategyChangeConfig = Field(default_factory=StrategyChangeConfig)
     consumers: ConsumersConfig | None = None

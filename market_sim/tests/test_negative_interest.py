@@ -9,6 +9,7 @@ from market_sim.run import build_runner
 def test_interest_tiers(cash, revenue, index):
     runner, _ = build_runner(1, 0, days_per_year=10)
     env = runner.env
+    runner.config.banking.enabled = False
     env.reset()
     rt = env.runtimes["retailer_01"]
     rt.cash, rt.last_year_revenue, env.price_index = cash, revenue, index
@@ -25,6 +26,7 @@ def test_interest_tiers(cash, revenue, index):
 
 def test_disabled_and_inflation_index():
     runner, _ = build_runner(1, 0, days_per_year=10)
+    runner.config.banking.enabled = False
     runner.start()
     runner.long_run._inflate(runner, 1.1)
     assert runner.env.price_index == pytest.approx(1.1)

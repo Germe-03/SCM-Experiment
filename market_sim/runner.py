@@ -22,7 +22,7 @@ from market_sim.config import MarketConfig, MarketEventTypeConfig
 from market_sim.environment import MarketEnvironment, MarketResult
 from market_sim.kpi import ARCHETYPE_DE, REGION_DE, STAGE_DE, chf
 from market_sim.kpi import (
-    AnnualReport, SystemKPIs, bullwhip_variance_ratio, herfindahl_index,
+    AnnualReport, BankAnnualReport, SystemKPIs, bullwhip_variance_ratio, herfindahl_index,
     service_level,
 )
 from market_sim.models import STAGES, Firm, SupplyNetwork
@@ -54,6 +54,7 @@ class RunResult:
     final_result: MarketResult
     annual_reports: list[dict[str, AnnualReport]]
     system_kpis: list[SystemKPIs]
+    bank_history: list[BankAnnualReport] = field(default_factory=list)
     daily_series: dict[str, dict[str, list[float]]] = field(default_factory=dict)
     days_total: int = 0
     financial_breakdown: dict[str, list[dict[str, float]]] = field(default_factory=dict)
@@ -81,6 +82,7 @@ class RunState:
     summaries: list[dict[str, YearSummary]] = field(default_factory=list)
     annual_reports: list[dict[str, AnnualReport]] = field(default_factory=list)
     system_kpis: list[SystemKPIs] = field(default_factory=list)
+    bank_history: list[BankAnnualReport] = field(default_factory=list)
     daily_series: dict[str, dict[str, list[float]]] = field(default_factory=dict)
     financial_breakdown: dict[str, list[dict[str, float]]] = field(default_factory=dict)
     recent_demand: dict[str, list[int]] = field(default_factory=dict)
@@ -226,6 +228,7 @@ class SimulationRunner:
             years=state.year, network=self.network, yearly_summaries=state.summaries,
             final_result=self.env.get_result(), annual_reports=state.annual_reports,
             system_kpis=state.system_kpis,
+            bank_history=list(state.bank_history),
             daily_series=state.daily_series, days_total=state.global_day,
             financial_breakdown=state.financial_breakdown,
             exits=dict(self.exits), events=list(state.events),
@@ -659,6 +662,17 @@ class SimulationRunner:
             self.holdings.year_end(self, state)
         if self.laws is not None:
             self.laws.year_end(self, state)
+        if self.env.banking is not None:
+            banking = self.env.banking
+            state.bank_history.extend(banking.year_end(
+                self.env.runtimes, self.config.bank, self.env.price_index,
+                state.year, self.config.simulation.days_per_year, state.events,
+            ))
+            system_kpis[-1] = system_kpis[-1].model_copy(update={
+                "total_loans": sum(b.loans for b in banking.banks.values()),
+                "total_deposits": sum(b.deposits for b in banking.banks.values()),
+                "bank_equity": sum(b.equity for b in banking.banks.values()),
+            })
         # Taxes, fines, dividends and takeovers are booked after the accounts close: count them in this year.
         for firm in self._firms():
             if not financial_breakdown.get(firm.id):
@@ -1143,6 +1157,8 @@ class SimulationRunner:
                 runtime = self.env.runtimes[firm_id]
                 if bank.enabled and bank.restructuring and runtime.cash < 0:
                     written_off = -runtime.cash
+                    if self.env.banking is not None:
+                        self.env.banking.write_off(firm_id, written_off)
                     runtime.adjust_cash(written_off, "bank:Schuldenschnitt")
                     runtime.consecutive_loss_years = 0
                     firm = self.network.firm(firm_id)

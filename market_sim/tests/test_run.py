@@ -27,6 +27,7 @@ def test_write_outputs(tmp_path):
         "system_kpis.csv": 2,
         "firm_ranking.csv": firm_count,
         "events.csv": len(result.events),
+        "bank_reports.csv": len(result.bank_history),
         "brand_report.csv": len(result.brand_reports),
         "class_report.csv": len(result.class_reports),
         "offence_ledger.csv": len(result.offence_ledger),
@@ -89,7 +90,7 @@ def test_main_writes_to_requested_directory(tmp_path):
         "annual_reports.csv", "system_kpis.csv", "firm_ranking.csv", "events.csv",
         "brand_report.csv", "class_report.csv", "offence_ledger.csv",
         "decisions.csv", "region_report.csv", "exit_analysis.json", "personas.json",
-        "holdings.json", "laws.json",
+        "holdings.json", "laws.json", "bank_reports.csv",
     }
 
 

@@ -49,7 +49,28 @@ class AnnualReport(BaseModel):
     main_problems: list[str]
 
 
+class BankAnnualReport(BaseModel):
+    year: int
+    bank_id: str
+    name: str
+    equity: float
+    loans: float
+    deposits: float
+    capital_ratio: float
+    profit: float
+    interest_income: float
+    interest_expense: float
+    refinancing_cost: float
+    operating_cost: float
+    write_offs: float
+    customers: int
+    active: bool
+
+
 class SystemKPIs(BaseModel):
+    total_loans: float = 0.0
+    total_deposits: float = 0.0
+    bank_equity: float = 0.0
     # Year-end policy rate for the following year; gap is a model indicator, not GDP.
     policy_rate: float | None = None
     inflation: float = 0.0

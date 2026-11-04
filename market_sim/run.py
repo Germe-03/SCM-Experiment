@@ -9,7 +9,7 @@ from pathlib import Path
 
 from market_sim.checkpoint import load_checkpoint, year_end_saver
 from market_sim.config import MarketConfig, load_market_config
-from market_sim.kpi import AnnualReport, SystemKPIs
+from market_sim.kpi import AnnualReport, BankAnnualReport, SystemKPIs
 from market_sim.models import STAGES, SupplyNetwork, load_firms
 from market_sim.policies import policies_for_network
 from market_sim.runner import RunResult, SimulationRunner
@@ -136,6 +136,13 @@ def write_outputs(result: RunResult, out_dir: str | Path) -> list[Path]:
         writer.writeheader()
         writer.writerows(sorted(result.events, key=lambda event: (event["year"], event["day"])))
     paths = [annual_path, system_path, ranking_path, events_path]
+    if result.bank_history:
+        bank_path = directory / "bank_reports.csv"
+        with bank_path.open("w", newline="", encoding="utf-8") as output:
+            writer = csv.DictWriter(output, fieldnames=list(BankAnnualReport.model_fields))
+            writer.writeheader()
+            writer.writerows(report.model_dump() for report in result.bank_history)
+        paths.append(bank_path)
     # Phase 2: brand and consumer-class reports exist only in the classes model.
     for name, rows in (("brand_report.csv", result.brand_reports), ("class_report.csv", result.class_reports),
                        ("rnd_projects.csv", result.rnd_reports)):

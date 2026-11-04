@@ -8,6 +8,7 @@ from market_sim.run import build_runner
 @pytest.mark.parametrize("cash", [-1000.0, 1000.0])
 def test_daily_interest(cash):
     runner, _ = build_runner()
+    runner.config.banking.enabled = False
     runner.start()
     runtime = runner.env.runtimes["retailer_01"]
     runtime.cash = cash
@@ -24,6 +25,7 @@ def test_daily_interest(cash):
 
 def test_credit_limit_cancels_loan():
     runner, _ = build_runner()
+    runner.config.banking.enabled = False
     runner.start()
     runtime = runner.env.runtimes["retailer_01"]
     runtime.credit_limit = 100
@@ -36,6 +38,7 @@ def test_credit_limit_cancels_loan():
 
 def test_disabled_bank_and_rate_cap():
     runner, _ = build_runner()
+    runner.config.banking.enabled = False
     runner.start()
     runtime = runner.env.runtimes["retailer_01"]
     runtime.cash = -1000

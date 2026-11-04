@@ -7,7 +7,7 @@ from math import exp, floor
 import random
 
 from market_sim.config import MarketConfig, load_market_config
-from market_sim.banking import CentralBank
+from market_sim.banking import BankingSystem, CentralBank, deposit_threshold
 from market_sim.models import STAGES, Firm, SupplyNetwork
 from market_sim.selection import split_order, supplier_candidates
 from market_sim.geography import Geography
@@ -208,6 +208,7 @@ class MarketEnvironment:
         self._commodity_rng = random.Random(f"commodities-{seed}")
         self.config = config or load_market_config()
         self.central_bank = CentralBank(self.config.central_bank)
+        self.banking: BankingSystem | None = None
         self.initial_inventory = initial_inventory
         lead_time = self.config.logistics.default_lead_time_days
         self.initial_pipeline = initial_pipeline or tuple(0 for _ in range(lead_time))
@@ -234,6 +235,8 @@ class MarketEnvironment:
     def close_firm(self, firm_id: str) -> None:
         """Cancel everything still open with a firm that has left the market."""
         runtime = self.runtimes[firm_id]
+        if self.banking is not None:
+            self.banking.remove_firm(firm_id, runtime.cash)
         runtime.active = False
         for customer_id, owed in self._open_units_by_customer(firm_id).items():
             customer = self.runtimes.get(customer_id)
@@ -252,6 +255,8 @@ class MarketEnvironment:
             self.brand_book.add_brand_for(firm)
         runtime = self._new_runtime(firm)
         self.runtimes[firm.id] = runtime
+        if self.banking is not None:
+            self.banking.add_firm(firm.id)
         self.inventory_history[firm.id] = []
         self.backlog_history[firm.id] = []
         self._orders_received_this_period[firm.id] = 0
@@ -324,6 +329,8 @@ class MarketEnvironment:
                     seeded_customer=seeded_customer,
                 )
         self.inventory_history = {firm_id: [] for firm_id in self.runtimes}
+        self.banking = (BankingSystem(self.config.banking, self.seed, self.runtimes)
+                        if self.config.banking.enabled else None)
         self.backlog_history = {firm_id: [] for firm_id in self.runtimes}
         self._orders_received_this_period = {firm_id: 0 for firm_id in self.runtimes}
 
@@ -552,7 +559,11 @@ class MarketEnvironment:
                 self._apply_rnd(firm_id)
             runtime.calculate_period_cost(daily_wage)
             self.wage_savings[firm_id] = self.wage_savings.get(firm_id, 0.0) + daily_wage * self.wage_saving_ratio.get(firm_id, 0.0)
-            self._apply_interest(runtime)
+            self._apply_interest(runtime, firm_id)
+        if self.banking is not None:
+            policy_rate = (self.central_bank.policy_rate if self.config.central_bank.enabled
+                           else self.config.bank.base_rate)
+            self.banking.daily(self.runtimes, policy_rate)
         self.period += 1
         firm_financials = {
             firm_id: self._financial_snapshot(runtime)
@@ -771,7 +782,7 @@ class MarketEnvironment:
             sum(result.cash for result in results.values()),
         )
 
-    def _apply_interest(self, runtime: FirmRuntime) -> None:
+    def _apply_interest(self, runtime: FirmRuntime, firm_id: str | None = None) -> None:
         """Book one day's net borrowing cost or deposit income."""
         cfg = self.config.bank
         if not cfg.enabled:
@@ -784,16 +795,23 @@ class MarketEnvironment:
             deposit_rate = max(0.0, policy_rate - cfg.deposit_spread)
             if policy_rate < 0:
                 negative_rate = max(negative_rate, -policy_rate)
+        if self.banking is not None:
+            if firm_id is None:
+                firm_id = next(fid for fid, rt in self.runtimes.items() if rt is runtime)
+            base_rate = (self.central_bank.policy_rate if self.config.central_bank.enabled else cfg.base_rate)
+            base_rate += self.banking.primary_bank(firm_id).margin
         rate = min(cfg.max_rate, base_rate
                    + cfg.risk_premium_per_loss_year * runtime.consecutive_loss_years
                    + cfg.leverage_premium * min(1.0, debt / max(1.0, runtime.last_year_revenue)))
         cost = debt * rate / 365 if debt else -runtime.cash * deposit_rate / 365
+        negative = 0.0
         if not debt and cfg.negative_interest_enabled:
-            threshold = max(cfg.deposit_threshold_min * self.price_index,
-                            cfg.deposit_threshold_revenue_fraction * runtime.last_year_revenue)
+            threshold = deposit_threshold(cfg, runtime, self.price_index)
             negative = max(0.0, runtime.cash - threshold) * negative_rate / 365
             cost = negative - min(runtime.cash, threshold) * deposit_rate / 365
             runtime.negative_interest_cost += negative
+        if self.banking is not None:
+            self.banking.book_interest(firm_id, debt, cost, negative)
         runtime.interest_cost += cost
         runtime.cash -= cost
 

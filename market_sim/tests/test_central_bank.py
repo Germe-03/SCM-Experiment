@@ -66,6 +66,7 @@ def test_demand_uses_previous_rate():
 def test_interest_uses_policy_only_when_enabled(enabled, policy_rate, cash):
     runner, _ = build_runner(1, days_per_year=3)
     runner.config.central_bank.enabled = enabled
+    runner.config.banking.enabled = False
     runner.env.central_bank.policy_rate = policy_rate
     runner.start()
     rt = runner.env.runtimes['retailer_01']
