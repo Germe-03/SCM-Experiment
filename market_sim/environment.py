@@ -7,6 +7,7 @@ from math import exp, floor
 import random
 
 from market_sim.config import MarketConfig, load_market_config
+from market_sim.banking import CentralBank
 from market_sim.models import STAGES, Firm, SupplyNetwork
 from market_sim.selection import split_order, supplier_candidates
 from market_sim.geography import Geography
@@ -206,6 +207,7 @@ class MarketEnvironment:
         self.material_cost_multiplier = 1.0
         self._commodity_rng = random.Random(f"commodities-{seed}")
         self.config = config or load_market_config()
+        self.central_bank = CentralBank(self.config.central_bank)
         self.initial_inventory = initial_inventory
         lead_time = self.config.logistics.default_lead_time_days
         self.initial_pipeline = initial_pipeline or tuple(0 for _ in range(lead_time))
@@ -775,15 +777,22 @@ class MarketEnvironment:
         if not cfg.enabled:
             return
         debt = max(0.0, -runtime.cash)
-        rate = min(cfg.max_rate, cfg.base_rate
+        base_rate, deposit_rate, negative_rate = cfg.base_rate, cfg.deposit_rate, cfg.negative_rate
+        if self.config.central_bank.enabled:
+            policy_rate = self.central_bank.policy_rate
+            base_rate = policy_rate + cfg.loan_margin
+            deposit_rate = max(0.0, policy_rate - cfg.deposit_spread)
+            if policy_rate < 0:
+                negative_rate = max(negative_rate, -policy_rate)
+        rate = min(cfg.max_rate, base_rate
                    + cfg.risk_premium_per_loss_year * runtime.consecutive_loss_years
                    + cfg.leverage_premium * min(1.0, debt / max(1.0, runtime.last_year_revenue)))
-        cost = debt * rate / 365 if debt else -runtime.cash * cfg.deposit_rate / 365
+        cost = debt * rate / 365 if debt else -runtime.cash * deposit_rate / 365
         if not debt and cfg.negative_interest_enabled:
             threshold = max(cfg.deposit_threshold_min * self.price_index,
                             cfg.deposit_threshold_revenue_fraction * runtime.last_year_revenue)
-            negative = max(0.0, runtime.cash - threshold) * cfg.negative_rate / 365
-            cost = negative - min(runtime.cash, threshold) * cfg.deposit_rate / 365
+            negative = max(0.0, runtime.cash - threshold) * negative_rate / 365
+            cost = negative - min(runtime.cash, threshold) * deposit_rate / 365
             runtime.negative_interest_cost += negative
         runtime.interest_cost += cost
         runtime.cash -= cost

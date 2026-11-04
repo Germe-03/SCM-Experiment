@@ -50,6 +50,10 @@ class AnnualReport(BaseModel):
 
 
 class SystemKPIs(BaseModel):
+    # Year-end policy rate for the following year; gap is a model indicator, not GDP.
+    policy_rate: float | None = None
+    inflation: float = 0.0
+    output_gap: float | None = None
     hhi_wholesaler: float = 0.0
     hhi_distributor: float = 0.0
     hhi_factory: float = 0.0

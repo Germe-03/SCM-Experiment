@@ -25,7 +25,30 @@ market_entry:
     distributor: [Alpen Logistik, Mittelland Verteilung, Gotthard Vertrieb, Jura Logistik]
     factory: [Aare Brauerei, Rigi Bräu, Emmental Bier, Säntis Brauerei]
 
+# Phase 13: year-end policy for the following year.
+central_bank:
+  enabled: true
+  start_rate: 0.01
+  target_inflation: 0.01
+  neutral_real_rate: 0.0
+  inflation_weight: 0.5
+  gap_weight: 0.5
+  min_rate: -0.0075
+  max_rate: 0.08
+  max_step: 0.005
+  gap_cap: 0.10
+  # Weight of the latest demand deviation from the population-based expectation.
+  gap_smoothing: 0.5
+  # Prior year's real rate affects next year's demand, at most +/-5%.
+  demand_effect: 0.5
+  demand_effect_cap: 0.05
+  # Prior year's output gap affects inflation, at most +/-0.5 percentage points.
+  inflation_effect: 0.05
+  inflation_effect_cap: 0.005
+
 bank:
+  loan_margin: 0.02
+  deposit_spread: 0.005
   enabled: true
   base_rate: 0.03
   risk_premium_per_loss_year: 0.01

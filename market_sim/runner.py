@@ -446,6 +446,7 @@ class SimulationRunner:
         retailer_lost = {firm.id: 0 for firm in self._firms()}
         retailer_served = {firm.id: 0 for firm in self._firms()}
         demand_series: list[float] = []
+        expected_demand = 0.0
         factory_order_series: list[float] = []
         daily_quality = {firm.id: [] for firm in self._firms()}
         daily_turnover = {firm.id: [] for firm in self._firms()}
@@ -507,6 +508,9 @@ class SimulationRunner:
                 band = self.strategies[firm.id]
                 self.applied_prices.append((firm.id, firm.sell_price, band.min_price, band.max_price))
             total_demand = self.demand(global_day)
+            if self.config.central_bank.enabled:
+                expected_demand += self.demand.mean * self.demand.seasonal_factor(global_day)
+                total_demand = max(0, round(total_demand * self.env.central_bank.demand_multiplier))
             _, info = self.env.step(total_demand, {key: value.order_qty for key, value in decisions.items()})
             self.region_reporter.daily(self)
             demand_series.append(total_demand)
@@ -627,6 +631,20 @@ class SimulationRunner:
         self._enter_market(state)
         changes = self._change_strategies(state)
         self.long_run.year_end(self, state)
+        if self.config.central_bank.enabled:
+            central_bank = self.env.central_bank
+            if central_bank.year_end(self.long_run.inflation, sum(demand_series), expected_demand):
+                state.events.append({
+                    "year": state.year, "day": self.config.simulation.days_per_year, "firm": "SNB",
+                    "event": "policy_rate_changed",
+                    "details": f"Leitzins Folgejahr {central_bank.policy_rate:.2%}, "
+                               f"Teuerung {central_bank.inflation:.2%}, "
+                               f"Konjunkturlücke (Modellindikator) {central_bank.output_gap:.2%}",
+                })
+            system_kpis[-1] = system_kpis[-1].model_copy(update={
+                "policy_rate": central_bank.policy_rate, "output_gap": central_bank.output_gap,
+            })
+        system_kpis[-1] = system_kpis[-1].model_copy(update={"inflation": self.long_run.inflation})
         geo = self.env.geography
         if geo is not None:
             geo.year_end(self, state)

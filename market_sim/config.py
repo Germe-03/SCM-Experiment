@@ -304,9 +304,35 @@ class MarketEntryConfig(ConfigModel):
         return self
 
 
+class CentralBankConfig(ConfigModel):
+    enabled: bool = False
+    start_rate: float = 0.01
+    target_inflation: float = 0.01
+    neutral_real_rate: float = 0.0
+    inflation_weight: float = Field(default=0.5, ge=0)
+    gap_weight: float = Field(default=0.5, ge=0)
+    min_rate: float = -0.0075
+    max_rate: float = 0.08
+    max_step: float = Field(default=0.005, ge=0)
+    gap_cap: float = Field(default=0.10, ge=0, le=1)
+    gap_smoothing: float = Field(default=0.5, ge=0, le=1)
+    demand_effect: float = Field(default=0.5, ge=0)
+    demand_effect_cap: float = Field(default=0.05, ge=0, le=1)
+    inflation_effect: float = Field(default=0.05, ge=0)
+    inflation_effect_cap: float = Field(default=0.005, ge=0)
+
+    @model_validator(mode="after")
+    def _rate_bounds(self) -> Self:
+        if not self.min_rate <= self.start_rate <= self.max_rate:
+            raise ValueError("central bank start_rate must be within min_rate and max_rate")
+        return self
+
+
 class BankConfig(ConfigModel):
     enabled: bool = False
     base_rate: float = Field(default=0.03, ge=0)
+    loan_margin: float = Field(default=0.02, ge=0)
+    deposit_spread: float = Field(default=0.005, ge=0)
     risk_premium_per_loss_year: float = Field(default=0.01, ge=0)
     leverage_premium: float = Field(default=0.04, ge=0)
     max_rate: float = Field(default=0.15, ge=0)
@@ -730,6 +756,7 @@ class MarketConfig(ConfigModel):
     supplier_discovery: SupplierDiscoveryConfig = Field(default_factory=SupplierDiscoveryConfig)
     market_entry: MarketEntryConfig = Field(default_factory=MarketEntryConfig)
     bank: BankConfig = Field(default_factory=BankConfig)
+    central_bank: CentralBankConfig = Field(default_factory=CentralBankConfig)
     strategy_change: StrategyChangeConfig = Field(default_factory=StrategyChangeConfig)
     consumers: ConsumersConfig | None = None
     brands: BrandsConfig | None = None

@@ -18,6 +18,7 @@ class LongRun:
     def __init__(self, runner: SimulationRunner, seed: int) -> None:
         self.cfg = runner.config.long_run
         self.rng = random.Random(f"longrun-{seed}")
+        self.inflation = 0.0
         self.price_index = 1.0
         self.population_index = 1.0
         trends = self.cfg.trends
@@ -38,8 +39,12 @@ class LongRun:
         switch_choice = self.rng.random()
         fx_roll = self.rng.gauss(0.0, 1.0)
         if not cfg.enabled:
+            self.inflation = 0.0
             return
+        if runner.config.central_bank.enabled:
+            inflation_roll += runner.env.central_bank.inflation_adjustment
         inflation = max(cfg.inflation_min, min(cfg.inflation_max, inflation_roll))
+        self.inflation = inflation
         self._inflate(runner, 1 + inflation)
         self._grow_population(runner)
         self._advance_trends(runner, state, switch_choice)

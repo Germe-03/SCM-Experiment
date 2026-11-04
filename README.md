@@ -89,6 +89,8 @@ und Texte vom lokalen Sprachmodell (Firmengeschichten, Chronik, Chat).
 - Bestellungen pro Marke statt Gesamtmengen.
 - Lieferzeit abhängig von der Distanz (heute nur in der Lieferantenwahl).
 - Grösseres Ollama-Modell (z. B. `qwen2.5:7b`) für besseres Deutsch.
+- Börsengang über eine Bank statt «alle Firmen ab Jahr 5 handelbar»
+  (siehe [`docs/bauplan-banken-boerse.md`](docs/bauplan-banken-boerse.md)).
 
 ### Modell in Kürze
 
