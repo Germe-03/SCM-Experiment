@@ -1,10 +1,11 @@
-"""Phase 12: serve the dashboard locally and answer chat questions with the local model.
+"""Phase 12: serve the dashboard locally and answer chat questions with the language model.
 
 Start::
 
     python -m market_sim.serve --dir runs --port 8770
 
-then open http://localhost:8770/dashboard.html. Questions go to Ollama on this machine.
+then open http://localhost:8770/dashboard.html. Questions go to the model set in
+``ollama.provider`` (SwissAI API or Ollama on this machine).
 """
 
 from __future__ import annotations
@@ -17,7 +18,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from market_sim.config import load_market_config
-from market_sim.llm import OllamaClient, unchecked_numbers
+from market_sim.llm import make_client, unchecked_numbers
 from market_sim.texts import SYSTEM, context_for_question
 
 
@@ -36,8 +37,8 @@ def answer(data: dict, llm, question: str) -> dict:
               f"sage das ehrlich.")
     try:
         text = llm.generate(SYSTEM, prompt).replace("ß", "ss").strip()
-    except Exception as error:  # Ollama not running or too slow
-        return {"answer": f"Das lokale Modell antwortet nicht ({error.__class__.__name__}). Läuft Ollama?",
+    except Exception as error:  # model offline, key missing or too slow
+        return {"answer": f"Das Sprachmodell antwortet nicht ({error.__class__.__name__}). Ist der API-Schlüssel gesetzt bzw. läuft Ollama?",
                 "sources": [], "checked": False}
     bad = unchecked_numbers(text, facts)
     if bad:
@@ -76,14 +77,16 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dir", default="runs")
     parser.add_argument("--port", type=int, default=8770)
-    parser.add_argument("--model", default=cfg.chat_model)
+    parser.add_argument("--model", help="model id (default from config)")
     args = parser.parse_args(argv)
     directory = Path(args.dir)
     state = {"data": load_dashboard_data(directory / "dashboard.html"),
-             "llm": OllamaClient(args.model, cfg.host, cfg.timeout_seconds, cfg.temperature, cfg.max_tokens)}
+             "llm": make_client(cfg, chat=True)}
+    if args.model:
+        state["llm"].model = args.model
     server = ThreadingHTTPServer(("127.0.0.1", args.port),
                                  partial(Handler, directory=str(directory), state=state))
-    print(f"Dashboard: http://localhost:{args.port}/dashboard.html (Modell {args.model})")
+    print(f"Dashboard: http://localhost:{args.port}/dashboard.html (Modell {state['llm'].model})")
     server.serve_forever()
 
 

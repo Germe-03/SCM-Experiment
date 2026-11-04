@@ -549,6 +549,16 @@ labor:
 # `python -m market_sim.dashboard --texts`; the chat needs `python -m market_sim.serve`.
 # A larger model such as qwen2.5:7b writes better German but must be downloaded first.
 ollama:
+  # api = SwissAI (GLM-5.3, gratis, schneller); ollama = lokales Modell, nichts verlässt den Rechner.
+  provider: api
+  api_base_url: https://api.swissai.svc.cscs.ch/v1
+  # Umgebungsvariable mit dem Schlüssel (nie den Schlüssel selbst hier eintragen).
+  api_key_env: SWISSAI_RESEARCH_API_KEY
+  api_story_model: CSCS-Inference/zai-org/GLM-5.3
+  api_chat_model: CSCS-Inference/zai-org/GLM-5.3
+  requests_per_minute: 14
+  # GLM denkt sonst vor jeder Antwort nach und verbraucht dabei alle Tokens.
+  api_reasoning_effort: low
   host: http://localhost:11434
   story_model: llama3.2:3b
   chat_model: llama3.2:3b

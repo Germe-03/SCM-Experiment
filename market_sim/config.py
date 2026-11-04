@@ -763,14 +763,23 @@ class LaborConfig(ConfigModel):
 
 
 class OllamaConfig(ConfigModel):
-    """Phase 12: local language model for stories, the chronicle and the dashboard chat."""
+    """Phase 12: language model for stories, the chronicle and the dashboard chat."""
 
+    # "ollama" = local model, nothing leaves the machine; "api" = OpenAI-compatible API (e.g. SwissAI).
+    provider: str = Field(default="ollama", pattern="^(ollama|api)$")
     host: str = "http://localhost:11434"
     story_model: str = "llama3.2:3b"
     chat_model: str = "llama3.2:3b"
     timeout_seconds: float = Field(default=180.0, gt=0)
     temperature: float = Field(default=0.3, ge=0, le=2)
     max_tokens: int = Field(default=400, gt=0)
+    api_base_url: str = "https://api.swissai.svc.cscs.ch/v1"
+    # Name of the environment variable holding the key; the key itself never goes into the repo.
+    api_key_env: str = "SWISSAI_RESEARCH_API_KEY"
+    api_story_model: str = "CSCS-Inference/zai-org/GLM-5.3"
+    api_chat_model: str = "CSCS-Inference/zai-org/GLM-5.3"
+    requests_per_minute: float = Field(default=14.0, gt=0)
+    api_reasoning_effort: str = "low"
 
 
 class TrendConfig(ConfigModel):

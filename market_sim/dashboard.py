@@ -710,7 +710,7 @@ $('#flow').addEventListener('click',e=>{if(e.target.id==='flow')e.target.close()
   const wait=add('bot','<span class="hint">Das Modell denkt nach …</span>');$('#chat-send').disabled=true;
   try{const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:q})});if(!r.ok)throw new Error(r.status);const a=await r.json();
    wait.innerHTML=esc(pretty(a.answer)).replace(/\n/g,'<br>')+(a.sources&&a.sources.length?`<div class="hint" style="margin-top:6px">Quellen: ${a.sources.map(esc).join(' · ')}</div>`:'')}
-  catch(err){wait.innerHTML='Keine Antwort vom Chat-Server. Läuft <code>python -m market_sim.serve</code> und ist Ollama gestartet?'}
+  catch(err){wait.innerHTML='Keine Antwort vom Chat-Server. Läuft <code>python -m market_sim.serve</code> und ist das Sprachmodell erreichbar?'}
   finally{$('#chat-send').disabled=false;input.focus()}}})();
 const VIEWS={chronicle:renderChronicle,map:renderMap,people:renderPeople,structure:renderStructure,overview:renderOverview,market:renderMarket,firms:renderFirms,compare:renderCompare,chain:renderChain,finance:renderFinance,state:renderState,rnd:renderRnd,events:renderEvents};
 function render(){destroy();VIEWS[S.tab]()}
@@ -719,17 +719,17 @@ openTab(location.hash.slice(1)||'overview');
 
 
 def _texts(data: dict, config, out: Path, seed: int, years: int) -> dict:
-    """Stories and chronicle from the local model, cached per seed and run length."""
-    from market_sim.llm import OllamaClient
+    """Stories and chronicle from the language model, cached per seed and run length."""
+    from market_sim.llm import make_client
     from market_sim.texts import generate_texts
 
     cache = out / f"texts_seed{seed}_{years}y.json"
     if cache.exists():
         return json.loads(cache.read_text(encoding="utf-8"))
     cfg = config.ollama
-    llm = OllamaClient(cfg.story_model, cfg.host, cfg.timeout_seconds, cfg.temperature, cfg.max_tokens)
+    llm = make_client(cfg)
     if not llm.available():
-        print(f"Ollama oder Modell {cfg.story_model} nicht erreichbar: es entstehen nur Kurzfassungen aus den Fakten.")
+        print(f"Sprachmodell {llm.model} nicht erreichbar: es entstehen nur Kurzfassungen aus den Fakten.")
     texts = generate_texts(data, llm, progress=lambda done, total: print(f"Texte {done}/{total}", end="\r"))
     print()
     out.mkdir(parents=True, exist_ok=True)
@@ -746,7 +746,7 @@ def main(argv: list[str] | None = None) -> Path:
     parser.add_argument("--out", default="runs")
     parser.add_argument("--open", action="store_true", dest="open_browser")
     parser.add_argument("--texts", action="store_true",
-                        help="write firm stories and a yearly chronicle with the local Ollama model (slow)")
+                        help="write firm stories and a yearly chronicle with the language model (SwissAI API or local Ollama)")
     args = parser.parse_args(argv)
     days = args.days_per_year or config.simulation.days_per_year
     effective = config.model_copy(update={"simulation": config.simulation.model_copy(

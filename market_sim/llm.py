@@ -1,11 +1,30 @@
-"""Phase 12: a thin client for a local Ollama model and a fake model for tests."""
+"""Phase 12: thin clients for a language model (local Ollama or an OpenAI-compatible API such as SwissAI) and a fake model for tests."""
 
 from __future__ import annotations
 
 import json
+import os
 import re
+import sys
+import time
 import urllib.error
 import urllib.request
+
+
+def api_key(name: str) -> str:
+    """Read an API key from the environment or, on Windows, the user registry."""
+    value = os.environ.get(name)
+    if value:
+        return value
+    if sys.platform == "win32":
+        try:
+            import winreg
+
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment") as key:
+                return str(winreg.QueryValueEx(key, name)[0])
+        except (OSError, ImportError):
+            return ""
+    return ""
 
 
 class OllamaClient:
@@ -33,6 +52,98 @@ class OllamaClient:
                                          headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(request, timeout=self.timeout) as response:
             return json.load(response).get("response", "").strip()
+
+
+class OpenAIClient:
+    """Calls an OpenAI-compatible chat API (e.g. SwissAI/CSCS); the key comes from an environment variable."""
+
+    def __init__(self, model: str, base_url: str, key_env: str, timeout: float = 120.0,
+                 temperature: float = 0.3, max_tokens: int = 400,
+                 requests_per_minute: float = 14.0, reasoning_effort: str = "") -> None:
+        self.model, self.base_url, self.key_env = model, base_url.rstrip("/"), key_env
+        self.timeout, self.temperature, self.max_tokens = timeout, temperature, max_tokens
+        self.requests_per_minute, self.reasoning_effort = requests_per_minute, reasoning_effort
+        self._last = 0.0
+
+    def available(self) -> bool:
+        key = api_key(self.key_env)
+        if not key:
+            return False
+        request = urllib.request.Request(
+            f"{self.base_url}/models",
+            headers={"Authorization": f"Bearer {key}"},
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=10) as response:
+                data = json.load(response).get("data", [])
+            return isinstance(data, list) and any(
+                isinstance(entry, dict) and entry.get("id") == self.model for entry in data
+            )
+        except (urllib.error.URLError, OSError, ValueError):
+            return False
+
+    def _wait(self) -> None:
+        interval = 60 / self.requests_per_minute
+        remaining = interval - (time.monotonic() - self._last)
+        if remaining > 0:
+            time.sleep(remaining)
+        self._last = time.monotonic()
+
+    def generate(self, system: str, prompt: str) -> str:
+        key = api_key(self.key_env)
+        body = json.dumps({
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": prompt},
+            ],
+            "temperature": self.temperature,
+            "max_tokens": self.max_tokens,
+            # Reasoning models (GLM) otherwise spend the whole token budget on thinking.
+            **({"reasoning_effort": self.reasoning_effort} if self.reasoning_effort else {}),
+        }).encode("utf-8")
+        request = urllib.request.Request(
+            f"{self.base_url}/chat/completions",
+            data=body,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {key}",
+            },
+        )
+        for attempt in range(1, 5):
+            self._wait()
+            try:
+                with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                    content = json.load(response)["choices"][0]["message"].get("content")
+                return re.sub(r"<think>.*?</think>", "", content or "", flags=re.DOTALL).strip()
+            except urllib.error.HTTPError as error:
+                if error.code == 429 or error.code >= 500:
+                    if attempt < 4:
+                        time.sleep(5 * attempt)
+                        continue
+                raise
+        return ""
+
+
+def make_client(cfg, chat: bool = False):
+    if cfg.provider == "api":
+        return OpenAIClient(
+            cfg.api_chat_model if chat else cfg.api_story_model,
+            cfg.api_base_url,
+            cfg.api_key_env,
+            cfg.timeout_seconds,
+            cfg.temperature,
+            cfg.max_tokens,
+            cfg.requests_per_minute,
+            cfg.api_reasoning_effort,
+        )
+    return OllamaClient(
+        cfg.chat_model if chat else cfg.story_model,
+        cfg.host,
+        cfg.timeout_seconds,
+        cfg.temperature,
+        cfg.max_tokens,
+    )
 
 
 class FakeLLM:

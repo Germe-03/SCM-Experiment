@@ -157,13 +157,17 @@ python -m pytest market_sim
 - Ein 50-Jahres-Lauf dauert einige Minuten.
 
 
-### Texte und Chat mit Ollama
+### Texte und Chat mit dem Sprachmodell
 
-Voraussetzung: [Ollama](https://ollama.com) läuft lokal mit dem Modell aus
-`config/market.yaml` (`ollama.story_model`, Standard `llama3.2:3b`). Nichts
-verlässt den Rechner. Das Modell schreibt nur aus Fakten, die Python
-berechnet; Texte mit Zahlen, die nicht in den Fakten stehen, werden durch
-eine Kurzfassung ersetzt.
+Standard ist GLM-5.3 über die kostenlose SwissAI-API (CSCS,
+`ollama.provider: api` in `config/market.yaml`). Den Schlüssel von
+<https://serving.swissai.svc.cscs.ch/api_key> als Umgebungsvariable
+`SWISSAI_RESEARCH_API_KEY` setzen; er kommt nie ins Repo. Höchstens 14
+Anfragen pro Minute, 112 Texte dauern so rund 8 Minuten. Mit
+`provider: ollama` läuft stattdessen das lokale Modell (`llama3.2:3b`), dann
+verlässt nichts den Rechner, aber ohne Grafikkarte dauert es Stunden. Das
+Modell schreibt nur aus Fakten, die Python berechnet; Texte mit Zahlen, die
+nicht in den Fakten stehen, werden durch eine Kurzfassung ersetzt.
 
 ```bash
 python -m market_sim.dashboard --seed 0 --out runs --texts
