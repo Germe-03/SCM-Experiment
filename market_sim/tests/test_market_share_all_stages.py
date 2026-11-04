@@ -14,7 +14,10 @@ def test_revenue_shares_category_shares_and_hhi():
         for stage in STAGES:
             firms = runner.network.firms_in(stage)
             total = sum(reports[f.id].revenue for f in firms)
-            assert sum(reports[f.id].market_share for f in firms) == pytest.approx(1 if total else 0)
+            groups = {f.channel for f in firms} if stage == "retailer" else {None}
+            for channel in groups:  # retail: stores and restaurants each add up to 100 %
+                group = [f for f in firms if channel is None or f.channel == channel]
+                assert sum(reports[f.id].market_share for f in group) == pytest.approx(1 if total else 0)
             if stage != "retailer":
                 for f in firms:
                     assert reports[f.id].market_share == pytest.approx(reports[f.id].revenue / total if total else 0)

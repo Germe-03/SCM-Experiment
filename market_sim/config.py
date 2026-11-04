@@ -589,6 +589,11 @@ class RestaurantConfig(ConfigModel):
     fixed_cost_factor: float = Field(default=1.6, gt=0)
     # Share of unmet out-of-home demand that buys in a store instead.
     spill_to_stores: float = Field(default=0.5, ge=0, le=1)
+    # Competition between the channels: how strongly the out-of-home share reacts when
+    # restaurants are dearer or cheaper relative to stores than the usual markup.
+    price_elasticity: float = Field(default=1.0, ge=0)
+    # Part of the out-of-home share that goes out regardless of price (company, food, events).
+    loyal_share: float = Field(default=0.5, ge=0, le=1)
 
 
 class HoldingsConfig(ConfigModel):

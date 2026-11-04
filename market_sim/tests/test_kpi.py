@@ -40,8 +40,11 @@ def test_runner_emits_sane_reports_and_dynamic_reputation():
     for reports, kpis in zip(result.annual_reports, result.system_kpis):
         assert len(reports) == expected_firms
         retailers = [report for report in reports.values()
-                     if result.network.firm(report.firm_id).stage == "retailer"]  # stores and restaurants
-        assert sum(report.market_share for report in retailers) == pytest.approx(1.0)
+                     if result.network.firm(report.firm_id).stage == "retailer"]
+        # Stores and restaurants are separate markets, each adding up to 100 %.
+        for channel in ("store", "restaurant"):
+            assert sum(r.market_share for r in retailers
+                       if result.network.firm(r.firm_id).channel == channel) == pytest.approx(1.0)
         for report in reports.values():
             assert 0 <= report.market_share <= 1
             assert 0 <= report.reputation <= 1

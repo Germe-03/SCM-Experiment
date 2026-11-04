@@ -267,13 +267,16 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const store={get(k,d){try{return JSON.parse(localStorage.getItem('bm-'+k))??d}catch{return d}},set(k,v){try{localStorage.setItem('bm-'+k,JSON.stringify(v))}catch{}}};
 const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const pal=()=>[1,2,3,4,5,6,7,8].map(i=>css('--c'+i));
-const stageColor=()=>Object.fromEntries(STAGES.map((s,i)=>[s,pal()[i]]));
+const stageColor=()=>({...Object.fromEntries(STAGES.map((s,i)=>[s,pal()[i]])),restaurant:pal()[5]});
+// The firms tab shows restaurants as their own group next to the stores.
+const FM_GROUPS=[...STAGES.slice(0,1),'restaurant',...STAGES.slice(1)];const fmGroup=f=>f?.channel==='restaurant'?'restaurant':f?.stage;
+const fmGroupLabel=g=>g==='restaurant'?'Gastronomie':STAGE[g];
 const catColor=()=>({beer:pal()[3],wine:pal()[6],spirits:pal()[2]});
 
 // --- state ---------------------------------------------------------------
 const years=D.system.map(x=>x.year);
 let range={from:years[0],to:years.at(-1)};
-const S={tab:'overview',fmStage:new Set(STAGES),fmStatus:'all',fmSort:['profit',-1],fmFirm:null,cmp:store.get('cmp',null),evTypes:null,evLimit:200};
+const S={tab:'overview',fmStage:new Set([...STAGES,'restaurant']),fmStatus:'all',fmSort:['profit',-1],fmFirm:null,cmp:store.get('cmp',null),evTypes:null,evLimit:200};
 S.cmp=[...new Set(Array.isArray(S.cmp)?S.cmp:[])].filter(id=>firm(id)).slice(0,6);
 const inRange=y=>y>=range.from&&y<=range.to;
 const sys=()=>D.system.filter(x=>inRange(x.year));
@@ -309,6 +312,10 @@ function chart(id,cfg){const el=document.getElementById(id);if(!el)return;el.set
  const o=cfg.options||{};cfg.options={responsive:true,maintainAspectRatio:false,animation:matchMedia('(prefers-reduced-motion: reduce)').matches?false:{duration:250},interaction:{mode:'index',intersect:false},
   plugins:{legend:{display:cfg.data.datasets.length>1,labels:{boxWidth:12,usePointStyle:true}},tooltip:{itemSort:(a,b)=>b.parsed.y-a.parsed.y},...(o.plugins||{})},...o};
  charts.push(new Chart(el,cfg))}
+// Hover mode for side-by-side stacks: the bar nearest to the mouse decides which stack is shown.
+Chart.Interaction.modes.stack=(chart,e,opts,useFinal)=>{const near=Chart.Interaction.modes.nearest(chart,e,{axis:'x',intersect:false},useFinal);if(!near.length)return[];
+ const i=near[0].index,key=d=>d.stack??'',st=key(chart.data.datasets[near[0].datasetIndex]);
+ return chart.data.datasets.flatMap((d,di)=>key(d)===st&&chart.isDatasetVisible(di)?[{element:chart.getDatasetMeta(di).data[i],datasetIndex:di,index:i}]:[])};
 const fmtAxis=f=>({ticks:{callback:v=>f==='chf'?chf(v):f==='pct'?pct(v):nf(v,2)}});
 function lines(id,series,{fmt,stacked,area}={}){const s=sys();chart(id,{type:'line',data:{labels:s.map(x=>x.year),datasets:series.map((d,i)=>({label:d.label,data:s.map(d.get),borderColor:d.color||pal()[i%8],backgroundColor:(d.color||pal()[i%8])+(area?'55':'22'),fill:area?'stack':false,pointRadius:0,borderWidth:2,tension:.2,yAxisID:d.axis||'y'}))},
  options:{scales:{x:{grid:{display:false}},y:{stacked:!!stacked,...fmtAxis(fmt),...(fmt==='pct'&&!stacked?{}:{})},...(series.some(d=>d.axis==='y2')?{y2:{position:'right',grid:{display:false},...fmtAxis(series.find(d=>d.axis==='y2').fmt)}}:{})}}})}
@@ -372,16 +379,16 @@ function renderMarket(){renderPhase10Market();const rows=(D.brands||[]).filter(r
 
 // --- Firmen --------------------------------------------------------------
 function renderFirms(){
- $('#fm-stage').innerHTML=STAGES.map(s=>`<button class="chip" data-s="${s}" aria-pressed="${S.fmStage.has(s)}"><span class="dot" style="background:${stageColor()[s]}"></span>${STAGE[s]}</button>`).join('');
+ $('#fm-stage').innerHTML=FM_GROUPS.map(s=>`<button class="chip" data-s="${s}" aria-pressed="${S.fmStage.has(s)}"><span class="dot" style="background:${stageColor()[s]}"></span>${fmGroupLabel(s)}</button>`).join('');
  $('#fm-status').innerHTML=[['all','Alle'],['active','Aktiv'],['exited','Ausgeschieden']].map(([k,l])=>`<button class="chip" data-st="${k}" aria-pressed="${S.fmStatus===k}">${l}</button>`).join('');
  $$('#fm-stage .chip').forEach(c=>c.onclick=()=>{const s=c.dataset.s;S.fmStage.has(s)?S.fmStage.delete(s):S.fmStage.add(s);renderFirms()});
  $$('#fm-status .chip').forEach(c=>c.onclick=()=>{S.fmStatus=c.dataset.st;renderFirms()});
  const q=$('#fm-search').value.trim().toLowerCase();
  const cols=[['name','Firma'],['stage','Stufe'],['category','Kategorie'],['region','Region'],['arch','Archetyp heute'],['profit','Gewinn im Zeitraum',1],['cash','Cash am Ende',1],['share','Marktanteil',1],['status','Status']];
- let ids=Object.keys(D.firms).filter(id=>{const f=firm(id);return S.fmStage.has(f.stage)&&(S.fmStatus==='all'||(S.fmStatus==='active')===!f.exit_year)&&(!q||f.name.toLowerCase().includes(q)||id.includes(q))});
- const val=(id,k)=>{const f=firm(id),y=f.yearly.filter(r=>inRange(r.year)),l=y.at(-1)||{};return{name:f.name,stage:STAGES.indexOf(f.stage),category:f.category,region:f.region||'',arch:l.archetype||f.archetype,profit:firmProfit(id),cash:l.cash,share:l.market_share,status:f.exit_year||0}[k]};
+ let ids=Object.keys(D.firms).filter(id=>{const f=firm(id);return S.fmStage.has(fmGroup(f))&&(S.fmStatus==='all'||(S.fmStatus==='active')===!f.exit_year)&&(!q||f.name.toLowerCase().includes(q)||id.includes(q))});
+ const val=(id,k)=>{const f=firm(id),y=f.yearly.filter(r=>inRange(r.year)),l=y.at(-1)||{};return{name:f.name,stage:FM_GROUPS.indexOf(fmGroup(f)),category:f.category,region:f.region||'',arch:l.archetype||f.archetype,profit:firmProfit(id),cash:l.cash,share:l.market_share,status:f.exit_year||0}[k]};
  const [sk,sd]=S.fmSort;ids.sort((a,b)=>{const x=val(a,sk),y=val(b,sk);return(x>y?1:x<y?-1:0)*sd});
- $('#fm-table').innerHTML=`<thead><tr>${cols.map(([k,l,n])=>`<th class="sort ${n?'num':''} ${sk===k?(sd>0?'asc':'desc'):''}" data-k="${k}" tabindex="0">${l}</th>`).join('')}</tr></thead><tbody>${ids.length?ids.map(id=>{const f=firm(id);return`<tr class="click ${S.fmFirm===id?'current':''}" data-firm="${esc(id)}"><td><span class="dot" style="background:${stageColor()[f.stage]}"></span>${esc(f.name)}</td><td>${stageLabel(f)}</td><td>${esc(CAT[f.category]||f.category)}${f.importer?' (Import)':''}</td><td>${esc(REGION[f.region]||f.region||'—')}</td><td>${esc(ARCH[val(id,'arch')]||val(id,'arch'))}</td><td class="num">${chf(val(id,'profit'))}</td><td class="num">${chf(val(id,'cash'))}</td><td class="num">${pct(val(id,'share'))}</td><td>${status(f)}</td></tr>`}).join(''):`<tr><td colspan="9">${empty('Keine Firma passt zu Suche und Filter. Entferne einen Filter oder ändere die Suche.')}</td></tr>`}</tbody>`;
+ $('#fm-table').innerHTML=`<thead><tr>${cols.map(([k,l,n])=>`<th class="sort ${n?'num':''} ${sk===k?(sd>0?'asc':'desc'):''}" data-k="${k}" tabindex="0">${l}</th>`).join('')}</tr></thead><tbody>${ids.length?ids.map(id=>{const f=firm(id);return`<tr class="click ${S.fmFirm===id?'current':''}" data-firm="${esc(id)}"><td><span class="dot" style="background:${stageColor()[fmGroup(f)]}"></span>${esc(f.name)}</td><td>${stageLabel(f)}</td><td>${esc(CAT[f.category]||f.category)}${f.importer?' (Import)':''}</td><td>${esc(REGION[f.region]||f.region||'—')}</td><td>${esc(ARCH[val(id,'arch')]||val(id,'arch'))}</td><td class="num">${chf(val(id,'profit'))}</td><td class="num">${chf(val(id,'cash'))}</td><td class="num">${pct(val(id,'share'))}</td><td>${status(f)}</td></tr>`}).join(''):`<tr><td colspan="9">${empty('Keine Firma passt zu Suche und Filter. Entferne einen Filter oder ändere die Suche.')}</td></tr>`}</tbody>`;
  $$('#fm-table th.sort').forEach(th=>{const go=()=>{const k=th.dataset.k;S.fmSort=[k,S.fmSort[0]===k?-S.fmSort[1]:(['name','stage','category','region','arch'].includes(k)?1:-1)];renderFirms()};th.onclick=go;th.onkeydown=e=>{if(e.key==='Enter')go()}});
  $$('#fm-table tr[data-firm]').forEach(r=>{r.tabIndex=0;const go=()=>{S.fmFirm=r.dataset.firm;renderFirms();$('#fm-detail').scrollIntoView({block:'start'})};r.onclick=go;r.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();go()}}});
  renderFirmDetail()}
@@ -429,9 +436,8 @@ function renderFirmDetail(){const root=$('#fm-detail');destroy();if(S.tab!=='fir
  root.insertAdjacentHTML('beforeend',ledgerHtml(id));
  $('#fd-cmp').onclick=()=>{const c=new Set(S.cmp||[]);c.has(id)?c.delete(id):(c.size<6&&c.add(id));S.cmp=[...c];store.set('cmp',S.cmp);renderFirmDetail()};
  const lbl=y.map(r=>r.year),costs={purchase_cost:'Einkauf/Rohstoffe',wage_cost:'Löhne',fixed_cost:'Fixkosten',handling_cost:'Handling & Transport',rnd_cost:'F&E',holding_cost:'Lager',backlog_cost:'Rückstand',hiring_cost:'Einstellung',interest_cost:'Zinsen'};
- const stackKey=d=>d.stack??'rev';
  chart('fd-cost',{type:'bar',data:{labels:lbl,datasets:[{label:'Umsatz',data:y.map(r=>r.revenue),backgroundColor:pal()[0],stack:'rev'},...Object.entries(costs).map(([k,n],j)=>({label:n,data:y.map(r=>r[k]),backgroundColor:pal()[(j+1)%8]+'cc',stack:'cost'}))]},
-  options:{onHover:(e,els,c)=>{c.hoverStack=els.length?stackKey(c.data.datasets[els[0].datasetIndex]):null},plugins:{tooltip:{filter:i=>stackKey(i.dataset)===i.chart.hoverStack,itemSort:(a,b)=>b.parsed.y-a.parsed.y,callbacks:{label:c=>`${c.dataset.label}: ${chf(c.parsed.y)}`}}},scales:{x:{stacked:true,grid:{display:false}},y:{stacked:true,...fmtAxis('chf')}}}});
+  options:{interaction:{mode:'stack'},plugins:{tooltip:{itemSort:(a,b)=>b.parsed.y-a.parsed.y,callbacks:{label:c=>`${c.dataset.label}: ${chf(c.parsed.y)}`}}},scales:{x:{stacked:true,grid:{display:false}},y:{stacked:true,...fmtAxis('chf')}}}});
  const weeks=D.meta.days_per_year/7,w=f.weekly,from=Math.floor((range.from-1)*weeks),to=Math.ceil(range.to*weeks);const wl=w.cash.slice(from,to).map((_,i)=>((from+i)/weeks+1).toFixed(1));
  chart('fd-cash',{type:'line',data:{labels:wl,datasets:[{label:'Cash',data:w.cash.slice(from,to),borderColor:pal()[2],pointRadius:0,borderWidth:1.5}]},options:{scales:{x:{ticks:{maxTicksLimit:10,callback:function(v){return'Jahr '+Math.floor(this.getLabelForValue(v))}}},y:fmtAxis('chf')}}});
  chart('fd-stock',{type:'line',data:{labels:wl,datasets:[{label:'Lager',data:w.inventory.slice(from,to),borderColor:pal()[0],pointRadius:0,borderWidth:1.5},{label:'Rückstand',data:w.backlog.slice(from,to),borderColor:pal()[1],pointRadius:0,borderWidth:1.5}]},options:{scales:{x:{ticks:{maxTicksLimit:10,callback:function(v){return'Jahr '+Math.floor(this.getLabelForValue(v))}}}}}});

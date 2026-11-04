@@ -918,9 +918,12 @@ class SimulationRunner:
         daily_prices,
     ):
         days = self.config.simulation.days_per_year
-        total_sales = sum(served.values())
+        # Restaurants and stores are separate markets: each channel's shares add up to 100 %.
+        channel_sales: dict[str, float] = {}
+        for firm in self.network.firms_in("retailer"):
+            channel_sales[firm.channel] = channel_sales.get(firm.channel, 0) + served[firm.id]
         retailer_shares = {
-            firm.id: (served[firm.id] / total_sales if total_sales else 0.0)
+            firm.id: (served[firm.id] / channel_sales[firm.channel] if channel_sales[firm.channel] else 0.0)
             for firm in self.network.firms_in("retailer")
         }
         stage_revenue = {stage: sum(summaries[f.id].revenue for f in self.network.firms_in(stage)
@@ -990,7 +993,8 @@ class SimulationRunner:
             total_lost_sales=sum(lost.values()),
             average_customer_price=customer_revenue / total_served if total_served else 0.0,
             average_quality=sum(report.average_quality for report in reports.values()) / len(reports),
-            market_concentration=herfindahl_index(list(retailer_shares.values())),
+            market_concentration=herfindahl_index(
+                [s for f, s in retailer_shares.items() if self.network.firm(f).channel != "restaurant"]),
             bullwhip_ratio=bullwhip_variance_ratio(factory_order_series, demand_series),
             service_level=service_level(total_served, total_demand),
         )

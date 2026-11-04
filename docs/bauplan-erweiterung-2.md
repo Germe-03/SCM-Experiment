@@ -320,3 +320,16 @@ Symbol einen Hinweis, wie man ihn startet.
   Geschichte in der Firmendetailansicht, Chat-Symbol unten rechts mit
   Hinweis, wenn der Server nicht läuft. Die Ökonomie bleibt unverändert.
   192 Tests bestanden (die Tests nutzen ein Ersatz-Modell ohne Ollama).
+- **2026-11-04, Gastronomie und Läden getrennt:** Restaurants und Läden sind
+  eigene Märkte; der Marktanteil zählt je Bereich (je 100 %), die
+  Konzentration (HHI) im Detailhandel nur über die Läden. Beide Bereiche
+  werben um dieselben Kunden: Wie viele auswärts trinken, hängt vom
+  Preisabstand ab (Restaurantpreis durch Ladenpreis, verglichen mit dem
+  üblichen Aufschlag 3). 60 % der Gäste gehen unabhängig vom Preis aus
+  (Gesellschaft, Essen, Anlässe), der Rest reagiert mit Elastizität 1.0.
+  Erste Fassung (50 % treu, Elastizität 1.5) war zu sprunghaft: Gewinn
+  5.8 % (−3.0 bis 12.2 %), Service Level 94.6 %. Ergebnis mit der sanfteren
+  Einstellung (10 Seeds, 50 Jahre, ohne die ersten 2 Jahre): Gewinn 6.8 %
+  des Endkundenumsatzes (2.8–11.7 %), Service Level 98.0 %. Im Reiter Firmen
+  ist die Gastronomie ein eigener Filter; der Tooltip der Kostengrafik zeigt
+  die Säule unter der Maus.

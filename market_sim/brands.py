@@ -162,13 +162,30 @@ class BrandBook:
         markup = self.markup(firm) if firm is not None else 1.0
         return sell_price * self.cfg.price_factors.get(brand.positioning, 1.0) * self.category_value(brand.category) * markup
 
-    def out_of_home_share(self, cls) -> float:
+    def out_of_home_share(self, cls, price_ratio: float | None = None) -> float:
+        """Share of a class that drinks out of home.
+
+        Restaurants and stores compete for the same customers: if restaurants are dearer
+        relative to stores than the usual markup, fewer guests come (and vice versa).
+        The loyal part (company, food, going out) does not react to prices.
+        """
         cfg = self.config.restaurants
         if not cfg.enabled:
             return 0.0
         share = cfg.out_of_home_share * cfg.age_factor.get(cls.age_group or "", 1.0)
         share *= 1 + cfg.income_step * ((cls.income_level or 3) - 3)
+        if price_ratio:
+            relative = (cfg.markup / price_ratio) ** cfg.price_elasticity
+            share *= cfg.loyal_share + (1 - cfg.loyal_share) * relative
         return max(0.0, min(0.9, share))
+
+    def channel_price_ratio(self, restaurants, stores) -> float | None:
+        """Average restaurant price divided by average store price."""
+        if not restaurants or not stores:
+            return None
+        rest = sum(f.sell_price * self.markup(f) for f in restaurants) / len(restaurants)
+        shop = sum(f.sell_price for f in stores) / len(stores)
+        return rest / shop if shop > 0 else None
 
     def parcel_value(self, parcel: dict[str, int], price: float) -> float:
         """Units of a mixed shipment times price, weighted by each brand's category."""
@@ -326,7 +343,8 @@ class BrandBook:
         home_demand = dict(demand_by_class)
         if restaurants and self.config.restaurants.enabled:
             # Phase 10: part of each class drinks out of home; unmet guests partly buy in stores.
-            out = {n: round(u * self.out_of_home_share(self.classes[n])) for n, u in demand_by_class.items()}
+            ratio = self.channel_price_ratio(restaurants, stores)
+            out = {n: round(u * self.out_of_home_share(self.classes[n], ratio)) for n, u in demand_by_class.items()}
             home_demand = {n: u - out[n] for n, u in demand_by_class.items()}
             bought_before = {n: self.class_stats[n].bought for n in out}
             reference = max(1.0, sum(out.values()) / len(restaurants))
