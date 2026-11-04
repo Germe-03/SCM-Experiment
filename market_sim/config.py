@@ -647,6 +647,17 @@ class LaborConfig(ConfigModel):
     poach_rate: float = Field(default=0.05, ge=0, le=1)
 
 
+class OllamaConfig(ConfigModel):
+    """Phase 12: local language model for stories, the chronicle and the dashboard chat."""
+
+    host: str = "http://localhost:11434"
+    story_model: str = "llama3.2:3b"
+    chat_model: str = "llama3.2:3b"
+    timeout_seconds: float = Field(default=180.0, gt=0)
+    temperature: float = Field(default=0.3, ge=0, le=2)
+    max_tokens: int = Field(default=400, gt=0)
+
+
 class TrendConfig(ConfigModel):
     name: str
     trait: str
@@ -725,6 +736,7 @@ class MarketConfig(ConfigModel):
     holdings: HoldingsConfig = Field(default_factory=HoldingsConfig)
     laws: LawsConfig = Field(default_factory=LawsConfig)
     labor: LaborConfig = Field(default_factory=LaborConfig)
+    ollama: OllamaConfig = Field(default_factory=OllamaConfig)
 
     @model_validator(mode="after")
     def _validate_stage_prices(self) -> Self:

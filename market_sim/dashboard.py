@@ -108,6 +108,7 @@ td.num,th.num{text-align:right}tbody tr.click{cursor:pointer}tbody tr.click:hove
   <button role="tab" data-tab="state">Staat</button>
   <button role="tab" data-tab="rnd">F&amp;E</button>
   <button role="tab" data-tab="events">Ereignisse</button>
+  <button role="tab" data-tab="chronicle">Chronik</button>
  </nav>
 </header>
 <main>
@@ -231,7 +232,17 @@ td.num,th.num{text-align:right}tbody tr.click{cursor:pointer}tbody tr.click:hove
  <div class="table-wrap"><table id="ev-table"></table></div>
  <button class="btn more" id="ev-more" hidden>Weitere anzeigen</button>
 </section>
+<section role="tabpanel" id="tab-chronicle">
+ <h2>Chronik</h2><p class="lead">Jahresberichte, vom lokalen Sprachmodell aus geprüften Fakten geschrieben.</p>
+ <div id="ch-list"></div>
+</section>
 </main>
+<button id="chat-open" class="btn primary" aria-haspopup="dialog" aria-controls="chat" style="position:fixed;right:20px;bottom:20px;border-radius:999px;padding:12px 18px;box-shadow:var(--shadow);z-index:20">💬 Fragen</button>
+<div id="chat" role="dialog" aria-label="Fragen an die Daten" hidden style="position:fixed;right:20px;bottom:76px;width:min(380px,calc(100vw - 40px));max-height:70vh;display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:0 8px 30px #0003;z-index:21">
+ <div style="display:flex;align-items:center;padding:12px 14px;border-bottom:1px solid var(--line)"><b>Fragen an die Daten</b><button class="btn" id="chat-close" aria-label="Chat schliessen" style="margin-left:auto">✕</button></div>
+ <div id="chat-log" aria-live="polite" style="padding:12px 14px;overflow:auto;flex:1;display:grid;gap:10px"><div class="hint">Frag zum Beispiel: «Warum ging Rigi Markt Konkurs?» oder «Was passierte in Jahr 20?». Die Antworten kommen vom lokalen Modell und stützen sich nur auf die Daten dieses Laufs.</div></div>
+ <form id="chat-form" style="display:flex;gap:8px;padding:12px 14px;border-top:1px solid var(--line)"><input id="chat-input" type="text" placeholder="Deine Frage …" aria-label="Deine Frage" style="flex:1;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 10px" maxlength="500"><button class="btn primary" id="chat-send">Senden</button></form>
+</div>
 <script id="dashboard-data" type="application/json">__DATA__</script>
 <script>
 const D=JSON.parse(document.getElementById('dashboard-data').textContent);
@@ -411,6 +422,7 @@ function renderFirmDetail(){const root=$('#fm-detail');destroy();if(S.tab!=='fir
  <div class="grid"><div class="card wide"><h3>Umsatz und Kosten pro Jahr</h3><p class="hint">Fahre über die Kostensäule, um die Kostenarten zu sehen.</p><div class="chart"><canvas id="fd-cost"></canvas></div></div>
  <div class="card"><h3>Cash (Wochenschnitt)</h3><div class="chart"><canvas id="fd-cash"></canvas></div></div><div class="card"><h3>Lager und Rückstand (Wochenschnitt)</h3><div class="chart"><canvas id="fd-stock"></canvas></div></div>
  <div class="card"><h3>Reputation und Qualität</h3><div class="chart"><canvas id="fd-rep"></canvas></div></div><div class="card"><h3>Ereignisse dieser Firma</h3><ul class="list" id="fd-events" style="max-height:270px;overflow:auto"></ul></div>
+ <div class="card wide" id="fd-story" hidden></div>
  <div class="card wide" id="fd-exit" hidden></div>
  <div class="card wide"><h3>Entscheidungen</h3><p class="hint">Pro Jahr nur, was sich geändert hat, dazu Straftaten, Investitionen und Projekte.</p><div class="chips" id="fd-dec-filter" style="margin-bottom:10px"></div><ul class="list" id="fd-decisions" style="max-height:420px;overflow:auto"></ul></div></div></div>`;
  $('#fd-cmp').disabled=!inCmp&&(S.cmp||[]).length>=6;
@@ -426,7 +438,8 @@ function renderFirmDetail(){const root=$('#fm-detail');destroy();if(S.tab!=='fir
  chart('fd-rep',{type:'line',data:{labels:lbl,datasets:[{label:'Reputation',data:y.map(r=>r.reputation),borderColor:pal()[4],pointRadius:0,borderWidth:2},{label:'Qualität',data:y.map(r=>r.average_quality),borderColor:pal()[5],pointRadius:0,borderWidth:2}]},options:{scales:{y:fmtAxis('pct')}}});
  const fe=f.events.filter(e=>inRange(e.year)&&e.event!=='inflation').slice().reverse();
  $('#fd-events').innerHTML=fe.length?fe.map(e=>`<li><span class="yr">Jahr ${e.year}</span><span><b>${esc(EVENT[e.event]||e.event)}</b> <span class="badge">${esc(pretty(e.details))}</span></span></li>`).join(''):'<li>Keine Ereignisse im Zeitraum.</li>';
- renderExit(id);renderDecisions(id)}
+ renderExit(id);renderDecisions(id);
+ const st=((D.texts||{}).stories||{})[id],sb=$('#fd-story');sb.hidden=!st;if(st)sb.innerHTML=`<h3>Geschichte ${st.checked?'<span class="badge ok">vom lokalen Modell, Zahlen geprüft</span>':'<span class="badge">Kurzfassung aus den Fakten</span>'}</h3><p style="margin:0">${esc(pretty(st.text))}</p>`}
 
 // --- Vergleich -----------------------------------------------------------
 const CMP_METRICS=[['profit','Gewinn','chf'],['revenue','Umsatz','chf'],['cash','Cash','chf'],['market_share','Marktanteil','pct'],['reputation','Reputation','pct'],['average_quality','Qualität','pct'],['average_sell_price','Preis',null],['capacity_utilization','Auslastung','pct'],['service_level','Lieferquote','pct']];
@@ -559,10 +572,44 @@ function renderPeople(){const rows=(D.classes||[]).filter(r=>r.year<=range.to);i
  <div class="kpis">${kpi('Personen',nf(r.persons))}${kpi('Einheiten pro Person und Jahr',nf(r.units_per_person,0))}${kpi('Höchstpreis',nf(r.max_price,2)+' CHF')}${kpi('Gekauft',pct(r.purchase_rate))}${kpi('Bezahlter Preis',nf(r.avg_price_paid,2)+' CHF')}</div><p class="hint">Kategorien: ${esc(shares)}</p>
  <div class="grid">${ps.map(p=>`<div class="card"><div style="display:flex;gap:12px;align-items:center"><div aria-hidden="true" style="width:48px;height:48px;border-radius:50%;background:${p.gender==='woman'?pal()[6]:pal()[2]};color:#fff;display:grid;place-items:center;font-weight:700">${esc(p.first_name[0]+p.surname[0])}</div><div><b>${esc(p.first_name)} ${esc(p.surname)}</b>, ${p.age}<br><small>${esc(p.job)} · ${esc(REGION[p.region]||p.region||'')}</small></div></div>
  <p style="margin:10px 0 4px">«${esc(p.priority_de)}»</p><p class="hint">Einkommen ${nf(p.monthly_income_range[0])}–${nf(p.monthly_income_range[1])} CHF pro Monat · trinkt ${HABIT[p.drinking_habit]||p.drinking_habit} · kauft oft ${esc(pretty(p.typical_brand))}</p></div>`).join('')}</div></div>`}
-const VIEWS={map:renderMap,people:renderPeople,structure:renderStructure,overview:renderOverview,market:renderMarket,firms:renderFirms,compare:renderCompare,chain:renderChain,finance:renderFinance,state:renderState,rnd:renderRnd,events:renderEvents};
+function renderChronicle(){const c=(D.texts||{}).chronicle||{};const yrs=Object.keys(c).map(Number).filter(inRange).sort((a,b)=>b-a);
+ $('#ch-list').innerHTML=yrs.length?yrs.map(y=>`<div class="card" style="margin-bottom:12px"><h3>Jahr ${y} ${c[y].checked?'<span class="badge ok">Zahlen geprüft</span>':'<span class="badge">Kurzfassung aus den Fakten</span>'}</h3><p style="margin:0">${esc(pretty(c[y].text))}</p></div>`).join(''):empty('Noch keine Chronik. Erzeuge sie mit: python -m market_sim.dashboard --texts (dauert je nach Rechner eine halbe Stunde oder länger).')}
+// Chat with the local model through python -m market_sim.serve.
+(function(){const box=$('#chat'),log=$('#chat-log'),input=$('#chat-input');
+ const open=v=>{box.hidden=!v;$('#chat-open').setAttribute('aria-expanded',v);if(v)input.focus()};
+ $('#chat-open').onclick=()=>open(box.hidden);$('#chat-close').onclick=()=>open(false);
+ box.addEventListener('keydown',e=>{if(e.key==='Escape')open(false)});
+ const add=(who,html)=>{const d=document.createElement('div');d.style.cssText=who==='me'?'justify-self:end;background:var(--brand);color:var(--brand-ink);padding:8px 12px;border-radius:12px 12px 2px 12px;max-width:85%':'background:var(--soft);padding:8px 12px;border-radius:12px 12px 12px 2px;max-width:92%';d.innerHTML=html;log.appendChild(d);log.scrollTop=log.scrollHeight;return d};
+ $('#chat-form').onsubmit=async e=>{e.preventDefault();const q=input.value.trim();if(!q)return;input.value='';add('me',esc(q));
+  if(location.protocol==='file:'){add('bot','Der Chat braucht den lokalen Server. Starte im Projektordner <code>python -m market_sim.serve</code> und öffne dann <code>http://localhost:8770/dashboard.html</code>.');return}
+  const wait=add('bot','<span class="hint">Das Modell denkt nach …</span>');$('#chat-send').disabled=true;
+  try{const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:q})});if(!r.ok)throw new Error(r.status);const a=await r.json();
+   wait.innerHTML=esc(pretty(a.answer)).replace(/\n/g,'<br>')+(a.sources&&a.sources.length?`<div class="hint" style="margin-top:6px">Quellen: ${a.sources.map(esc).join(' · ')}</div>`:'')}
+  catch(err){wait.innerHTML='Keine Antwort vom Chat-Server. Läuft <code>python -m market_sim.serve</code> und ist Ollama gestartet?'}
+  finally{$('#chat-send').disabled=false;input.focus()}}})();
+const VIEWS={chronicle:renderChronicle,map:renderMap,people:renderPeople,structure:renderStructure,overview:renderOverview,market:renderMarket,firms:renderFirms,compare:renderCompare,chain:renderChain,finance:renderFinance,state:renderState,rnd:renderRnd,events:renderEvents};
 function render(){destroy();VIEWS[S.tab]()}
 openTab(location.hash.slice(1)||'overview');
 </script></body></html>'''
+
+
+def _texts(data: dict, config, out: Path, seed: int, years: int) -> dict:
+    """Stories and chronicle from the local model, cached per seed and run length."""
+    from market_sim.llm import OllamaClient
+    from market_sim.texts import generate_texts
+
+    cache = out / f"texts_seed{seed}_{years}y.json"
+    if cache.exists():
+        return json.loads(cache.read_text(encoding="utf-8"))
+    cfg = config.ollama
+    llm = OllamaClient(cfg.story_model, cfg.host, cfg.timeout_seconds, cfg.temperature, cfg.max_tokens)
+    if not llm.available():
+        print(f"Ollama oder Modell {cfg.story_model} nicht erreichbar: es entstehen nur Kurzfassungen aus den Fakten.")
+    texts = generate_texts(data, llm, progress=lambda done, total: print(f"Texte {done}/{total}", end="\r"))
+    print()
+    out.mkdir(parents=True, exist_ok=True)
+    cache.write_text(json.dumps(texts, ensure_ascii=False, indent=1), encoding="utf-8")
+    return texts
 
 
 def main(argv: list[str] | None = None) -> Path:
@@ -573,6 +620,8 @@ def main(argv: list[str] | None = None) -> Path:
     parser.add_argument("--days-per-year", type=int)
     parser.add_argument("--out", default="runs")
     parser.add_argument("--open", action="store_true", dest="open_browser")
+    parser.add_argument("--texts", action="store_true",
+                        help="write firm stories and a yearly chronicle with the local Ollama model (slow)")
     args = parser.parse_args(argv)
     days = args.days_per_year or config.simulation.days_per_year
     effective = config.model_copy(update={"simulation": config.simulation.model_copy(
@@ -580,10 +629,10 @@ def main(argv: list[str] | None = None) -> Path:
     )})
     network = load_firms()
     result = run_simulation(args.years, args.seed, days, effective, network)
-    path = write_dashboard_html(
-        build_dashboard_data(result, network, effective, args.seed),
-        Path(args.out) / "dashboard.html",
-    ).resolve()
+    data = build_dashboard_data(result, network, effective, args.seed)
+    if args.texts:
+        data["texts"] = _texts(data, effective, Path(args.out), args.seed, args.years)
+    path = write_dashboard_html(data, Path(args.out) / "dashboard.html").resolve()
     print(path)
     if args.open_browser:
         webbrowser.open(path.as_uri())

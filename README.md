@@ -73,15 +73,22 @@ Zusätzliche Ausgaben eines Laufs: `brand_report.csv`, `class_report.csv`,
 `rnd_projects.csv`. Jede Erweiterung lässt sich in `config/market.yaml` mit
 `enabled: false` abschalten.
 
+**Erweiterung 2 (Phasen 8–12,** siehe
+[`docs/bauplan-erweiterung-2.md`](docs/bauplan-erweiterung-2.md)**):**
+Marktanteil auf allen Stufen, Negativzins auf grosse Kassen, Bilanz «Hat sich
+die Straftat gelohnt?», weitere F&E-Projekte, neuer Vergleich, Marktaufbau,
+Entscheidungsprotokoll mit Konkursanalyse, schematische Schweizer Karte,
+Bevölkerung mit Personas, Marketing, Restaurants, Beteiligungen, neue
+Gesetze mit vorsichtiger Beurteilung ihrer Folgen, regionaler Arbeitsmarkt
+und Texte vom lokalen Sprachmodell (Firmengeschichten, Chronik, Chat).
+
 **TODO:**
 
-- Bericht mit lokalem LLM (Ollama): Fakten in Python berechnen, Text vom
-  Modell schreiben lassen, jede Zahl gegen die Fakten prüfen (Bauplan,
-  Phase 7b).
 - Zigaretten als eigene Kategorie mit Sucht und Regulierung (Idee 15).
 - Begrenzter Regalplatz, damit Läden sich stärker spezialisieren.
 - Bestellungen pro Marke statt Gesamtmengen.
 - Lieferzeit abhängig von der Distanz (heute nur in der Lieferantenwahl).
+- Grösseres Ollama-Modell (z. B. `qwen2.5:7b`) für besseres Deutsch.
 
 ### Modell in Kürze
 
@@ -137,6 +144,29 @@ python -m pytest market_sim
   `experiment_runs.csv` (pro Seed) und `experiment_summary.csv` (Mittelwert,
   Streuung, Minimum, Maximum pro Kennzahl), ohne die Anlaufjahre.
 - Ein 50-Jahres-Lauf dauert einige Minuten.
+
+
+### Texte und Chat mit Ollama
+
+Voraussetzung: [Ollama](https://ollama.com) läuft lokal mit dem Modell aus
+`config/market.yaml` (`ollama.story_model`, Standard `llama3.2:3b`). Nichts
+verlässt den Rechner. Das Modell schreibt nur aus Fakten, die Python
+berechnet; Texte mit Zahlen, die nicht in den Fakten stehen, werden durch
+eine Kurzfassung ersetzt.
+
+```bash
+python -m market_sim.dashboard --seed 0 --out runs --texts
+```
+
+```bash
+python -m market_sim.serve --dir runs --port 8770
+```
+
+`--texts` schreibt Firmengeschichten und eine Jahreschronik ins Dashboard
+(auf einem Rechner ohne Grafikkarte etwa eine bis zwei Stunden für 50 Jahre,
+danach zwischengespeichert). `serve` liefert das Dashboard unter
+<http://localhost:8770/dashboard.html> aus und beantwortet Fragen im Chat
+unten rechts.
 
 ### Speicherstände
 

@@ -453,3 +453,14 @@ labor:
   wage_index_max: 1.2
   poach_gap: 0.05
   poach_rate: 0.05
+
+# Phase 12: local Ollama model (nothing leaves this computer). Texts are only written with
+# `python -m market_sim.dashboard --texts`; the chat needs `python -m market_sim.serve`.
+# A larger model such as qwen2.5:7b writes better German but must be downloaded first.
+ollama:
+  host: http://localhost:11434
+  story_model: llama3.2:3b
+  chat_model: llama3.2:3b
+  timeout_seconds: 180
+  temperature: 0.3
+  max_tokens: 400

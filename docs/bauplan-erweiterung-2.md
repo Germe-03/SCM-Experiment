@@ -303,3 +303,20 @@ Symbol einen Hinweis, wie man ihn startet.
   Gewinn 6.7 % des Endkundenumsatzes (3.9–9.9 %), Service Level 97.7 %,
   pro Lauf 130–300 offene Stellen und 14–36 abgeworbene Arbeitskräfte,
   Lohnniveau am Ende 0.98–1.08.
+- **2026-11-04, Phase 12:** Ollama-Anbindung ohne neue Abhängigkeiten
+  (`market_sim/llm.py`), Fakten und Texte (`market_sim/texts.py`):
+  Firmengeschichten (4–6 Sätze) und Jahreschronik (3–5 Sätze), dazu ein Chat
+  über einen kleinen lokalen Server (`market_sim/serve.py`), der das
+  Dashboard ausliefert. Python wählt die passenden Fakten (genannte Firmen,
+  genannte Jahre, sonst das letzte Jahr), das Modell formuliert nur. Jede
+  Zahl im Text muss in den Fakten stehen; sonst wird einmal neu gefragt und
+  danach eine Kurzfassung aus den Fakten gezeigt (im Chat ein Hinweis
+  «ungeprüft»). Erste Tests mit `llama3.2:3b`: Das Modell erfand
+  Kalenderjahre («2002») und rundete Beträge selbst; darum stehen Beträge
+  jetzt schon gerundet in Mio. CHF in den Fakten, und Kalenderjahre sind
+  ausdrücklich verboten. Danach wurden Geschichten geprüft übernommen. Eine
+  Geschichte dauert auf diesem Rechner (ohne Grafikkarte) etwa 30 Sekunden,
+  eine Chat-Antwort etwa 15–20 Sekunden. Im Dashboard: Reiter «Chronik»,
+  Geschichte in der Firmendetailansicht, Chat-Symbol unten rechts mit
+  Hinweis, wenn der Server nicht läuft. Die Ökonomie bleibt unverändert.
+  192 Tests bestanden (die Tests nutzen ein Ersatz-Modell ohne Ollama).
