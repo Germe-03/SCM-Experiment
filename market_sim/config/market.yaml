@@ -556,7 +556,7 @@ ollama:
   api_key_env: SWISSAI_RESEARCH_API_KEY
   api_story_model: CSCS-Inference/zai-org/GLM-5.3
   api_chat_model: CSCS-Inference/zai-org/GLM-5.3
-  requests_per_minute: 14
+  requests_per_minute: 12
   # GLM denkt sonst vor jeder Antwort nach und verbraucht dabei alle Tokens.
   api_reasoning_effort: low
   host: http://localhost:11434

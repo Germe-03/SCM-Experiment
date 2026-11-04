@@ -110,17 +110,18 @@ class OpenAIClient:
                 "Authorization": f"Bearer {key}",
             },
         )
-        for attempt in range(1, 5):
+        for attempt in range(1, 7):
             self._wait()
             try:
                 with urllib.request.urlopen(request, timeout=self.timeout) as response:
                     content = json.load(response)["choices"][0]["message"].get("content")
                 return re.sub(r"<think>.*?</think>", "", content or "", flags=re.DOTALL).strip()
             except urllib.error.HTTPError as error:
-                if error.code == 429 or error.code >= 500:
-                    if attempt < 4:
-                        time.sleep(5 * attempt)
-                        continue
+                if (error.code == 429 or error.code >= 500) and attempt < 6:
+                    # The API names its wait (up to a minute at 15 requests per minute).
+                    retry = error.headers.get("Retry-After") if error.headers else None
+                    time.sleep(float(retry) + 1 if retry and retry.isdigit() else 5 * attempt)
+                    continue
                 raise
         return ""
 
