@@ -85,9 +85,11 @@ td.num,th.num{text-align:right}tbody tr.click{cursor:pointer}tbody tr.click:hove
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
 @media(max-width:900px){.grid,.split{grid-template-columns:1fr}.card.wide{grid-column:auto}main{padding:12px}.bar{padding:10px 12px}}
 .compare-layout{display:grid;grid-template-columns:280px minmax(0,1fr);gap:20px}.compare-layout aside{max-height:760px;overflow:auto}.compare-layout label.firm-choice{display:block;padding:7px 0}.compare-layout input[type=search]{width:100%;margin:8px 0}.best{font-weight:700;background:var(--soft)}.structure svg{min-width:900px;width:100%}.structure svg text{fill:var(--ink)}.structure [data-firm]{cursor:pointer}.structure [data-firm]:focus rect{stroke:var(--ink);stroke-width:3}@media(max-width:900px){.compare-layout{grid-template-columns:1fr}}
-#flow{width:min(980px,96vw);max-height:92vh;border:1px solid var(--line);border-radius:14px;background:var(--panel);color:inherit;padding:18px 22px;box-shadow:0 8px 30px #0003}
+#flow{width:min(1040px,96vw);max-height:94vh;border:1px solid var(--line);border-radius:14px;background:var(--panel);color:inherit;padding:18px 22px;box-shadow:0 8px 30px #0003}
 #flow::backdrop{background:#0006}.flow-head{display:flex;gap:8px;align-items:center}.flow-head h3{margin:0;margin-right:auto}
-#flow text{fill:currentColor}.flow-pick{cursor:pointer}.flow-pick:hover rect,.flow-pick:focus rect{stroke:currentColor;stroke-width:2}
+#flow text:not([fill]){fill:currentColor}.flow-node[tabindex]{cursor:pointer}.flow-node.off{opacity:.4}.flow-node[tabindex]:hover rect,.flow-node:focus rect{stroke-width:3.5}.flow-node:focus{outline:none}
+#flow-detail h4{margin:6px 0}.flow-row{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(80px,1fr) 7.5em;gap:12px;align-items:center;padding:5px 0;border-top:1px solid var(--line)}
+.flow-bar{height:8px;border-radius:4px;background:var(--soft)}.flow-bar span{display:block;height:8px;border-radius:4px}.flow-row .num{font-variant-numeric:tabular-nums;white-space:nowrap;text-align:right}
 </style></head><body>
 <header class="top">
  <div class="bar">
@@ -240,7 +242,7 @@ td.num,th.num{text-align:right}tbody tr.click{cursor:pointer}tbody tr.click:hove
  <div id="ch-list"></div>
 </section>
 </main>
-<dialog id="flow" aria-labelledby="flow-title"><div class="flow-head"><h3 id="flow-title"></h3><button class="btn" id="flow-back" hidden>← Zurück</button><button class="btn" id="flow-close" aria-label="Schliessen">✕</button></div><p class="hint" id="flow-hint"></p><div id="flow-body"></div><p class="hint">Schliessen mit Esc. Breite der Bänder = Betrag.</p></dialog>
+<dialog id="flow" aria-labelledby="flow-title"><div class="flow-head"><h3 id="flow-title"></h3><button class="btn" id="flow-prev" aria-label="Jahr davor">‹</button><button class="btn" id="flow-next" aria-label="Jahr danach">›</button><button class="btn" id="flow-close" aria-label="Schliessen">✕</button></div><div id="flow-body"></div><div id="flow-detail"></div><p class="hint" style="margin-top:10px">Schliessen mit Esc, Jahr wechseln mit den Pfeiltasten.</p></dialog>
 <button id="chat-open" class="btn primary" aria-haspopup="dialog" aria-controls="chat" style="position:fixed;right:20px;bottom:20px;border-radius:999px;padding:12px 18px;box-shadow:var(--shadow);z-index:20">💬 Fragen</button>
 <div id="chat" role="dialog" aria-label="Fragen an die Daten" hidden style="position:fixed;right:20px;bottom:76px;width:min(380px,calc(100vw - 40px));max-height:70vh;display:none;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:0 8px 30px #0003;z-index:21">
  <div style="display:flex;align-items:center;padding:12px 14px;border-bottom:1px solid var(--line)"><b>Fragen an die Daten</b><button class="btn" id="chat-close" aria-label="Chat schliessen" style="margin-left:auto">✕</button></div>
@@ -584,50 +586,80 @@ function renderPeople(){const rows=(D.classes||[]).filter(r=>r.year<=range.to);i
  <p style="margin:10px 0 4px">«${esc(p.priority_de)}»</p><p class="hint">Einkommen ${nf(p.monthly_income_range[0])}–${nf(p.monthly_income_range[1])} CHF pro Monat · trinkt ${HABIT[p.drinking_habit]||p.drinking_habit} · kauft oft ${esc(pretty(p.typical_brand))}</p></div>`).join('')}</div></div>`}
 function renderChronicle(){const c=(D.texts||{}).chronicle||{};const yrs=Object.keys(c).map(Number).filter(inRange).sort((a,b)=>b-a);
  $('#ch-list').innerHTML=yrs.length?yrs.map(y=>`<div class="card" style="margin-bottom:12px"><h3>Jahr ${y} ${c[y].checked?'<span class="badge ok">Zahlen geprüft</span>':'<span class="badge">Kurzfassung aus den Fakten</span>'}</h3><p style="margin:0">${esc(pretty(c[y].text))}</p></div>`).join(''):empty('Noch keine Chronik. Erzeuge sie mit: python -m market_sim.dashboard --texts (dauert je nach Rechner eine halbe Stunde oder länger).')}
-// Money flow of one firm in one year: where the money came from and where it went.
-const FLOW_COST={wage_cost:['Löhne','Mitarbeitende'],fixed_cost:['Fixkosten','Miete, Maschinen, Abschreibungen'],handling_cost:['Handling & Transport',''],rnd_cost:['F&E','Forschungsprojekte'],holding_cost:['Lager',''],backlog_cost:['Rückstand','Strafkosten für offene Aufträge'],hiring_cost:['Einstellung',''],interest_cost:['Zinsen','an die Bank']};
+// Money flow of one firm in one year as a circular flow: the firm in the middle, its partners around it.
 const FLOW_REASON={Gewinnsteuer:'Gewinnsteuer auf den Jahresgewinn',Alkoholsteuer:'Alkoholsteuer, steckt im Rohstoffpreis',Zoll:'Zoll auf importierte Ware',Schuldenschnitt:'Die Bank erlässt Schulden, damit die letzte Firma der Stufe bleibt'};
+const FLOW_CF={dividende_an:'Anteil am Gewinn für Beteiligte',dividende_von:'Anteil am Gewinn einer Beteiligung',kapital_von:'neues Eigenkapital',beteiligung:'Kauf eines Anteils',beteiligung_verkauft:'Verkauf eines Anteils',uebernahme:'Kaufpreis samt übernommenen Schulden',uebernommen:'Kasse geht an den Käufer'};
 const flowName=k=>{const [g,r]=k.split(':');if(k==='rohstoffe')return'Rohstoffe & Produktion';if(r===undefined)return D.firms[k]?fname(k):k;if(g==='staat')return r.startsWith('Busse')?'Busse: '+(OFFENCE[r.slice(6)]||r.slice(6)):r;
- return({uebernahme:'Übernahme von ',uebernommen:'Kasse an Käufer ',dividende_an:'Dividende an ',dividende_von:'Dividende von ',beteiligung:'Beteiligung an ',beteiligung_verkauft:'Beteiligung verkauft: ',kapital_von:'Kapital von ',bank:''}[g]??'')+(D.firms[r]?fname(r):r||k)};
-function flowNodes(id,year){const r=firm(id).yearly.find(x=>x.year===year)||{};const paid=r.paid_to||{},cf=r.cash_flows||{};
- const ins=[],outs=[],staat=[],invest=[],divs=[];const add=(a,n,v,info,kids)=>{if(v>0.5)a.push({n,v,info,kids})};
- add(ins,'Umsatz',r.revenue,'Verkäufe an Kunden');
- const buy=Object.entries(paid).filter(([k])=>!k.startsWith('staat:')).map(([k,v])=>({n:flowName(k),v,info:D.firms[k]?stageLabel(firm(k)):'eigene Produktion',firm:D.firms[k]?k:null})).sort((a,b)=>b.v-a.v);
- Object.entries(paid).filter(([k])=>k.startsWith('staat:')).forEach(([k,v])=>add(staat,flowName(k),v,FLOW_REASON[k.slice(6)]||''));
- const buySum=buy.reduce((a,x)=>a+x.v,0),other=(r.purchase_cost||0)-buySum-staat.reduce((a,x)=>a+x.v,0);if(other>0.5)buy.push({n:'Ohne Zuordnung',v:other,info:'ältere Daten'});
- add(outs,'Einkauf',buySum+Math.max(0,other),'an Lieferanten',buy);
- for(const [k,[n,info]] of Object.entries(FLOW_COST))add(outs,n,r[k],info);
- for(const [k,v] of Object.entries(cf)){const g=k.split(':')[0];
-  if(v>0)add(ins,flowName(k),v,g==='bank'?FLOW_REASON.Schuldenschnitt:'');
-  else if(g==='staat')add(staat,flowName(k),-v,FLOW_REASON[k.slice(6)]||(k.includes('Busse')?'Straftat wurde entdeckt':''));
-  else if(g==='dividende_an')add(divs,flowName(k),-v,'Anteil am Gewinn für Beteiligte');
-  else add(invest,flowName(k),-v,'')}
- if(staat.length)add(outs,'Staat',staat.reduce((a,x)=>a+x.v,0),'Steuern, Zoll und Bussen',staat.sort((a,b)=>b.v-a.v));
- if(invest.length)add(outs,'Investitionen',invest.reduce((a,x)=>a+x.v,0),'Übernahmen und Beteiligungen',invest.sort((a,b)=>b.v-a.v));
- if(divs.length)add(outs,'Dividenden',divs.reduce((a,x)=>a+x.v,0),'an Beteiligte',divs);
- const tin=ins.reduce((a,x)=>a+x.v,0),tout=outs.reduce((a,x)=>a+x.v,0);
- if(tin>tout)add(outs,'Bleibt in der Kasse',tin-tout,'Überschuss des Jahres');else add(ins,'Aus der Kasse',tout-tin,'Verlust, bezahlt aus Reserven oder Schulden');
- return{ins,outs}}
-function sankey(ins,outs,onPick){const W=900,gap=8,nodeW=14,minH=3,total=Math.max(ins.reduce((a,x)=>a+x.v,0),1),scale=320/total;
- // Every node gets at least room for its label; the bar itself stays true to the amount.
- const slot=x=>Math.max(x.v*scale,minH,34);
- const place=list=>{let y=0;return list.map(x=>{const n={...x,y,h:Math.max(minH,x.v*scale)};y+=slot(x)+gap;return n})};
- const L=place(ins),R=place(outs),H=Math.max(...[L,R].map(a=>a.length?a.at(-1).y+slot(a.at(-1)):0)),x1=230,x2=560,col=i=>`var(--c${i%8+1})`;let svg='',ai=0,ao=0,li=0,ri=0,lo=0,ro=0;
- // Bands: walk both sides in order and connect overlapping amounts.
- while(li<L.length&&ri<R.length){const take=Math.min(L[li].v-lo,R[ri].v-ro);if(take>0){const h=take*scale,ya=L[li].y+lo*scale,yb=R[ri].y+ro*scale,m=(x1+x2)/2;
-   svg+=`<path d="M${x1+nodeW},${ya}C${m},${ya} ${m},${yb} ${x2},${yb}L${x2},${yb+h}C${m},${yb+h} ${m},${ya+h} ${x1+nodeW},${ya+h}Z" fill="${col(ri+1)}" fill-opacity=".28"><title>${esc(L[li].n)} → ${esc(R[ri].n)}: ${chf(take)}</title></path>`}
-  lo+=take;ro+=take;if(L[li].v-lo<=1e-6){li++;lo=0}if(R[ri].v-ro<=1e-6){ri++;ro=0}}
- L.forEach(n=>svg+=`<rect x="${x1}" y="${n.y}" width="${nodeW}" height="${n.h}" fill="var(--c1)"/><text x="${x1-8}" y="${n.y+n.h/2}" text-anchor="end" dominant-baseline="middle" font-size="13"><tspan font-weight="600">${esc(n.n)}</tspan><tspan x="${x1-8}" dy="15" fill="var(--muted)">${chf(n.v)}</tspan></text>`);
- R.forEach((n,i)=>{const pick=n.kids&&n.kids.length;svg+=`<g ${pick?`class="flow-pick" tabindex="0" role="button" data-i="${i}" aria-label="${esc(n.n)} aufschlüsseln"`:''}><rect x="${x2}" y="${n.y}" width="${nodeW}" height="${n.h}" fill="${col(i+1)}"/><text x="${x2+nodeW+8}" y="${n.y+n.h/2}" dominant-baseline="middle" font-size="13"><tspan font-weight="600">${esc(n.n)}${pick?' ›':''}</tspan> <tspan fill="var(--muted)">${chf(n.v)} · ${pct(n.v/total)}</tspan>${n.info?`<tspan x="${x2+nodeW+8}" dy="15" fill="var(--muted)" font-size="12">${esc(n.info)}</tspan>`:''}</text></g>`});
- const box=$('#flow-body');box.innerHTML=`<svg viewBox="0 0 ${W} ${H+20}" width="100%" role="img" style="overflow:visible">${svg}</svg>`;
- box.querySelectorAll('.flow-pick').forEach(g=>{const go=()=>onPick(R[+g.dataset.i]);g.onclick=go;g.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();go()}}})}
-function openFlow(id,year){const dlg=$('#flow'),{ins,outs}=flowNodes(id,year);
- const top=()=>{$('#flow-title').textContent=`Geldfluss ${firm(id).name} – Jahr ${year}`;$('#flow-hint').textContent='Links woher das Geld kam, rechts wohin es ging. Klicke auf einen Posten mit › für die Empfänger.';$('#flow-back').hidden=true;sankey(ins,outs,detail)};
- const detail=n=>{$('#flow-title').textContent=`${n.n} – ${firm(id).name}, Jahr ${year}`;$('#flow-hint').textContent=n.info||'';$('#flow-back').hidden=false;
-  sankey([{n:n.n,v:n.v}],n.kids,null);
-  const links=n.kids.filter(k=>k.firm);if(links.length)$('#flow-body').insertAdjacentHTML('beforeend',`<p class="hint">Lieferanten öffnen: ${links.map(k=>`<a href="#" data-go="${esc(k.firm)}">${esc(k.n)}</a>`).join(' · ')}</p>`);
-  $$('#flow-body [data-go]').forEach(a=>a.onclick=e=>{e.preventDefault();dlg.close();S.fmFirm=a.dataset.go;renderFirms();$('#fm-detail').scrollIntoView({block:'start'})})};
- $('#flow-back').onclick=top;$('#flow-close').onclick=()=>dlg.close();top();if(!dlg.open)dlg.showModal()}
+ return({uebernahme:'Übernahme von ',uebernommen:'Kasse an ',dividende_an:'Dividende an ',dividende_von:'Dividende von ',beteiligung:'Beteiligung an ',beteiligung_verkauft:'Beteiligung verkauft: ',kapital_von:'Kapital von ',bank:''}[g]??'')+(D.firms[r]?fname(r):r)};
+// Partners around the firm: position in the picture, colour and the arrow labels.
+const FLOW_NODES=[
+ {k:'kunden',label:'Kunden',x:120,y:300,c:3,lin:'Umsatz'},
+ {k:'lieferanten',label:'Lieferanten',x:840,y:300,c:6,lout:'Einkauf'},
+ {k:'staat',label:'Staat',x:480,y:62,c:4,lout:'Steuern, Zoll, Bussen'},
+ {k:'beteiligungen',label:'Beteiligungen',x:180,y:92,c:5,lin:'Dividenden, Kapital',lout:'Dividenden, Käufe'},
+ {k:'forschung',label:'Forschung',x:780,y:92,c:8,lout:'F&E'},
+ {k:'personal',label:'Mitarbeitende',x:180,y:508,c:1,lout:'Löhne'},
+ {k:'bank',label:'Bank',x:480,y:540,c:7,lin:'Schuldenschnitt',lout:'Zinsen'},
+ {k:'betrieb',label:'Betrieb & Logistik',x:780,y:508,c:2,lout:'Fixkosten, Transport, Lager'}];
+function flowGroups(id,year){const r=firm(id).yearly.find(x=>x.year===year)||{},paid=r.paid_to||{},cf=r.cash_flows||{};
+ const G=Object.fromEntries(FLOW_NODES.map(n=>[n.k,{in:[],out:[]}]));
+ const put=(g,dir,n,v,info,firmId)=>{if(v>0.5)G[g][dir].push({n,v,info,firm:firmId||null})};
+ put('kunden','in','Umsatz',r.revenue,'Verkäufe an Kunden');
+ for(const [k,v] of Object.entries(paid))k.startsWith('staat:')?put('staat','out',flowName(k),v,FLOW_REASON[k.slice(6)]||''):put('lieferanten','out',flowName(k),v,D.firms[k]?stageLabel(firm(k)):'eigene Produktion',D.firms[k]?k:null);
+ put('lieferanten','out','Ohne Zuordnung',(r.purchase_cost||0)-Object.values(paid).reduce((a,v)=>a+v,0),'Lauf ohne Empfängerdaten');
+ put('personal','out','Löhne',r.wage_cost,'');put('personal','out','Einstellung',r.hiring_cost,'Kosten für neue Mitarbeitende');
+ put('betrieb','out','Fixkosten',r.fixed_cost,'Miete, Maschinen, Abschreibungen');put('betrieb','out','Handling & Transport',r.handling_cost,'');
+ put('betrieb','out','Lager',r.holding_cost,'');put('betrieb','out','Rückstand',r.backlog_cost,'Strafkosten für offene Aufträge');
+ put('forschung','out','F&E',r.rnd_cost,'Forschungsprojekte');put('bank','out','Zinsen',r.interest_cost,'');
+ for(const [k,v] of Object.entries(cf)){const [g,other]=k.split(':'),grp=g==='staat'?'staat':g==='bank'?'bank':'beteiligungen';
+  const info=g==='staat'?(FLOW_REASON[other]||(other.startsWith('Busse')?'Straftat wurde entdeckt':'')):g==='bank'?FLOW_REASON.Schuldenschnitt:FLOW_CF[g]||'';
+  put(grp,v>0?'in':'out',flowName(k),Math.abs(v),info,D.firms[other]?other:null)}
+ for(const g of Object.values(G)){g.in.sort((a,b)=>b.v-a.v);g.out.sort((a,b)=>b.v-a.v)}
+ return G}
+const sumV=a=>a.reduce((s,x)=>s+x.v,0);
+function flowSvg(id,year,G,sel){const W=960,H=600,C={x:480,y:300,w:250,h:124},NW=176,NH=58;
+ const tin=Object.values(G).reduce((a,g)=>a+sumV(g.in),0),tout=Object.values(G).reduce((a,g)=>a+sumV(g.out),0),net=tin-tout;
+ const max=Math.max(1,...Object.values(G).flatMap(g=>[sumV(g.in),sumV(g.out)]));
+ const edge=(b,tx,ty)=>{const dx=tx-b.x,dy=ty-b.y,s=Math.min(b.w/2/Math.abs(dx||1e-9),b.h/2/Math.abs(dy||1e-9));return[b.x+dx*s,b.y+dy*s]};
+ const halo='paint-order:stroke;stroke:var(--panel);stroke-width:5px;stroke-linejoin:round';let arrows='',labels='',nodes='';
+ for(const n of FLOW_NODES){const g=G[n.k],nb={x:n.x,y:n.y,w:NW,h:NH},both=g.in.length&&g.out.length;
+  for(const [dir,items] of [['in',g.in],['out',g.out]]){if(!items.length)continue;const v=sumV(items),w=2+15*Math.sqrt(v/max);
+   // Two arrows between the same pair bend to opposite sides.
+   const off=both?(dir==='in'?-14:14):0,[ax,ay]=edge(C,n.x,n.y),[bx,by]=edge(nb,C.x,C.y),len=Math.hypot(bx-ax,by-ay),px=-(by-ay)/len,py=(bx-ax)/len;
+   let [sx,sy,ex,ey]=dir==='out'?[ax,ay,bx,by]:[bx,by,ax,ay];sx+=px*off;sy+=py*off;ex+=px*off;ey+=py*off;
+   const bend=(both?off*1.6:18),cx=(sx+ex)/2+px*bend,cy=(sy+ey)/2+py*bend,dl=Math.hypot(ex-cx,ey-cy),ux=(ex-cx)/dl,uy=(ey-cy)/dl,head=Math.max(11,w*1.5);
+   const tx=ex-ux*head,ty=ey-uy*head,col=dir==='in'?'var(--good)':'var(--c2)';
+   arrows+=`<path d="M${sx},${sy}Q${cx},${cy} ${tx},${ty}" fill="none" stroke="${col}" stroke-width="${w}" stroke-opacity=".85"><title>${esc(n.label)}: ${chf(v)}</title></path>`+
+    `<polygon points="${ex},${ey} ${tx-uy*head*.6},${ty+ux*head*.6} ${tx+uy*head*.6},${ty-ux*head*.6}" fill="${col}"/>`;
+   let nx=px,ny=py;if(ny>0||(Math.abs(ny)<1e-6&&nx<0)){nx=-nx;ny=-ny}
+   // Labels sit beside the arrow, above it when the arrow runs sideways.
+   const side=Math.abs(ny)>.5?w/2+22:0,mx=.25*sx+.5*cx+.25*tx+nx*side,my=.25*sy+.5*cy+.25*ty+ny*side,name=items.length===1?items[0].n:(dir==='in'?n.lin:n.lout)||n.label;
+   labels+=`<text x="${mx}" y="${my-4}" text-anchor="middle" font-size="13" style="${halo}"><tspan font-weight="600">${esc(name)}</tspan><tspan x="${mx}" dy="16" fill="var(--muted)">${chf(v)}</tspan></text>`}
+  const active=g.in.length||g.out.length,on=sel===n.k;
+  nodes+=`<g class="flow-node${active?'':' off'}${on?' on':''}" data-k="${n.k}" ${active?`tabindex="0" role="button" aria-pressed="${on}" aria-label="${esc(n.label)} anzeigen"`:''}>`+
+   `<rect x="${n.x-NW/2}" y="${n.y-NH/2}" width="${NW}" height="${NH}" rx="14" fill="var(--c${n.c})" fill-opacity="${on?.32:.14}" stroke="var(--c${n.c})" stroke-width="${on?3:2}"/>`+
+   `<text x="${n.x}" y="${n.y-3}" text-anchor="middle" font-size="15" font-weight="700">${esc(n.label)}</text>`+
+   `<text x="${n.x}" y="${n.y+16}" text-anchor="middle" font-size="12" fill="var(--muted)">${active?[g.in.length?'+'+chf(sumV(g.in)):'',g.out.length?'−'+chf(sumV(g.out)):''].filter(Boolean).join(' · '):'kein Geldfluss'}</text></g>`}
+ const center=`<rect x="${C.x-C.w/2}" y="${C.y-C.h/2}" width="${C.w}" height="${C.h}" rx="16" fill="var(--panel)" stroke="currentColor" stroke-width="2.5"/>`+
+  `<text x="${C.x}" y="${C.y-24}" text-anchor="middle" font-size="17" font-weight="700">${esc(firm(id).name.length>26?firm(id).name.slice(0,25)+'…':firm(id).name)}</text>`+
+  `<text x="${C.x}" y="${C.y}" text-anchor="middle" font-size="13" fill="var(--muted)">rein ${chf(tin)} · raus ${chf(tout)}</text>`+
+  `<text x="${C.x}" y="${C.y+28}" text-anchor="middle" font-size="15" font-weight="700" fill="${net>=0?'var(--good)':'var(--bad)'}">${net>=0?'Bleibt in der Kasse +':'Aus der Kasse −'}${chf(Math.abs(net))}</text>`;
+ return`<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Geldfluss Jahr ${year}">${arrows}${center}${nodes}${labels}</svg>`}
+function flowDetail(id,year,G,k){const box=$('#flow-detail');if(!k){box.innerHTML=`<p class="hint">Grün fliesst Geld zur Firma, orange fliesst es weg. Die Dicke zeigt den Betrag. Klicke auf einen Partner für die Einzelheiten, ‹ und › wechseln das Jahr.</p>`;return}
+ const n=FLOW_NODES.find(x=>x.k===k),g=G[k],max=Math.max(...[...g.in,...g.out].map(x=>x.v));
+ const rows=(items,dir)=>items.map(x=>`<div class="flow-row"><div><b>${x.firm?`<a href="#" data-go="${esc(x.firm)}">${esc(x.n)}</a>`:esc(x.n)}</b>${x.info?`<span class="hint"> · ${esc(x.info)}</span>`:''}</div>`+
+  `<div class="flow-bar"><span style="width:${Math.max(1,x.v/max*100)}%;background:${dir==='in'?'var(--good)':'var(--c2)'}"></span></div><div class="num">${dir==='in'?'+':'−'}${chf(x.v)}</div></div>`).join('');
+ box.innerHTML=`<h4>${esc(n.label)}</h4>${g.in.length?`<p class="hint">Fliesst zur Firma: ${chf(sumV(g.in))}</p>${rows(g.in,'in')}`:''}${g.out.length?`<p class="hint">Fliesst weg: ${chf(sumV(g.out))}</p>${rows(g.out,'out')}`:''}`;
+ $$('#flow-detail [data-go]').forEach(a=>a.onclick=e=>{e.preventDefault();$('#flow').close();S.fmFirm=a.dataset.go;openTab('firms');renderFirms();$('#fm-detail').scrollIntoView({block:'start'})})}
+function openFlow(id,year,sel=null){const dlg=$('#flow'),years=firm(id).yearly.map(r=>r.year).filter(inRange),G=flowGroups(id,year);
+ $('#flow-title').textContent=`Geldfluss ${firm(id).name} – Jahr ${year}`;
+ const i=years.indexOf(year);$('#flow-prev').disabled=i<=0;$('#flow-next').disabled=i<0||i>=years.length-1;
+ $('#flow-prev').onclick=()=>openFlow(id,years[i-1],sel);$('#flow-next').onclick=()=>openFlow(id,years[i+1],sel);
+ if(sel&&!(G[sel].in.length||G[sel].out.length))sel=null;
+ $('#flow-body').innerHTML=flowSvg(id,year,G,sel);flowDetail(id,year,G,sel);
+ $$('#flow-body .flow-node[tabindex]').forEach(el=>{const go=()=>openFlow(id,year,sel===el.dataset.k?null:el.dataset.k);el.onclick=go;el.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();go()}}});
+ dlg.onkeydown=e=>{if(e.key==='ArrowLeft'&&!$('#flow-prev').disabled)$('#flow-prev').click();if(e.key==='ArrowRight'&&!$('#flow-next').disabled)$('#flow-next').click()};
+ $('#flow-close').onclick=()=>dlg.close();if(!dlg.open)dlg.showModal()}
 $('#flow').addEventListener('click',e=>{if(e.target.id==='flow')e.target.close()});
 
 // Chat with the local model through python -m market_sim.serve.
