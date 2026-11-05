@@ -36,7 +36,9 @@ class Geography:
         self.last_delay = 0
         if getattr(config, "carriers", None) is not None and config.carriers.enabled:
             from market_sim.carriers import CarrierMarket
-            self.carriers = CarrierMarket(config, self, seed)
+            from market_sim.couriers import CourierMarket
+            market = CourierMarket if config.carriers.couriers.enabled else CarrierMarket
+            self.carriers = market(config, self, seed)
         for index, firm in enumerate(sorted(firms, key=lambda f: (STAGES.index(f.stage), f.id))):
             if firm.region is None:
                 firm.region = self._default_region(firm.stage, index)

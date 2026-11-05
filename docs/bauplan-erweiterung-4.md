@@ -324,3 +324,23 @@ Vorlage: «Offene Punkte» in `docs/bauplan-banken-boerse.md`.
   Schadenwurf in `ship()` bleibt gleich, darum ist ein Lauf mit Tarif 1.4 fest und
   unbegrenzter Kapazität genau gleich wie ohne Post (Test). Ausgabe `carrier_report.csv`,
   `RunResult.carriers`. Tests: `test_carriers.py` (7); 328 Tests grün.
+- **Phase 29, 2026-11-05:** Neues Modul `couriers.py` (`CourierMarket` erbt von
+  `CarrierMarket`), Block `carriers.couriers` (an, wirkt nur mit `carriers.enabled`).
+  **Entscheid:** Kuriere sind leichte Akteure im `CourierMarket` mit Kasse, Kreditlimite
+  (Zins = Leitzins + Aufschlag), Konkurs und Übernahme (Wettbewerbsbehörde: keine
+  Übernahme über 60 % Kurieranteil einer Region), keine fünfte Firmenstufe; die volle
+  Firmenmaschine (Bank, Börse, Strategien) hätte die Phase vervielfacht. Eintritt pro
+  Region (ein Zufallswurf pro Region und Jahr, eigener Zufall `couriers-{seed}`), nur wenn
+  der Posttarif die Kurierkosten um `min_margin` übersteigt; Kurierkosten pro km sind in
+  dünn besiedelten Regionen höher (`density_exponent`), darum starten Kuriere in der
+  Genferseeregion und in Zürich, das Tessin bleibt bei der Post. Regionen ausbauen bei
+  Gewinn, aufgeben nach zwei Verlustjahren. Preis je Region frei: unter der Post je nach
+  Risikobereitschaft, nie unter Kosten plus Aufschlag; risikofreudige Kuriere sind
+  billiger, aber weniger zuverlässig. Verlader im Dienstmodus wählen jährlich pro
+  Kundenregion nach Gesamtkosten (Preis x km + erwarteter Schaden + Verspätung aus dem
+  Vorjahr + Wechselkosten). Eigene Flotte oder Kauf bleibt die Jahreswahl pro Firma
+  (Flottenfixkosten lassen sich nicht auf Regionen aufteilen). Kalibrierung: Wechselkosten
+  als Anteil der Transportrechnung statt des Warenwerts, Verspätungskosten eigener Wert
+  `delay_cost_per_unit_day` (5 CHF), Kurier-Schadenquote 0,1–1 %; sonst gewann nie ein
+  Kurier. Seed 0, 8 Jahre: 2 Eintritte (Genfersee, Zürich), 30 Wechsel, eine Übernahme,
+  Regionen auf- und zugemacht. Tests: `test_couriers.py` (6); 334 Tests grün.

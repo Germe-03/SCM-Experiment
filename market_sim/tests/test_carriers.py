@@ -6,9 +6,11 @@ from market_sim.config import load_market_config
 from market_sim.run import build_runner, write_outputs
 
 
-def _config(enabled=True, **post):
+def _config(enabled=True, couriers=False, **post):
     config = load_market_config()
-    carriers = config.carriers.model_copy(update={"enabled": enabled, "post": config.carriers.post.model_copy(update=post)})
+    carriers = config.carriers.model_copy(update={
+        "enabled": enabled, "post": config.carriers.post.model_copy(update=post),
+        "couriers": config.carriers.couriers.model_copy(update={"enabled": couriers})})
     return config.model_copy(update={"carriers": carriers})
 
 
