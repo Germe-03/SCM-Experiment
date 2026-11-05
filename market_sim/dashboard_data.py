@@ -132,6 +132,7 @@ def build_dashboard_data(
         "classes": list(result.class_reports),
         "rnd": list(result.rnd_reports),
         "patents": list(result.patents),
+        "carriers": list(result.carriers),
         "offence_ledger": list(result.offence_ledger),
         "holdings": list(result.holdings),
         "laws": list(result.laws),

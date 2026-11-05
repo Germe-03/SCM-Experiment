@@ -344,3 +344,19 @@ Vorlage: «Offene Punkte» in `docs/bauplan-banken-boerse.md`.
   `delay_cost_per_unit_day` (5 CHF), Kurier-Schadenquote 0,1–1 %; sonst gewann nie ein
   Kurier. Seed 0, 8 Jahre: 2 Eintritte (Genfersee, Zürich), 30 Wechsel, eine Übernahme,
   Regionen auf- und zugemacht. Tests: `test_couriers.py` (6); 334 Tests grün.
+- **Phase 30, 2026-11-05:** Neuer Reiter «Transport» (`dashboard_carriers.js`, eingefügt
+  über `__CARRIERS__`): Kennzahlen, Marktanteile eigene Flotte / Post / Kuriere,
+  Posttarif und Bundesbeitrag, mittlere Verspätung, Kuriere pro Region als kleine Karte,
+  Tabelle aller Anbieter. Export `D.carriers`, `carrier_report.csv` (seit Phase 28).
+  Gesetze (Restmonopol, Konzessionsabgabe, Tariffreiheit) **nicht gebaut**: sie brauchen
+  neue Gesetzesarten in `laws.py` und Eingriffe in Tarif und Wahl, also nicht klein.
+  Messlauf 3 Seeds x 50 Jahre, aus / an (Kuriere an): Die Post gerät in eine Spirale.
+  Kuriere nehmen ihr dichte Strecken weg, die Fixkosten bleiben, der Tarif steigt jedes
+  Jahr um 5 % bis 3,2–3,7 CHF, am Ende fahren alle Verlader mit eigener Flotte (Anteil
+  Post und Kuriere 0 %). Bundesbeitrag total 0,73–0,81 Mia. CHF. Gewinne aller Firmen
+  total ändern sich stark (Seed 0: 9,2 → 42,0 Mia., Seed 1: −17,1 → −33,3 Mia.,
+  Seed 2: 12,7 → −42,5 Mia.), Konkurse 72/80/92 → 56/92/119, Servicegrad Seed 2
+  0,97 → 0,78. Darum bleibt `carriers.enabled: false`. Nötig vor dem Einschalten: Post-
+  Fixkosten an das tatsächliche Volumen anpassen (oder bei Volumenverlust senken),
+  Tarifspirale dämpfen und prüfen, warum der Servicegrad fällt (Verspätungen, Konkurse
+  von Kurieren mit Kunden). Tests: `test_dashboard_carriers.py` (2).

@@ -25,7 +25,8 @@ def write_dashboard_html(data: dict, path: str | Path) -> Path:
     stocks = Path(__file__).with_name("dashboard_stocks.js").read_text(encoding="utf-8")
     etfs = Path(__file__).with_name("dashboard_etfs.js").read_text(encoding="utf-8")
     html = (_HTML.replace("__DATA__", payload).replace("__CHART_JS__", CHART_JS_URL)
-            .replace("__TABLE_FILTERS__", filters).replace("__STOCK_COMPARE__", stocks).replace("__ETFS__", etfs))
+            .replace("__TABLE_FILTERS__", filters).replace("__STOCK_COMPARE__", stocks).replace("__ETFS__", etfs)
+            .replace("__CARRIERS__", Path(__file__).with_name("dashboard_carriers.js").read_text(encoding="utf-8")))
     target.write_text(html, encoding="utf-8")
     return target
 
@@ -125,6 +126,7 @@ body:has(dialog[open]){overflow:hidden}
   <button role="tab" data-tab="stocks">Börse</button>
   <button role="tab" data-tab="state">Staat</button>
   <button role="tab" data-tab="rnd">F&amp;E</button>
+  <button role="tab" data-tab="transport">Transport</button>
   <button role="tab" data-tab="events">Ereignisse</button>
   <button role="tab" data-tab="chronicle">Chronik</button>
  </nav>
@@ -265,6 +267,17 @@ body:has(dialog[open]){overflow:hidden}
   <div class="card"><h3>Projekte pro Jahr</h3><div class="chart"><canvas id="rd-count"></canvas></div></div>
   <div class="card"><h3>Ausgaben für Projekte</h3><div class="chart"><canvas id="rd-spend"></canvas></div></div>
   <div class="card wide"><h3>Alle abgeschlossenen Projekte</h3><div class="table-wrap"><table id="rd-table"></table></div></div>
+ </div>
+</section>
+<section role="tabpanel" id="tab-transport">
+ <h2>Post und Kuriere</h2><p class="lead">Wer die Ware transportiert: eigene Flotte, Post oder private Kuriere.</p>
+ <div class="kpis" id="tr-kpis"></div>
+ <div class="grid">
+  <div class="card"><h3>Marktanteile (Einheiten x km)</h3><div class="chart"><canvas id="tr-shares"></canvas></div></div>
+  <div class="card"><h3>Posttarif und Bundesbeitrag</h3><div class="chart"><canvas id="tr-post"></canvas></div></div>
+  <div class="card"><h3>Mittlere Verspätung (Tage)</h3><div class="chart"><canvas id="tr-delay"></canvas></div></div>
+  <div class="card"><h3>Kuriere pro Region</h3><svg id="tr-map" viewBox="0 0 400 260" role="img" aria-label="Kuriere pro Region"></svg></div>
+  <div class="card wide"><h3>Alle Transportanbieter</h3><div class="table-wrap"><table id="tr-table"></table></div></div>
  </div>
 </section>
 <section role="tabpanel" id="tab-events">
@@ -855,12 +868,13 @@ $('#flow').addEventListener('click',e=>{if(e.target.id==='flow')closeFlow()});
    wait.innerHTML=esc(pretty(a.answer)).replace(/\n/g,'<br>')+(a.sources&&a.sources.length?`<div class="hint" style="margin-top:6px">Quellen: ${a.sources.map(esc).join(' · ')}</div>`:'')}
   catch(err){wait.innerHTML='Keine Antwort vom Chat-Server. Läuft <code>python -m market_sim.serve</code> und ist das Sprachmodell erreichbar?'}
   finally{$('#chat-send').disabled=false;input.focus()}}})();
-const VIEWS={chronicle:renderChronicle,map:renderMap,overview:renderOverview,market:()=>{renderMarket();renderPeople();renderStructure()},firms:renderFirms,compare:renderCompare,chain:renderChain,finance:renderFinance,stocks:renderStocks,state:renderState,rnd:renderRnd,events:renderEvents};
+const VIEWS={chronicle:renderChronicle,map:renderMap,overview:renderOverview,market:()=>{renderMarket();renderPeople();renderStructure()},firms:renderFirms,compare:renderCompare,chain:renderChain,finance:renderFinance,stocks:renderStocks,state:renderState,rnd:renderRnd,transport:renderTransport,events:renderEvents};
 function render(){destroy();VIEWS[S.tab]()}
 showTab(location.hash.slice(1)||'overview');viewHistory.push(viewSnapshot());viewIndex=0;viewReady=true;history.replaceState({dashboardView:0},'', '#'+S.tab);history.scrollRestoration='manual';backState();
 __TABLE_FILTERS__
 __STOCK_COMPARE__
 __ETFS__
+__CARRIERS__
 </script></body></html>'''
 
 
