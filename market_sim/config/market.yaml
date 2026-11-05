@@ -425,12 +425,15 @@ geography:
 # One uniform tariff for all regions, at most 5 % change per year; a loss is covered
 # by the federal state (bundesbeitrag, only shown). Off until calibrated.
 carriers:
-  enabled: false
+  enabled: true
   post:
     start_rate: 1.4
     margin: 0.03
     max_tariff_step: 0.05
-    fixed_cost_per_day: 40000
+    fixed_cost_per_day: 2000
+    volume_smoothing: 0.3
+    network_adjust: 0.5
+    tariff_adjust: 0.5
     variable_rate: 0.9
     capacity_per_day: 2000
     expand_utilization: 0.9

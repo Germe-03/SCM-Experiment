@@ -33,6 +33,7 @@ def test_write_outputs(tmp_path):
         "offence_ledger.csv": len(result.offence_ledger),
         "decisions.csv": len(result.decisions),
         "region_report.csv": len(result.region_reports),
+        "carrier_report.csv": len(result.carriers),
     }
     json_files = {"exit_analysis.json", "personas.json", "holdings.json", "laws.json"}
     assert {path.name for path in paths} == set(expected_rows) | json_files
@@ -90,7 +91,7 @@ def test_main_writes_to_requested_directory(tmp_path):
         "annual_reports.csv", "system_kpis.csv", "firm_ranking.csv", "events.csv",
         "brand_report.csv", "class_report.csv", "offence_ledger.csv",
         "decisions.csv", "region_report.csv", "exit_analysis.json", "personas.json",
-        "holdings.json", "laws.json", "bank_reports.csv",
+        "holdings.json", "laws.json", "bank_reports.csv", "carrier_report.csv",
     }
 
 
