@@ -207,10 +207,10 @@ Vorlage: `docs/post-kuriere-proposal.md` (Schritte 4–5).
   Tariffreiheit.
 - Kalibrieren, dann `carriers.enabled: true`.
 
-**Offene Fragen an David (vor Phase 28):** Darf die Post auf Kuriere mit
-Rabatten reagieren oder bleibt sie beim Einheitstarif? Sollen auch Läden
-Transport einkaufen? Fliesst der Bundesbeitrag über Steuern zurück oder wird
-er nur angezeigt?
+**Entscheid David (2026-11-05):** Die Post bleibt beim Einheitstarif (keine
+Rabatte). Nur die Verlader (Hersteller, Verteilung, Grosshandel) kaufen
+Transport, Läden nicht. Der Bundesbeitrag wird nur angezeigt und fliesst nicht
+über Steuern zurück.
 
 ## Phase 31: Börsengang über eine Bank
 
@@ -221,7 +221,7 @@ Vorlage: TODO in `docs/bauplan-banken-boerse.md`.
   (ab 10 %) beteiligbar.
 - Auswirkungen auf Index und ETFs (Phase 23) prüfen.
 
-**Offen:** Ab welcher Grösse (Umsatz, Eigenkapital)? Wie hoch die Gebühr?
+**Entscheid David (2026-11-05):** Börsengang über eine Bank vorerst weglassen.
 
 ## Phase 32: Rohstoffbörse ausbauen
 
@@ -235,7 +235,9 @@ Rohstoffkosten mit schwankendem Preisindex (`commodities` in
 - Optional Variante B: Preis aus Angebot und Nachfrage aller Hersteller.
 - Dashboard: Rohstoffpreise, Einkaufspreis je Hersteller gegen Marktschnitt.
 
-**Offen:** Nur Vorrat/Termingeschäfte oder auch Variante B?
+**Entscheid David (2026-11-05):** Vorerst so lassen wie jetzt (Variante A).
+**TODO:** Beschaffungsstrategie (Spot, Vorrat, Termingeschäft) und optional
+Variante B später umsetzen.
 
 ## Phase 33: Offene Punkte der Banken
 
