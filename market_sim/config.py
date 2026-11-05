@@ -677,9 +677,16 @@ class PostConfig(ConfigModel):
     margin: float = Field(default=0.03, ge=0)
     # Largest tariff change per year (share); 0 keeps the tariff fixed.
     max_tariff_step: float = Field(default=0.05, ge=0)
-    # Network and staff per day (times price index and mean wage index), grows with capacity.
-    fixed_cost_per_day: float = Field(default=40_000.0, ge=0)
+    # Smallest network and staff per day (real CHF, times price index). The network itself
+    # follows the smoothed volume so that the start tariff covers the costs.
+    fixed_cost_per_day: float = Field(default=2_000.0, ge=0)
     variable_rate: float = Field(default=0.9, ge=0)
+    # Weight of the new year in the smoothed volume (1 = only last year).
+    volume_smoothing: float = Field(default=0.3, gt=0, le=1)
+    # Share of the gap to the target network closed per year (network shrinks with delay).
+    network_adjust: float = Field(default=0.5, ge=0, le=1)
+    # Share of the gap to the target tariff closed per year, before max_tariff_step.
+    tariff_adjust: float = Field(default=0.5, ge=0, le=1)
     # Units per day; 0 = unlimited. Overload waits (longer lead time), nothing is lost.
     capacity_per_day: float = Field(default=2000.0, ge=0)
     expand_utilization: float = Field(default=0.9, ge=0)

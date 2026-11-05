@@ -19,9 +19,8 @@ def _run(config, years=2, days=30, seed=0):
     return runner, runner.run(run_years)
 
 
-def test_disabled_by_default_and_no_carrier_market():
-    config = load_market_config()
-    assert config.carriers.enabled is False
+def test_switched_off_means_no_carrier_market():
+    config = _config(enabled=False)
 
     runner, result = _run(config, years=1)
 

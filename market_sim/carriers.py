@@ -1,4 +1,8 @@
-"""Phase 28: the Post as a transport actor."""
+"""Phase 28: the Post as a transport actor.
+
+Fixed costs follow the smoothed volume with delay, and the tariff moves halfway
+to the long-run average cost, max 5 % per year.
+"""
 
 from __future__ import annotations
 
@@ -66,6 +70,13 @@ class CarrierMarket:
             regions=sorted(geography.regions),
         )
         self.start_capacity = self.cfg.post.capacity_per_day
+        self.network_per_day = float(self.cfg.post.fixed_cost_per_day)
+        self.smoothed_fuel_km: float | None = None
+        self.fixed_rate = max(
+            0.0,
+            self.cfg.post.start_rate / (1 + self.cfg.post.margin)
+            - self.cfg.post.variable_rate,
+        )
         self.held: list[tuple[int, str, dict[str, int], int]] = []
         self.own_units = 0
         self.own_unit_km = 0.0
@@ -180,21 +191,53 @@ class CarrierMarket:
                 carrier.capacity_per_day = capacity
 
     def fixed_cost_year(self, runner: SimulationRunner) -> float:
-        labor = getattr(runner, "labor", None)
-        wages = getattr(labor, "wage_index", {}) if labor is not None else {}
-        wage = sum(wages.values()) / len(wages) if wages else 1.0
-        scale = (
-            self.post.capacity_per_day / self.start_capacity
-            if self.post.capacity_per_day > 0 and self.start_capacity > 0
-            else 1.0
-        )
         return (
-            self.cfg.post.fixed_cost_per_day
+            self.network_per_day
             * self.post.days
             * runner.long_run.price_index
-            * wage
-            * scale
         )
+
+    def adapt_network(self, price_index: float) -> None:
+        fuel_km = self.post.fuel_km
+        floor = self.cfg.post.fixed_cost_per_day
+        first_volume_year = self.smoothed_fuel_km is None
+
+        # Once the Post has carried anything, empty years also lower the smoothed
+        # volume, so the network shrinks instead of being paid by the Bund for ever.
+        if fuel_km > 0 or self.smoothed_fuel_km is not None:
+            if self.smoothed_fuel_km is None:
+                self.smoothed_fuel_km = fuel_km
+            else:
+                self.smoothed_fuel_km += self.cfg.post.volume_smoothing * (
+                    fuel_km - self.smoothed_fuel_km
+                )
+
+        if self.smoothed_fuel_km is None:
+            return
+
+        target = max(
+            floor,
+            self.fixed_rate
+            * self.smoothed_fuel_km
+            / self.days_per_year
+            / max(price_index, 1e-9),
+        )
+        if first_volume_year:
+            self.network_per_day = target
+        else:
+            self.network_per_day += self.cfg.post.network_adjust * (
+                target - self.network_per_day
+            )
+        self.network_per_day = max(floor, self.network_per_day)
+
+        if first_volume_year and self.post.capacity_per_day > 0:
+            mean_load = (
+                self.post.load_days / self.post.days if self.post.days else 0
+            )
+            if not self.post.pending_capacity:
+                self.post.capacity_per_day = max(
+                    self.post.capacity_per_day, mean_load * 1.5
+                )
 
     def year_end(self, runner: SimulationRunner, state: RunState) -> None:
         year = state.year
@@ -212,22 +255,6 @@ class CarrierMarket:
                 "firm": "post",
                 "event": "bundesbeitrag",
                 "details": f"Bund deckt Verlust der Post: {chf(bundesbeitrag)}",
-            })
-
-        old = post.tariff
-        if post.fuel_km > 0:
-            target = (
-                self.cfg.post.variable_rate + fixed / post.fuel_km
-            ) * (1 + self.cfg.post.margin)
-            step = self.cfg.post.max_tariff_step
-            post.tariff = min(old * (1 + step), max(old * (1 - step), target))
-        if post.tariff != old:
-            state.events.append({
-                "year": year,
-                "day": self.days_per_year,
-                "firm": "post",
-                "event": "post_tariff",
-                "details": f"Posttarif {old:.3f} -> {post.tariff:.3f} CHF pro Einheit und km",
             })
 
         utilization = (
@@ -253,6 +280,31 @@ class CarrierMarket:
                     f"Post baut aus: {old_capacity:.0f} -> {new_capacity:.0f} "
                     f"Einheiten pro Tag ab Tag {ready}"
                 ),
+            })
+
+        self.adapt_network(runner.long_run.price_index)
+
+        old = post.tariff
+        if self.smoothed_fuel_km is not None and self.smoothed_fuel_km > 0:
+            next_fixed = (
+                self.network_per_day
+                * self.days_per_year
+                * runner.long_run.price_index
+            )
+            target = (
+                self.cfg.post.variable_rate
+                + next_fixed / self.smoothed_fuel_km
+            ) * (1 + self.cfg.post.margin)
+            desired = old + self.cfg.post.tariff_adjust * (target - old)
+            step = self.cfg.post.max_tariff_step
+            post.tariff = min(old * (1 + step), max(old * (1 - step), desired))
+        if post.tariff != old:
+            state.events.append({
+                "year": year,
+                "day": self.days_per_year,
+                "firm": "post",
+                "event": "post_tariff",
+                "details": f"Posttarif {old:.3f} -> {post.tariff:.3f} CHF pro Einheit und km",
             })
 
         total = self.own_unit_km + sum(c.unit_km for c in self.carriers())
@@ -284,6 +336,8 @@ class CarrierMarket:
             "share_post": round(share_post, 4),
             "share_couriers": round(share_couriers, 4),
             "held_units": self.held_units(),
+            "network_per_day": round(self.network_per_day, 1),
+            "smoothed_fuel_km": round(self.smoothed_fuel_km, 1) if self.smoothed_fuel_km is not None else 0.0,
         })
 
         for carrier in self.carriers():

@@ -170,7 +170,8 @@ def write_outputs(result: RunResult, out_dir: str | Path) -> list[Path]:
         if rows:
             path = directory / name
             with path.open("w", newline="", encoding="utf-8") as output:
-                writer = csv.DictWriter(output, fieldnames=list(rows[0]))
+                # Post and courier rows carry different extra keys: use all of them.
+                writer = csv.DictWriter(output, fieldnames=list(dict.fromkeys(k for row in rows for k in row)))
                 writer.writeheader()
                 writer.writerows({k: json.dumps(v, ensure_ascii=False) if isinstance(v, (dict, list)) else v for k, v in row.items()} for row in rows)
             paths.append(path)

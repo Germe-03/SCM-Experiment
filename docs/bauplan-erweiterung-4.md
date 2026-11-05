@@ -439,3 +439,29 @@ Vorlage: «Offene Punkte» in `docs/bauplan-banken-boerse.md`.
   Fixkosten an das tatsächliche Volumen anpassen (oder bei Volumenverlust senken),
   Tarifspirale dämpfen und prüfen, warum der Servicegrad fällt (Verspätungen, Konkurse
   von Kurieren mit Kunden). Tests: `test_dashboard_carriers.py` (2).
+- **Post überarbeitet, 2026-11-05:** Ursache der Spirale: Die Fixkosten (40'000 CHF pro Tag
+  x Preisindex x Lohnindex) waren etwa doppelt so hoch, wie das tatsächliche Volumen zum
+  Starttarif decken kann; im ersten Jahr fährt niemand mit der Post (volle Fixkosten auf
+  null Volumen), und der Zieltarif war die Durchschnittskosten des Vorjahres. Fällt das
+  Volumen, steigt der Tarif, noch mehr Verlader gehen zur eigenen Flotte. Kapazität war
+  nicht der Engpass (Auslastung 10–35 %). Neu: Das Netz (`network_per_day`, real) richtet
+  sich nach dem geglätteten Volumen (`volume_smoothing` 0,3, auch leere Jahre zählen) und
+  passt sich mit Verzögerung an (`network_adjust` 0,5), so dass der Starttarif 1,4 die
+  Kosten deckt; `fixed_cost_per_day` ist nur noch das kleinste Netz (2'000 CHF). Der Tarif
+  geht halb zum Ziel (`tariff_adjust` 0,5), höchstens 5 %. Fixkosten nur x Preisindex.
+  Kapazität im ersten Volumenjahr mindestens mittlere Tageslast x 1,5. `carrier_report.csv`
+  schreibt alle Spalten von Post und Kurieren (vorher Absturz mit Kurieren). Messlauf
+  3 Seeds x 50 Jahre, aus / an (Kuriere an):
+
+  | Seed | Gewinn total | Konkurse | Servicegrad | Posttarif Ende | Anteil Post / Kuriere (Mittel) | Bundesbeitrag total |
+  |---|---|---|---|---|---|---|
+  | 0 | 9,2 → 33,1 Mia. | 72 → 59 | 0,967 → 0,959 | 1,42 (1,36–1,47) | 34 % / 2,6 % (max. 12 %) | 87 Mio. |
+  | 1 | −17,1 → −36,3 Mia. | 80 → 95 | 0,948 → 0,944 | 1,40 | 67 % / 0,2 % (max. 5 %) | 64 Mio. |
+  | 2 | 1,7 → 26,1 Mia. | 85 → 80 | 0,966 → 0,978 | 1,38 | 77 % / 0,6 % (max. 14 %) | 45 Mio. |
+
+  Zum Vergleich ohne Post, nur Dienstpreis 1,42 statt 1,4: Gewinn 28,0 / −1,3 / −1,1 Mia.,
+  Konkurse 72/85/89; Seed 2 mit 1,38 bzw. 1,45: 44,5 bzw. 23,3 Mia. Der Gesamtgewinn
+  reagiert also schon auf kleinste Änderungen um ±20–40 Mia.; die Abweichungen der Post
+  liegen in diesem Band. Servicegrad überall innerhalb 1,2 Prozentpunkten. Darum jetzt
+  `carriers.enabled: true` (Kuriere an). Tests: `test_post_rework.py` (5), Test «aus heisst
+  kein Transportmarkt» schaltet ausdrücklich aus.
