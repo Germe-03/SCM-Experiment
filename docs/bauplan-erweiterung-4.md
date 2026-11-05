@@ -298,3 +298,14 @@ Vorlage: «Offene Punkte» in `docs/bauplan-banken-boerse.md`.
   (66 Forschung erfolgreich, 31 Fehlschläge, 56 Umsetzungen), 63-mal
   Nachzügler-Rabatt, Kosten total 5,00 Mia. CHF. Hinweis: Die Texte im Cache
   `runs/texts_seed0_50y.json` stammen aus dem Lauf vor Phase 24.
+- **Phase 25, 2026-11-05:** Neues Modul `patents.py` (`PatentOffice`), Block
+  `patents` in `market.yaml` (an), `patentable: true` bei Smart Factory, Hefezucht,
+  Mehrwegsystem, alkoholfreiem Produkt, neuer Geschmacksrichtung, Kühlkette und
+  Kommissionier-Roboter. Wer zuerst erfolgreich erforscht, patentiert, wenn er die
+  Gebühr tragen kann ((2 Mio. + 1 Mio. pro Jahr) x Preisindex, an den Staat,
+  «staat:Patentgebühr» im Geldfluss); Laufzeit 5 Jahre für Premium und reiche
+  Firmen, 3 für Billiganbieter, sonst 4. Andere forschen weiter, setzen aber erst
+  nach Ablauf um (Vorbenutzungsrecht für bereits laufende oder fertige
+  Umsetzungen). Übernahme: Patent an die Käuferin; Konkurs: Patent verfällt.
+  Ereignisse `patent_granted` (Börse +0.05), `patent_expired`; Export `D.patents`.
+  Tests: `test_patents.py` (10); 321 Tests grün.

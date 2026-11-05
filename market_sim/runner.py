@@ -15,6 +15,7 @@ from market_sim.longrun import LongRun
 from market_sim.state import StateActor
 from market_sim.research import ResearchLab
 from market_sim.research_tree import ResearchTreeLab
+from market_sim.patents import PatentOffice
 from market_sim.marketing import Marketing
 from market_sim.holdings import Holdings
 from market_sim.stock_market import StockMarket
@@ -69,6 +70,7 @@ class RunResult:
     brand_reports: list[dict[str, object]] = field(default_factory=list)
     class_reports: list[dict[str, object]] = field(default_factory=list)
     rnd_reports: list[dict[str, object]] = field(default_factory=list)
+    patents: list[dict[str, object]] = field(default_factory=list)
     offence_ledger: list[dict[str, object]] = field(default_factory=list)
     holdings: list[dict[str, object]] = field(default_factory=list)
     laws: list[dict[str, object]] = field(default_factory=list)
@@ -168,6 +170,8 @@ class SimulationRunner:
         self.state_actor = StateActor(self, seed) if config.state.enabled else None
         self.lab = ((ResearchTreeLab if config.research.trees_enabled else ResearchLab)(self, seed)
                     if config.research.enabled else None)
+        self.patent_office = (PatentOffice(self) if config.patents.enabled
+                              and isinstance(self.lab, ResearchTreeLab) else None)
         self._restaurant_templates = [f.model_copy(deep=True) for f in self._firms() if f.channel == "restaurant"]
         self._store_templates = [f.model_copy(deep=True) for f in self._firms()
                                  if f.stage == "retailer" and f.channel != "restaurant"]
@@ -246,6 +250,7 @@ class SimulationRunner:
             exits=dict(self.exits), events=list(state.events),
             brand_reports=list(state.brand_reports), class_reports=list(state.class_reports),
             rnd_reports=list(self.lab.reports) if self.lab is not None else [],
+            patents=self.patent_office.report() if self.patent_office is not None else [],
             holdings=list(self.holdings.history) + self.holdings.snapshot(state.year) if self.holdings is not None else [],
             laws=assess_laws(self.laws.enacted, [k.model_dump() for k in state.system_kpis], self.config.laws)
             if self.laws is not None else [],
@@ -678,6 +683,8 @@ class SimulationRunner:
             self.state_actor.takeovers(self, state)
         if self.lab is not None:
             self.lab.year_end(self, state)
+        if self.patent_office is not None:
+            self.patent_office.year_end(self, state)
         if self.marketing is not None:
             self.marketing.year_end(self, state)
         if self.holdings is not None:

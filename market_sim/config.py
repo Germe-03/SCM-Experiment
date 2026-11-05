@@ -649,6 +649,30 @@ class ResearchStageConfig(ResearchProjectConfig):
     # Only firms of these product categories (empty = all); requirements a firm cannot
     # reach because of this restriction count as fulfilled.
     categories: list[str] = Field(default_factory=list)
+    # Phase 25: the first firm to research this stage may patent it.
+    patentable: bool = False
+
+
+class PatentsConfig(ConfigModel):
+    """Phase 25: patents on the first research success of patentable stages (no licences)."""
+
+    enabled: bool = False
+    min_years: int = Field(default=3, ge=1)
+    max_years: int = Field(default=5, ge=1)
+    # Fee = (base_fee + fee_per_year x years) x price index, paid once to the state.
+    base_fee: float = Field(default=2_000_000.0, ge=0)
+    fee_per_year: float = Field(default=1_000_000.0, ge=0)
+    cash_cover: float = Field(default=2.0, ge=0)
+    # Cash above this multiple of the longest fee: the firm patents for the longest term.
+    rich_cash_multiple: float = Field(default=20.0, ge=0)
+    long_archetypes: list[str] = Field(default_factory=lambda: ["premium"])
+    short_archetypes: list[str] = Field(default_factory=lambda: ["low_cost"])
+
+    @model_validator(mode="after")
+    def validate_years(self) -> Self:
+        if self.min_years > self.max_years:
+            raise ValueError("min_years must not exceed max_years")
+        return self
 
 
 class ResearchConfig(ConfigModel):
@@ -722,7 +746,7 @@ class StockMarketConfig(ConfigModel):
     revalue_days: int = Field(default=91, ge=1)
     event_shocks: dict[str, float] = Field(default_factory=lambda: {
         "poisoning": -0.5, "firm_recall": -0.15, "recall": -0.15, "offence_detected": -0.1,
-        "rnd_success": 0.1, "restructuring": -0.3})
+        "rnd_success": 0.1, "restructuring": -0.3, "patent_granted": 0.05})
     index_base: float = Field(default=1000.0, gt=0)
     # Phase 23: ETFs as display-only baskets (not tradable yet), chain-linked like the index.
     etfs_enabled: bool = True
@@ -890,6 +914,7 @@ class MarketConfig(ConfigModel):
     geography: GeographyConfig = Field(default_factory=GeographyConfig)
     state: StateConfig = Field(default_factory=StateConfig)
     research: ResearchConfig = Field(default_factory=ResearchConfig)
+    patents: PatentsConfig = Field(default_factory=PatentsConfig)
     marketing: MarketingConfig = Field(default_factory=MarketingConfig)
     restaurants: RestaurantConfig = Field(default_factory=RestaurantConfig)
     holdings: HoldingsConfig = Field(default_factory=HoldingsConfig)

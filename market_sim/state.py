@@ -277,6 +277,9 @@ class StateActor:
         # Phase 24: the buyer receives the research progress (implementation still to pay).
         if hasattr(runner.lab, "transfer"):
             runner.lab.transfer(target.id, buyer.id)
+        # Phase 25: patents go to the buyer.
+        if getattr(runner, "patent_office", None) is not None:
+            runner.patent_office.transfer(target.id, buyer.id, year)
         runner.close_firm_now(target.id, year, state, "takeover", f"gekauft von {buyer.id} für {chf(price)}")
         runner.decision_log.record(year, buyer.id, "takeover_bought", {"target": target.id, "price": price}, "Übernahme eines finanziell angeschlagenen Konkurrenten")
         self.stats["takeovers"] += 1

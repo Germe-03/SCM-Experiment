@@ -106,8 +106,13 @@ class ResearchTreeLab(ResearchLab):
             if step == "research":
                 success = roll < stage.success_probability
                 if success:
+                    first = (tree, name) not in self.first_success
                     self.progress.setdefault(firm_id, {})[name] = "researched"
                     self.first_success.setdefault((tree, name), state.year)
+                    # Phase 25: the first researcher may patent the stage.
+                    office = getattr(runner, "patent_office", None)
+                    if office is not None:
+                        office.on_research_success(runner, state, firm, tree, stage, first)
                     self.stats["rnd_successes"] += 1
                     event = "rnd_success"
                     detail = "erforscht"
@@ -172,10 +177,13 @@ class ResearchTreeLab(ResearchLab):
                 continue
 
             tree = tree_key(firm)
+            office = getattr(runner, "patent_office", None)
+            # Phase 25: a stage patented by another firm cannot be implemented yet.
             pending = [
                 stage
                 for stage in self.stages.get(tree, {}).values()
                 if self.progress.get(firm.id, {}).get(stage.name) == "researched"
+                and not (office is not None and office.blocked(firm.id, tree, stage.name))
             ]
             if pending:
                 stage = pending[0]
