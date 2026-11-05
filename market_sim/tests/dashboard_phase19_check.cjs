@@ -5,10 +5,10 @@ const D = JSON.parse(html.match(/<script id="dashboard-data" type="application\/
 const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => m[1]);
 scripts.forEach(s => new vm.Script(s));
 const source = scripts[0], nodes = new Map(), charts = new Map();
-const $ = id => {if (!nodes.has(id)) nodes.set(id, {value:'',querySelectorAll:()=>[],scrollIntoView(){}}); return nodes.get(id)};
+const $ = id => {if (!nodes.has(id)) nodes.set(id, {value:'',querySelectorAll:()=>[],querySelector:()=>null,scrollIntoView(){}}); return nodes.get(id)};
 const range = {from: 1, to: 2}, S = {fmStage:new Set(['bank']),fmStatus:'all',fmSort:['profit',-1],tab:'firms'};
 const periods=['week','month'].map(period=>({dataset:{period},setAttribute(){}}));
-const context = {D, S, range, $, $$: selector => selector==='#sx-period button'?periods:[],
+const context = {D, S, range, $, store:{get:(k,d)=>d,set(){}}, $$: selector => selector==='#sx-period button'?periods:[],
   inRange: y => y >= range.from && y <= range.to,
   sys: () => D.system.filter(x => x.year >= range.from && x.year <= range.to),
   firm: id => D.firms[id], fname: id => D.firms[id]?.name || id,
@@ -26,6 +26,7 @@ const context = {D, S, range, $, $$: selector => selector==='#sx-period button'?
 vm.createContext(context);
 vm.runInContext(source.slice(source.indexOf('function bankActors()'), source.indexOf('const DEC_GROUP=')), context);
 vm.runInContext(source.slice(source.indexOf('function renderBanks()'), source.indexOf('function renderFinance()')), context);
+vm.runInContext(source.slice(source.indexOf('// Aktienkurs im Reiter Vergleich')), context);
 vm.runInContext('renderBanks();renderStocks()', context);
 assert.match($('#fi-banks').innerHTML, /Eigenkapitalquote/);
 assert.equal(charts.get('fi-stocks').data.labels.length, 6);
@@ -49,6 +50,7 @@ periods[1].onclick();
 assert.ok(charts.get('fi-stocks').data.labels.every(s=>s.includes('Monat')));
 assert.equal(charts.get('sx-compare').data.datasets.length,6);
 range.from = 2;
+vm.runInContext(source.slice(source.indexOf('// Aktienkurs im Reiter Vergleich')), context);
 vm.runInContext('renderBanks();renderStocks()', context);
 assert.equal($('#fi-bank-year').textContent, 'Stand: Jahr 2');
 assert.ok(charts.get('fi-stocks').data.labels.every(s => s.startsWith('Jahr 2')));
@@ -98,6 +100,7 @@ assert.deepEqual(Array.from(vm.runInContext("stockPoints('month')",context)),[2,
 assert.equal(vm.runInContext("stockStageSeries('factory')[1]",context),125);
 assert.ok($('#sx-top').innerHTML.indexOf(`data-stock-add="${ids[0]}"`)<$('#sx-top').innerHTML.indexOf(`data-stock-add="${ids[1]}"`));
 D.stocks = {days: [], years: [], index: [], prices: {}}; D.banks = [];
+vm.runInContext(source.slice(source.indexOf('// Aktienkurs im Reiter Vergleich')), context);
 vm.runInContext('renderBanks();renderStocks()', context);
 assert.match($('#fi-banks').innerHTML, /Keine Bankberichte/);
 assert.match($('#fi-stock-empty').textContent, /Keine Börsenkurse/);

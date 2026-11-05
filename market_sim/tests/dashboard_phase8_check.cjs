@@ -37,6 +37,7 @@ const context = {
 };
 vm.createContext(context);
 vm.runInContext(source.slice(start, end), context);
+vm.runInContext(fs.readFileSync(require('node:path').join(__dirname, '..', 'dashboard_stocks.js'), 'utf8'), context);
 vm.runInContext('renderCompare()', context);
 assert.match($('#cp-charts').innerHTML, /Top 5/);
 S.cmp = Object.keys(firms);

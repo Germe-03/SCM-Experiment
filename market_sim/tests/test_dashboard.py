@@ -173,3 +173,13 @@ def test_dashboard_shows_billions_as_mia():
     subprocess.run(["node", str(Path(__file__).with_name("dashboard_money_check.cjs")), dashboard.__file__],
                    check=True, capture_output=True, text=True)
 
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node is optional for Python-only installations")
+def test_share_price_in_compare_tab(tmp_path):
+    directory = Path(__file__).parent
+    subprocess.run(["node", str(directory / "dashboard_phase22_check.cjs"), str(directory.parent / "dashboard_stocks.js")],
+                   check=True, capture_output=True, text=True)
+    html = write_dashboard_html({"meta": {}}, tmp_path / "d.html").read_text(encoding="utf-8")
+    assert "function renderCompareStock" in html and "__STOCK_COMPARE__" not in html
+    assert "['stock_price','Aktienkurs','stock']" in html and "stockIndexSwitch('sx',true)" in html
+    assert "stockIndexSwitch('fd',true)" in html

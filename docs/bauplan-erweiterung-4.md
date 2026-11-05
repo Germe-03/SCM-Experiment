@@ -262,3 +262,11 @@ Vorlage: «Offene Punkte» in `docs/bauplan-banken-boerse.md`.
   Cache-Texte «2'652 Mio. CHF» um, `chf()` zeigt «Mia.» statt «Mrd.» mit Komma,
   Spaltenfilter liest «Mia.». Neue Tests: `test_texts` (2), `dashboard_money_check.cjs`.
   `runs/dashboard.html` neu, im Browser geprüft (Chronik zeigt z. B. «-4,26 Mia. CHF»).
+- **Phase 22, 2026-11-05:** Neue Datei `market_sim/dashboard_stocks.js` (wird wie die
+  Spaltenfilter ins Dashboard eingefügt). Reiter Vergleich: Kennzahl «Aktienkurs»
+  nur wenn eine gewählte Firma Kurse hat, Schalter «Start = 100» und «Börsenindex
+  einblenden» (aus), Hinweis «… ist nicht an der Börse», Tabelle mit letztem Kurs,
+  Veränderung, Höchst- und Tiefstkurs mit Jahr; «relativ zum Stufenschnitt» dort
+  ausgeblendet. Reiter Börse und Firmendetails: Schalter «Börsenindex einblenden»
+  (an), Zustand pro Reiter gemerkt. Test: `dashboard_phase22_check.cjs`.
+  Im Browser geprüft (Vergleich, Börse, Firmendetails).

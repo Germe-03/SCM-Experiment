@@ -22,7 +22,9 @@ def write_dashboard_html(data: dict, path: str | Path) -> Path:
     target.parent.mkdir(parents=True, exist_ok=True)
     payload = json.dumps(data, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
     filters = Path(__file__).with_name("dashboard_filters.js").read_text(encoding="utf-8")
-    html = _HTML.replace("__DATA__", payload).replace("__CHART_JS__", CHART_JS_URL).replace("__TABLE_FILTERS__", filters)
+    stocks = Path(__file__).with_name("dashboard_stocks.js").read_text(encoding="utf-8")
+    html = (_HTML.replace("__DATA__", payload).replace("__CHART_JS__", CHART_JS_URL)
+            .replace("__TABLE_FILTERS__", filters).replace("__STOCK_COMPARE__", stocks))
     target.write_text(html, encoding="utf-8")
     return target
 
@@ -74,6 +76,7 @@ td.num,th.num{text-align:right}tbody tr.click{cursor:pointer}tbody tr.click:hove
 .chip .x{margin-left:6px;opacity:.7}
 #sx-period{gap:0;display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
 #sx-period .chip{border:0;border-radius:0;padding:6px 18px}
+.switch-line{display:inline-flex;align-items:center;gap:6px;margin:4px 14px 4px 0;font-size:13px}
 #sx-period .chip:focus-visible{outline-offset:-3px}
 #sx-search{display:block;width:min(100%,420px);margin:6px 0 12px}
 #sx-selected{margin:12px 0}#tab-stocks summary{cursor:pointer;font-weight:600;margin-bottom:12px}
@@ -191,7 +194,7 @@ body:has(dialog[open]){overflow:hidden}
    <p class="hint" id="cp-limit" aria-live="polite"></p><div id="cp-firms"></div>
   </aside>
   <div><div class="chips" id="cp-metrics" role="group" aria-label="Kennzahl"></div>
-   <label><input type="checkbox" id="cp-relative"> relativ zum Stufenschnitt</label>
+   <label id="cp-relative-label"><input type="checkbox" id="cp-relative"> relativ zum Stufenschnitt</label>
    <div id="cp-charts"></div>
   </div>
  </div>
@@ -234,7 +237,7 @@ body:has(dialog[open]){overflow:hidden}
  <p class="hint" id="fi-stock-empty" role="status"></p>
  <div class="grid">
   <div class="card wide"><h3>Börsenindex und SNB-Leitzins</h3><p class="hint">Wochen- und Jahresendkurse. Monat zeigt den letzten verfügbaren Stand. Leitzins: Jahresendstand auf der rechten Achse.</p><div class="chart"><canvas id="fi-stocks"></canvas></div></div>
-  <div class="card wide"><h3>Entwicklung (Start des Zeitraums = 100)</h3><label for="sx-search">Firma vergleichen …</label><input id="sx-search" type="search" list="sx-options" placeholder="Firma vergleichen …" aria-describedby="sx-selection-hint"><datalist id="sx-options"></datalist><p class="hint" id="sx-selection-hint" role="status">Bis zu fünf Firmen. Bei späterem Börsengang gilt der erste verfügbare Kurs als Start.</p><div class="chips" id="sx-selected" aria-label="Ausgewählte Firmen"></div><div class="chart"><canvas id="sx-compare"></canvas></div></div>
+  <div class="card wide"><h3>Entwicklung (Start des Zeitraums = 100)</h3><label for="sx-search">Firma vergleichen …</label><input id="sx-search" type="search" list="sx-options" placeholder="Firma vergleichen …" aria-describedby="sx-selection-hint"><datalist id="sx-options"></datalist><p class="hint" id="sx-selection-hint" role="status">Bis zu fünf Firmen. Bei späterem Börsengang gilt der erste verfügbare Kurs als Start.</p><div class="chips" id="sx-selected" aria-label="Ausgewählte Firmen"></div><div id="sx-index-switch"></div><div class="chart"><canvas id="sx-compare"></canvas></div></div>
   <div class="card"><h3>Grösste Börsenwerte</h3><p class="hint">Top 10 am Ende des Zeitraums. Zeile: zum Vergleich hinzufügen. Name: Firmendetails.</p><div class="table-wrap"><table id="sx-top"></table></div></div>
   <div class="card"><h3>Grösste Gewinner / Verlierer im Zeitraum</h3><p class="hint">Je fünf noch kotierte Firmen mit Kurs am Anfang und Ende des Zeitraums.</p><div id="sx-movers"></div></div>
   <div class="card wide"><details><summary>Index pro Stufe (Start = 100)</summary><p class="hint">Nach Kurs gewichtet, gleiche Aktienzahl je Firma. Ein- und Austritte werden ohne Kurssprung verkettet.</p><div class="chart"><canvas id="sx-stages"></canvas></div></details></div>
@@ -539,7 +542,7 @@ function renderFirmDetail(){const root=$('#fm-detail');destroy();if(S.tab!=='fir
  <div class="card"><h3>Cash (Wochenschnitt)</h3><div class="chart"><canvas id="fd-cash"></canvas></div></div><div class="card"><h3>Lager und Rückstand (Wochenschnitt)</h3><div class="chart"><canvas id="fd-stock"></canvas></div></div>
  <div class="card"><h3>Reputation und Qualität</h3><div class="chart"><canvas id="fd-rep"></canvas></div></div><div class="card"><h3>Ereignisse dieser Firma</h3><ul class="list" id="fd-events" style="max-height:270px;overflow:auto"></ul></div>
  <div class="card wide" id="fd-story" hidden></div>
- ${D.stocks?.prices?.[id]?'<div class="card wide"><h3>Börsenkurs</h3><p class="hint" id="fd-stock-empty"></p><div class="chart"><canvas id="fd-price"></canvas></div></div>':''}
+ ${D.stocks?.prices?.[id]?'<div class="card wide"><h3>Börsenkurs</h3><div id="fd-index-switch">'+stockIndexSwitch('fd',true)+'</div><p class="hint" id="fd-stock-empty"></p><div class="chart"><canvas id="fd-price"></canvas></div></div>':''}
  <div class="card wide" id="fd-exit" hidden></div>
  <div class="card wide"><h3>Entscheidungen</h3><p class="hint">Pro Jahr nur, was sich geändert hat, dazu Straftaten, Investitionen und Projekte.</p><div class="chips" id="fd-dec-filter" style="margin-bottom:10px"></div><ul class="list" id="fd-decisions" style="max-height:420px;overflow:auto"></ul></div></div></div>`;
  wireBankLinks(root);
@@ -556,7 +559,7 @@ function renderFirmDetail(){const root=$('#fm-detail');destroy();if(S.tab!=='fir
  chart('fd-rep',{type:'line',data:{labels:lbl,datasets:[{label:'Reputation',data:y.map(r=>r.reputation),borderColor:pal()[4],pointRadius:0,borderWidth:2},{label:'Qualität',data:y.map(r=>r.average_quality),borderColor:pal()[5],pointRadius:0,borderWidth:2}]},options:{scales:{y:fmtAxis('pct')}}});
  const fe=f.events.filter(e=>inRange(e.year)&&e.event!=='inflation').slice().reverse();
  $('#fd-events').innerHTML=fe.length?fe.map(e=>`<li><span class="yr">Jahr ${e.year}</span><span><b>${esc(EVENT[e.event]||e.event)}</b> <span class="badge">${esc(pretty(e.details))}</span></span></li>`).join(''):'<li>Keine Ereignisse im Zeitraum.</li>';
- if(D.stocks?.prices?.[id])renderStockChart('fd-price',[id],true,'week','fd-stock-empty');
+ if(D.stocks?.prices?.[id]){wireStockIndexSwitch($('#fd-index-switch'),'fd',renderFirmDetail);renderStockChart('fd-price',[id],stockIndexShown('fd',true),'week','fd-stock-empty')}
  renderExit(id);renderDecisions(id);
  const st=((D.texts||{}).stories||{})[id],sb=$('#fd-story');sb.hidden=!st;if(st)sb.innerHTML=`<h3>Geschichte ${st.checked?'<span class="badge ok">vom lokalen Modell, Zahlen geprüft</span>':'<span class="badge">Kurzfassung aus den Fakten</span>'}</h3><p style="margin:0">${esc(pretty(st.text))}</p>`}
 
@@ -580,11 +583,12 @@ function renderCompare(){const actors={...D.firms,...bankActors()},actor=id=>act
  ['cp-category','cp-product','cp-status'].forEach(id=>$('#'+id).onchange=renderCompare);$('#cp-years').oninput=renderCompare;
  $('#cp-top').onclick=()=>save(()=>{S.cmp=matches.sort((a,b)=>sumBy(b.yearly.filter(r=>inRange(r.year)),'profit')-sumBy(a.yearly.filter(r=>inRange(r.year)),'profit')).slice(0,5).map(f=>f.id)});
  $('#cp-clear').onclick=()=>save(()=>{S.cmp=[]});
- const metrics=S.cmp.length&&S.cmp.every(id=>actor(id).stage==='bank')?CMP_METRICS.slice(0,4):CMP_METRICS;if(!metrics.some(m=>m[0]===S.cmpMetric))S.cmpMetric='profit';const key=S.cmpMetric,relative=!!S.cmpRelative;
+ const metrics=[...(S.cmp.length&&S.cmp.every(id=>actor(id).stage==='bank')?CMP_METRICS.slice(0,4):CMP_METRICS),...(S.cmp.some(hasStockPrices)?[['stock_price','Aktienkurs','stock']]:[])];if(!metrics.some(m=>m[0]===S.cmpMetric))S.cmpMetric='profit';const key=S.cmpMetric,relative=!!S.cmpRelative;
  $('#cp-metrics').innerHTML=metrics.map(([k,t])=>`<button class="chip" data-metric="${k}" aria-pressed="${k===key}">${t}</button>`).join('');
  $$('#cp-metrics button').forEach(b=>b.onclick=()=>{S.cmpMetric=b.dataset.metric;renderCompare()});
- $('#cp-relative').checked=relative;$('#cp-relative').onchange=e=>{S.cmpRelative=e.target.checked;renderCompare()};
+ $('#cp-relative-label').hidden=key==='stock_price';$('#cp-relative').checked=relative;$('#cp-relative').onchange=e=>{S.cmpRelative=e.target.checked;renderCompare()};
  destroy();const root=$('#cp-charts');if(!S.cmp.length){root.innerHTML=empty('Wähle links bis zu sechs Firmen oder nutze «Top 5 nach Gewinn».');return}
+ if(key==='stock_price'){renderCompareStock(root,S.cmp,actorName,id=>pal()[cmpColors[id]]);return}
  const [,title,fmt]=CMP_METRICS.find(x=>x[0]===key),labels=years.filter(inRange),format=v=>v==null?'–':fmt==='chf'?chf(v):fmt==='pct'?pct(v):nf(v,2);
  const rawValue=(f,y)=>{if(!activeInYear(f,y))return null;const r=f.yearly.find(r=>r.year===y);if(!r)return null;if(f.stage==='bank'){if(!['profit','revenue','cash','market_share'].includes(key))return null;return r[{cash:'equity',market_share:'deposit_share'}[key]||key]??null}return r[key]??null};
  const value=(id,y)=>{const f=actor(id),v=rawValue(f,y);if(v==null||!relative)return v;const peers=Object.values(actors).filter(p=>fmGroup(p)===fmGroup(f)).map(p=>rawValue(p,y)).filter(v=>v!=null);return peers.length?v-peers.reduce((a,b)=>a+b,0)/peers.length:null};
@@ -664,7 +668,7 @@ function renderStocks(){const s=D.stocks||{days:[],years:[],index:[],prices:{}},
  $('#sx-selection-hint').textContent=`${S.stockFirms.length} von 5 Firmen ausgewählt. Bei späterem Börsengang gilt der erste verfügbare Kurs als Start.`;
  $('#sx-selected').innerHTML=S.stockFirms.map(id=>`<button class="chip" data-remove-stock="${esc(id)}" aria-label="${actorLabel(id)} aus Vergleich entfernen">${actorLabel(id)} ×</button>`).join('');
  $$('#sx-selected button').forEach(b=>b.onclick=()=>{S.stockFirms=S.stockFirms.filter(id=>id!==b.dataset.removeStock);render()});
- renderStockChart('sx-compare',S.stockFirms,true,period,null);
+ $('#sx-index-switch').innerHTML=stockIndexSwitch('sx',true);wireStockIndexSwitch($('#sx-index-switch'),'sx',render);renderStockChart('sx-compare',S.stockFirms,stockIndexShown('sx',true),period,null);
  const first=all[0],final=all.at(-1),rows=ids.filter(id=>s.prices[id][final]!=null).map(id=>({id,price:s.prices[id][final],cap:s.prices[id][final]*(D.meta.shares_per_firm||1000000),change:s.prices[id][first]>0?s.prices[id][final]/s.prices[id][first]-1:null}));
  const name=r=>`<a href="#firms" data-firm="${esc(r.id)}">${actorLabel(r.id)}</a>`;
  $('#sx-top').innerHTML='<thead><tr><th>Name</th><th>Stufe</th><th>Kurs</th><th>Veränderung</th><th>Börsenwert</th></tr></thead><tbody>'+rows.sort((a,b)=>b.cap-a.cap).slice(0,10).map(r=>`<tr class="click" tabindex="0" data-stock-add="${esc(r.id)}"><td>${name(r)}</td><td>${esc(fmGroupLabel(fmGroup(firm(r.id))))}</td><td class="num" data-value="${r.price}">${nf(r.price,4)} CHF</td><td class="num" data-value="${r.change==null?'':(r.change)*100}">${pct(r.change)}</td><td class="num" data-value="${r.cap}">${chf(r.cap)}</td></tr>`).join('')+(rows.length?'':'<tr><td colspan="5">Keine kotierten Firmen am Ende des Zeitraums.</td></tr>')+'</tbody>';
@@ -853,6 +857,7 @@ const VIEWS={chronicle:renderChronicle,map:renderMap,overview:renderOverview,mar
 function render(){destroy();VIEWS[S.tab]()}
 showTab(location.hash.slice(1)||'overview');viewHistory.push(viewSnapshot());viewIndex=0;viewReady=true;history.replaceState({dashboardView:0},'', '#'+S.tab);history.scrollRestoration='manual';backState();
 __TABLE_FILTERS__
+__STOCK_COMPARE__
 </script></body></html>'''
 
 
