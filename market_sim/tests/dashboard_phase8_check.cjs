@@ -29,7 +29,7 @@ const context = {
   bankActors:()=>({}),FM_GROUPS:['retailer'],fmGroup:f=>f.stage,fmGroupLabel:String,
   navigateView:change=>change(),sumBy:(a,k)=>a.reduce((n,r)=>n+(r[k]||0),0),
   pal: () => ['red', 'blue', 'green', 'orange', 'purple', 'cyan'], stageColor: () => ({retailer: 'red'}),
-  firm: id => firms[id], fname: id => firms[id]?.name || id, firmProfit: id => firms[id].yearly[2].profit,
+  firm: id => firms[id], fname: id => firms[id]?.name || id, actorLabel: id => String(firms[id]?.name || id).replaceAll('<', '&lt;').replaceAll('>', '&gt;'), firmProfit: id => firms[id].yearly[2].profit,
   inRange: year => year >= 1 && year <= 3, empty: text => text,
   esc: value => String(value ?? '').replaceAll('<', '&lt;').replaceAll('>', '&gt;'),
   chf: String, pct: String, nf: String, kpi: text => text,

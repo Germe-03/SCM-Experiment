@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import random
 
 from market_sim.config import BankingConfig, CentralBankConfig
-from market_sim.kpi import BankAnnualReport
+from market_sim.kpi import BankAnnualReport, chf
 
 
 @dataclass
@@ -136,7 +136,7 @@ class BankingSystem:
         self.rejected_year[firm_id] = year
         bank.credit_rejections += 1
         self.credit_events.append({"year": year, "day": day, "firm": firm_id,
-            "event": "credit_rejected", "details": f"{bank.name}: Kredit abgelehnt, Linie {line:,.2f} CHF"})
+            "event": "credit_rejected", "details": f"{bank.name}: Kredit abgelehnt, Linie {chf(line)}"})
 
     def add_firm(self, firm_id: str) -> None:
         if firm_id in self.accounts:
@@ -252,13 +252,13 @@ class BankingSystem:
                 new_bank = self.banks[new]
 
             events.append({"year": year, "day": day, "firm": firm_id, "event": "bank_switched",
-                           "details": f"{bank.name} ist pleite: {loss:,.0f} CHF Guthaben verloren "
+                           "details": f"{bank.name} ist pleite: {chf(loss)} Guthaben verloren "
                                       f"(nur {insured_share:.0%} gesichert), neue Bank {new_bank.name}"})
 
         events.append({"year": year, "day": day, "firm": bank.id, "event": "bank_failed",
                        "details": f"{bank.name} ist pleite: {customers} Kunden, Einlagen "
-                                  f"{deposits:,.0f} CHF, davon {insured_share:.0%} gesichert, "
-                                  f"Verlust der Firmen {total_loss:,.0f} CHF"})
+                                  f"{chf(deposits)}, davon {insured_share:.0%} gesichert, "
+                                  f"Verlust der Firmen {chf(total_loss)}"})
         self.failures.append({"year": year, "bank_id": bank.id, "customers": customers,
                               "deposits": deposits, "firm_losses": total_loss})
 
@@ -302,7 +302,7 @@ class BankingSystem:
         equity = self.start_equity * price_index
         self.banks[bank_id] = CommercialBank(bank_id, name, margin, equity, founded_year=year)
         events.append({"year": year, "day": day, "firm": bank_id, "event": "bank_entry",
-                       "details": f"{name} gegründet, Eigenkapital {equity:,.0f} CHF, "
+                       "details": f"{name} gegründet, Eigenkapital {chf(equity)}, "
                                   f"Marge {margin:.2%}"})
         # Firms left without any bank (all failed) become customers of the newcomer; old debt stays behind.
         for firm_id in sorted(self.accounts):
@@ -325,7 +325,7 @@ class BankingSystem:
             if payout > 0:
                 bank.equity -= payout
                 events.append({"year": year, "day": day, "firm": bank.id, "event": "bank_payout",
-                               "details": f"{bank.name}: Ausschüttung {payout:,.2f} CHF verlässt das System"})
+                               "details": f"{bank.name}: Ausschüttung {chf(payout)} verlässt das System"})
         self.resolve_failures(runtimes, year, day, events)
         self.enter_bank(runtimes, price_index, year, day, events)
         self.open_second_accounts(runtimes, bank_config, price_index, year, day, events)

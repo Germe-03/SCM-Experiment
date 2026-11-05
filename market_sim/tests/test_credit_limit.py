@@ -29,7 +29,7 @@ def test_undercapitalized_bank_keeps_debt_but_grants_no_new_credit():
     assert budget(system, firms) == 0
     assert firms["a"].cash == -100
     assert system.banks["B1"].loans == 100
-    assert "100.00" in system.credit_events[0]["details"]
+    assert "100 CHF" in system.credit_events[0]["details"]
     firms["a"].cash = -150  # wages and interest can create arrears
     assert budget(system, firms) == 0
     assert firms["a"].cash == -150

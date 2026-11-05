@@ -18,7 +18,7 @@ const context = {D, S, range, $, $$: selector => selector==='#sx-period button'?
   fmGroup:f=>f?.channel==='restaurant'?'restaurant':f?.stage, fmGroupLabel:g=>g==='bank'?'Banken':g, catLabel:()=> '–',
   stageColor:()=>({}), kpi:(label,value)=>label+': '+value, sumBy:(a,k)=>a.reduce((n,r)=>n+(r[k]||0),0),
   renderFirmDetail:()=>{}, wireFirmLinks:()=>{}, openTab:tab=>{S.tab=tab},
-  navigateView:change=>change(), showTab:tab=>{S.tab=tab},
+  navigateView:change=>change(), showTab:tab=>{S.tab=tab}, hideStructure(){S.structure=false},
   nf: String, chf: String, pct: String, empty: String, fmtAxis: () => ({}),
   pal: () => ['red','blue','green','orange','purple','cyan','pink','black'],
   chart: (id, cfg) => charts.set(id, cfg), lines: (id, series) => charts.set(id, series),

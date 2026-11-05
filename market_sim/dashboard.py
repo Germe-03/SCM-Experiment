@@ -21,7 +21,8 @@ def write_dashboard_html(data: dict, path: str | Path) -> Path:
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
     payload = json.dumps(data, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
-    html = _HTML.replace("__DATA__", payload).replace("__CHART_JS__", CHART_JS_URL)
+    filters = Path(__file__).with_name("dashboard_filters.js").read_text(encoding="utf-8")
+    html = _HTML.replace("__DATA__", payload).replace("__CHART_JS__", CHART_JS_URL).replace("__TABLE_FILTERS__", filters)
     target.write_text(html, encoding="utf-8")
     return target
 
@@ -90,6 +91,7 @@ td.num,th.num{text-align:right}tbody tr.click{cursor:pointer}tbody tr.click:hove
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
 @media(max-width:900px){.grid,.split{grid-template-columns:1fr}.card.wide{grid-column:auto}main{padding:12px}.bar{padding:10px 12px}}
 .compare-layout{display:grid;grid-template-columns:280px minmax(0,1fr);gap:20px}.compare-layout>div{min-width:0}.compare-layout .table-wrap{max-height:none;margin-bottom:80px}.compare-layout aside{max-height:760px;overflow:auto}.compare-layout label.firm-choice{display:block;padding:7px 0}.compare-layout input[type=search]{width:100%;margin:8px 0}.best{font-weight:700;background:var(--soft)}.structure svg{min-width:900px;width:100%}.structure svg text{fill:var(--ink)}.structure [data-firm]{cursor:pointer}.structure [data-firm]:focus rect{stroke:var(--ink);stroke-width:3}@media(max-width:900px){.compare-layout{grid-template-columns:1fr}}
+#structure{width:min(1100px,95vw);max-height:90vh;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:14px;padding:20px}#structure::backdrop{background:#0008}
 body:has(dialog[open]){overflow:hidden}
 #flow{width:min(1040px,96vw);max-height:94vh;overflow:auto;overscroll-behavior:contain;border:1px solid var(--line);border-radius:14px;background:var(--panel);color:inherit;padding:18px 22px;box-shadow:0 8px 30px #0003}
 #flow::backdrop{background:#0006}.flow-head{display:flex;gap:8px;align-items:center}.flow-head h3{margin:0;margin-right:auto}
@@ -97,6 +99,7 @@ body:has(dialog[open]){overflow:hidden}
 #flow-detail h4{margin:6px 0}.flow-row{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(80px,1fr) 7.5em;gap:12px;align-items:center;padding:5px 0;border-top:1px solid var(--line)}
 .flow-bar{height:8px;border-radius:4px;background:var(--soft)}.flow-bar span{display:block;height:8px;border-radius:4px}.flow-row .num{font-variant-numeric:tabular-nums;white-space:nowrap;text-align:right}
 #view-back{position:fixed;left:20px;bottom:20px;width:48px;height:48px;border-radius:999px;box-shadow:var(--shadow);z-index:20;font-size:24px;padding:0}#view-back:disabled{opacity:.35;cursor:default}#cp-filters{display:grid;gap:8px}#cp-filters label{display:grid;gap:3px}#cp-product-label[hidden]{display:none}.flow-row .num{white-space:normal}#market-people{margin-top:28px}@media(max-width:900px){main{padding-bottom:100px}}
+.column-sort{font:inherit;font-weight:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:4px}.column-filter-button{vertical-align:middle;border:1px solid transparent;border-radius:5px;background:none;color:var(--muted);padding:6px;cursor:pointer}.column-filter-button.active{color:var(--brand-ink);background:var(--brand);border-color:currentColor}.column-filter-panel{position:fixed;z-index:100;width:280px;max-height:320px;overflow:auto;box-sizing:border-box;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--ink);box-shadow:var(--shadow)}.column-filter-panel input[type=search],.column-filter-panel input[type=number]{width:100%;box-sizing:border-box;margin:4px 0 10px}.column-options{max-height:180px;overflow:auto;margin-bottom:10px}.column-options label{display:block;padding:5px}.column-options label[hidden],tr[hidden],.filter-summary[hidden]{display:none}.filter-summary{margin:10px 0;display:flex;gap:12px;align-items:center}button:focus-visible,input:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
 </style></head><body>
 <header class="top">
  <div class="bar">
@@ -112,7 +115,6 @@ body:has(dialog[open]){overflow:hidden}
   <button role="tab" data-tab="market">Markt &amp; Kunden</button>
   <button role="tab" data-tab="map">Karte</button>
   <button role="tab" data-tab="firms">Firmen</button>
-  <button role="tab" data-tab="structure">Marktaufbau</button>
   <button role="tab" data-tab="compare">Vergleich</button>
   <button role="tab" data-tab="chain">Lieferkette</button>
   <button role="tab" data-tab="finance">Finanzen</button>
@@ -149,6 +151,7 @@ body:has(dialog[open]){overflow:hidden}
   <div class="card"><h3>Marketing und Bekanntheit</h3><p class="hint">Ausgaben aller Firmen und Bekanntheit der vier bekanntesten Marken.</p><div class="chart"><canvas id="mk-marketing"></canvas></div></div>
   <div class="card wide"><h3>Trends</h3><ul class="list" id="mk-trends"></ul></div>
  </div>
+<div class="card"><h3>Was es zu kaufen gibt</h3><div id="ms-brands"></div></div>
 <section id="market-people" aria-labelledby="people-title">
  <h2 id="people-title">Bevölkerung</h2><p class="lead">Die 30 Kundenklassen im letzten Jahr des Zeitraums. Klicke auf eine Klasse, um zwei typische Personen kennenzulernen.</p>
  <div class="card" style="margin-bottom:16px"><div class="table-wrap" style="max-height:none"><table id="pp-grid" class="heat"></table></div><p class="hint" style="margin-top:8px">Zahl oben: Personen. Unten: Anteil der Nachfrage, die gekauft wurde, und Lieblingskategorie.</p></div>
@@ -163,7 +166,7 @@ body:has(dialog[open]){overflow:hidden}
 </section>
 
 <section role="tabpanel" id="tab-firms">
- <h2>Firmen</h2><p class="lead">Alle Firmen, auch ausgeschiedene. Klicke auf eine Zeile für die Details.</p>
+ <button class="btn" id="structure-open" aria-haspopup="dialog" aria-controls="structure" style="float:right">Marktaufbau</button><h2>Firmen</h2><p class="lead">Alle Firmen, auch ausgeschiedene. Klicke auf eine Zeile für die Details.</p>
  <div class="filters">
   <input type="search" id="fm-search" placeholder="Firma suchen …" aria-label="Firma suchen">
   <div class="chips" id="fm-stage" role="group" aria-label="Stufe"></div>
@@ -172,12 +175,7 @@ body:has(dialog[open]){overflow:hidden}
  <div class="table-wrap"><table id="fm-table"></table></div>
  <div id="fm-detail" style="margin-top:20px"></div>
 </section>
-<section role="tabpanel" id="tab-structure">
- <h2>Marktaufbau</h2><p class="lead">Firmen von der Gründung bis zum Austritt. Wähle einen Balken für die Firmendetails.</p>
- <div class="card"><h3>Was es zu kaufen gibt</h3><div id="ms-brands"></div></div>
- <p class="hint" id="ms-legend"></p>
- <div class="table-wrap structure" id="ms-timeline" style="max-height:none"></div>
-</section>
+
 <section role="tabpanel" id="tab-compare">
  <h2>Vergleich</h2><p class="lead">Wähle Firmen aus und vergleiche ihre Entwicklung.</p>
  <div class="compare-layout">
@@ -276,6 +274,7 @@ body:has(dialog[open]){overflow:hidden}
  <div id="ch-list"></div>
 </section>
 </main>
+<dialog id="structure" aria-labelledby="structure-title"><div class="flow-head"><h3 id="structure-title">Marktaufbau</h3><button class="btn" id="structure-close" aria-label="Marktaufbau schliessen">✕</button></div><p class="hint">Von der Gründung bis zum Austritt. Wähle einen Balken für die Details. Esc schliesst das Fenster.</p><p class="hint" id="ms-legend"></p><div class="table-wrap structure" id="ms-timeline" style="max-height:none"></div></dialog>
 <dialog id="flow" aria-labelledby="flow-title"><div class="flow-head"><h3 id="flow-title"></h3><button class="btn" id="flow-prev" aria-label="Jahr davor">‹</button><button class="btn" id="flow-next" aria-label="Jahr danach">›</button><button class="btn" id="flow-close" aria-label="Schliessen">✕</button></div><div id="flow-body"></div><div id="flow-detail"></div><p class="hint" style="margin-top:10px">Schliessen mit Esc, Jahr wechseln mit den Pfeiltasten.</p></dialog>
 <button id="view-back" class="btn primary" aria-label="Zurück" title="Zurück" disabled>←</button>
 <button id="chat-open" class="btn primary" aria-haspopup="dialog" aria-controls="chat" style="position:fixed;right:20px;bottom:20px;border-radius:999px;padding:12px 18px;box-shadow:var(--shadow);z-index:20">💬 Fragen</button>
@@ -297,10 +296,10 @@ const TREND={none:'kein Trend',craft_welle:'Craft-Welle',alkoholfrei:'Alkoholfre
 const trendText=d=>String(d).split(/->|→/).map(x=>TREND[x.trim()]||x.trim()).join(' → ');
 const REGION={genfersee:'Genferseeregion',bern:'Bern',jura_freiburg:'Jura/Freiburg/Neuenburg',nordwestschweiz:'Nordwestschweiz',zuerich:'Zürich',ostschweiz:'Ostschweiz',zentralschweiz:'Zentralschweiz',tessin:'Tessin'};
 // Firm ids and region keys in event texts become readable names.
-const pretty=t=>String(t??'').replace(/[a-z]+(?:_[a-z0-9]+)*/g,m=>D.firms[m]?.name||REGION[m]||m);
+const pretty=t=>String(t??'').replace(/\b(?:B\d+|[a-z]+(?:_[a-z0-9]+)*)\b/g,m=>D.firms[m]?.name||bankActors()['bank:'+m]?.name||REGION[m]||m);
 Object.assign(EVENT,{policy_rate_changed:'Leitzins geändert',credit_rejected:'Kredit abgelehnt',account_opened:'Zweitkonto eröffnet',bank_switched:'Bankwechsel',bank_failed:'Bankpleite',bank_entry:'Neue Bank',bank_payout:'Bank schüttet aus',exchange_opened:'Börse eröffnet',listed:'Börsengang',delisted:'Dekotiert',stock_crash:'Börsencrash'});
 const KEY_EVENTS=new Set(['law_enacted','trend_change','recession','raw_material_shortage','cost_shock','poisoning','breakup','wage_push']);
-const firm=id=>D.firms[id],fname=id=>firm(id)?.name||id||'Markt';
+const firm=id=>D.firms[id],fname=id=>firm(id)?.name||bankActors()[id]?.name||bankActors()['bank:'+id]?.name||id||'Markt';
 const stageLabel=f=>f?.channel==='restaurant'?'Gastronomie':STAGE[f?.stage]||'';
 const nf=(v,d=0)=>v==null||isNaN(v)?'—':new Intl.NumberFormat('de-CH',{maximumFractionDigits:d}).format(v);
 const pct=v=>v==null||isNaN(v)?'—':new Intl.NumberFormat('de-CH',{style:'percent',maximumFractionDigits:1}).format(v);
@@ -343,22 +342,30 @@ const tabs=$$('nav.tabs button');
 // Keep the same view snapshots in our list and browser history. Scroll is updated
 // before each action, and while scrolling so native Back restores the last position.
 const viewHistory=[];let viewIndex=-1,restoringView=false,viewReady=false;
-function viewSnapshot(){return {tab:S.tab,fmFirm:S.fmFirm,cmp:[...S.cmp],flow:S.flow?{...S.flow}:null,range:{...range},scroll:window.scrollY,flowScroll:$('#flow').scrollTop}}
+function viewSnapshot(){return {tab:S.tab,fmFirm:S.fmFirm,cmp:[...S.cmp],flow:S.flow?{...S.flow}:null,structure:!!S.structure,structureScroll:$('#structure').scrollTop,range:{...range},scroll:window.scrollY,flowScroll:$('#flow').scrollTop}}
 function rememberView(){if(!viewReady||restoringView)return;viewHistory[viewIndex]=viewSnapshot();history.replaceState({dashboardView:viewIndex},'', '#'+S.tab)}
-function backState(){const button=$('#view-back'),parent=$('#flow').open?$('#flow'):document.body;if(button.parentElement!==parent)parent.appendChild(button);button.disabled=viewIndex<=0}
+function backState(){const button=$('#view-back'),parent=$('#structure').open?$('#structure'):$('#flow').open?$('#flow'):document.body;if(button.parentElement!==parent)parent.appendChild(button);button.disabled=viewIndex<=0}
 function navigateView(change){if(restoringView){change();return}rememberView();change();if(!viewReady)return;viewHistory.splice(viewIndex+1);viewHistory.push(viewSnapshot());viewIndex=viewHistory.length-1;history.pushState({dashboardView:viewIndex},'', '#'+S.tab);backState()}
-function showTab(name,focus=false){if(name==='people')name='market';if(!tabs.some(b=>b.dataset.tab===name))name='overview';S.tab=name;
+function showTab(name,focus=false){if(name==='structure'){showTab('firms',focus);renderStructureDialog();return}if(name==='people')name='market';if(!tabs.some(b=>b.dataset.tab===name))name='overview';S.tab=name;
  tabs.forEach(b=>{const on=b.dataset.tab===name;b.setAttribute('aria-selected',on);b.tabIndex=on?0:-1;if(on&&focus)b.focus()});
  $$('section[role=tabpanel]').forEach(p=>p.classList.toggle('active',p.id==='tab-'+name));render()}
-function openTab(name,focus=false){navigateView(()=>{S.flow=null;if($('#flow').open)$('#flow').close();showTab(name,focus);window.scrollTo({top:0,behavior:'instant'})})}
-function restoreView(index){const v=viewHistory[index];if(!v)return;restoringView=true;viewIndex=index;S.fmFirm=v.fmFirm;S.cmp=[...v.cmp];store.set('cmp',S.cmp);range={...v.range};$('#from').value=range.from;$('#to').value=range.to;S.flow=null;if($('#flow').open)$('#flow').close();showTab(v.tab);if(v.flow)openFlow(v.flow.id,v.flow.year,v.flow.sel);backState();requestAnimationFrame(()=>{window.scrollTo({top:v.scroll,behavior:'instant'});$('#flow').scrollTop=v.flowScroll||0;restoringView=false})}
+function openTab(name,focus=false){navigateView(()=>{hideStructure();S.flow=null;if($('#flow').open)$('#flow').close();showTab(name,focus);window.scrollTo({top:0,behavior:'instant'})})}
+function restoreView(index){const v=viewHistory[index];if(!v)return;restoringView=true;viewIndex=index;S.fmFirm=v.fmFirm;S.cmp=[...v.cmp];store.set('cmp',S.cmp);hideStructure();range={...v.range};$('#from').value=range.from;$('#to').value=range.to;S.flow=null;if($('#flow').open)$('#flow').close();showTab(v.tab);if(v.flow)openFlow(v.flow.id,v.flow.year,v.flow.sel);if(v.structure)renderStructureDialog();backState();requestAnimationFrame(()=>{window.scrollTo({top:v.scroll,behavior:'instant'});$('#flow').scrollTop=v.flowScroll||0;$('#structure').scrollTop=v.structureScroll||0;restoringView=false})}
 $('#view-back').onclick=()=>{if(viewIndex>0){rememberView();history.back()}};
 window.addEventListener('scroll',()=>{if(viewReady&&!restoringView)viewHistory[viewIndex]=viewSnapshot()},{passive:true});
 $('#flow').addEventListener('scroll',()=>{if(viewReady&&!restoringView)viewHistory[viewIndex]=viewSnapshot()},{passive:true});
 tabs.forEach((b,i)=>{b.id='t-'+b.dataset.tab;b.setAttribute('aria-controls','tab-'+b.dataset.tab);b.onclick=()=>openTab(b.dataset.tab);
  b.onkeydown=e=>{const k={ArrowRight:1,ArrowLeft:-1}[e.key];if(k&&!e.altKey){e.preventDefault();openTab(tabs[(i+k+tabs.length)%tabs.length].dataset.tab,true)}}});
 window.addEventListener('popstate',e=>{if(Number.isInteger(e.state?.dashboardView)&&viewHistory[e.state.dashboardView])restoreView(e.state.dashboardView)});
-window.addEventListener('hashchange',()=>{const name=location.hash.slice(1)==='people'?'market':location.hash.slice(1);if(name===S.tab)return;rememberView();showTab(name);S.flow=null;if($('#flow').open)$('#flow').close();window.scrollTo({top:0,behavior:'instant'});viewHistory.splice(viewIndex+1);viewHistory.push(viewSnapshot());viewIndex=viewHistory.length-1;history.replaceState({dashboardView:viewIndex},'', '#'+S.tab);backState()});
+window.addEventListener('hashchange',()=>{const name=location.hash.slice(1)==='people'?'market':location.hash.slice(1);if(name===S.tab)return;rememberView();hideStructure();showTab(name);S.flow=null;if($('#flow').open)$('#flow').close();window.scrollTo({top:0,behavior:'instant'});viewHistory.splice(viewIndex+1);viewHistory.push(viewSnapshot());viewIndex=viewHistory.length-1;history.replaceState({dashboardView:viewIndex},'', '#'+S.tab);backState()});
+
+function hideStructure(){S.structure=false;if($('#structure').open)$('#structure').close()}
+function renderStructureDialog(){S.structure=true;renderStructure();if(!$('#structure').open)$('#structure').showModal()}
+function openStructure(){navigateView(()=>{showTab('firms');renderStructureDialog()})}
+function closeStructure(){navigateView(hideStructure)}
+$('#structure-open').onclick=openStructure;$('#structure-close').onclick=closeStructure;
+$('#structure').addEventListener('cancel',e=>{e.preventDefault();closeStructure()});
+$('#structure').addEventListener('scroll',()=>{if(viewReady&&!restoringView)viewHistory[viewIndex]=viewSnapshot()},{passive:true});
 
 // --- charts --------------------------------------------------------------
 const charts=[];
@@ -384,6 +391,7 @@ const gastroShare=(y,get,strict)=>{const g=groupSum('restaurant',y,get,strict),a
 const byGroup=(prefix,get,fmt,strict)=>FM_GROUPS.filter(g=>g!=='bank').map(g=>({label:fmGroupLabel(g),color:stageColor()[g],fmt,
  get:x=>g==='restaurant'?x[prefix+'retailer']*gastroShare(x.year,get,strict):g==='retailer'?x[prefix+'retailer']*(1-gastroShare(x.year,get,strict)):x[prefix+g]}));
 
+document.addEventListener('click',e=>{const link=e.target.closest('[data-bank]');if(link){e.preventDefault();e.stopPropagation();showActor('bank:'+link.dataset.bank)}},true);
 // --- helpers -------------------------------------------------------------
 const sumBy=(arr,k)=>arr.reduce((a,x)=>a+(+x[k]||0),0);
 const kpi=(label,value,note='',cls='')=>`<div class="kpi"><span>${esc(label)}</span><b>${value}</b><small class="${cls}">${note}</small></div>`;
@@ -408,7 +416,7 @@ function renderOverview(){const s=sys(),first=s[0],last=s.at(-1);const e=evs();
  lines('ov-cats',Object.keys(CAT).map(c=>({label:CAT[c],get:x=>x['share_'+c],color:catColor()[c]})),{fmt:'pct',stacked:true,area:true});
  const ranked=Object.keys(D.firms).map(id=>[id,firmProfit(id)]).sort((a,b)=>b[1]-a[1]);
  const head='<thead><tr><th>Firma</th><th>Stufe</th><th class="num">Gewinn</th><th>Status</th></tr></thead>';
- const row=([id,p])=>`<tr class="click" data-firm="${esc(id)}"><td><span class="dot" style="background:${stageColor()[firm(id).stage]}"></span>${esc(fname(id))}</td><td>${STAGE[firm(id).stage]}</td><td class="num">${chf(p)}</td><td>${status(firm(id))}</td></tr>`;
+ const row=([id,p])=>`<tr class="click" data-firm="${esc(id)}"><td><span class="dot" style="background:${stageColor()[firm(id).stage]}"></span>${actorLabel(id)}</td><td>${STAGE[firm(id).stage]}</td><td class="num" data-value="${p}">${chf(p)}</td><td>${status(firm(id))}</td></tr>`;
  $('#ov-top').innerHTML=head+'<tbody>'+ranked.slice(0,6).map(row).join('')+'</tbody>';
  $('#ov-flop').innerHTML=head+'<tbody>'+ranked.slice(-6).reverse().map(row).join('')+'</tbody>';
  wireFirmLinks($('#ov-top'));wireFirmLinks($('#ov-flop'));
@@ -446,10 +454,11 @@ function bankActors(){const actors={};for(const r of D.banks||[]){const key='ban
  if(!actors[key])actors[key]={id:key,bank_id:r.bank_id,name:r.name,stage:'bank',entry_year:Math.max(1,r.founded_year||r.year),exit_year:null,yearly:[]};
  const f=actors[key];f.yearly.push(r);if(!r.active)f.exit_year=f.exit_year==null?r.year:Math.min(f.exit_year,r.year)}
  for(const f of Object.values(actors))f.yearly.sort((a,b)=>a.year-b.year);return actors}
-function showActor(id){navigateView(()=>{S.fmFirm=id;S.flow=null;if($('#flow').open)$('#flow').close();showTab('firms');$('#fm-detail').scrollIntoView({block:'start',behavior:'instant'})})}
+function showActor(id){navigateView(()=>{hideStructure();S.fmFirm=bankActors()['bank:'+id]?'bank:'+id:id;S.flow=null;if($('#flow').open)$('#flow').close();showTab('firms');$('#fm-detail').scrollIntoView({block:'start',behavior:'instant'})})}
 function closeActor(){navigateView(()=>{S.fmFirm=null;renderFirms()})}
 function bankRatio(b){const assets=Math.max(b.loans||0,(b.deposits||0)+(b.equity||0));return assets>0?b.equity/assets:null}
 function bankLink(id,name){return `<a href="#firms" data-bank="${esc(id)}">${esc(name)}</a>`}
+function actorLabel(id){const bank=bankActors()[id]||bankActors()['bank:'+id];return bank?bankLink(bank.bank_id,bank.name):esc(fname(id))}
 function wireBankLinks(root){root.querySelectorAll('[data-bank]').forEach(r=>{r.tabIndex=0;const go=e=>{e?.preventDefault();e?.stopPropagation();showActor('bank:'+r.dataset.bank)};r.onclick=go;r.onkeydown=e=>{if(e.key==='Enter'||e.key===' ')go(e)}})}
 function eventList(rows){return rows.length?rows.slice().reverse().map(e=>`<li><span class="yr">Jahr ${e.year}</span><span><b>${esc(EVENT[e.event]||e.event)}</b> ${esc(pretty(e.details))}</span></li>`).join(''):'<li>Keine Ereignisse im Zeitraum.</li>'}
 function renderFirms(){
@@ -463,7 +472,7 @@ function renderFirms(){
  let ids=Object.keys(actors).filter(id=>{const f=actors[id];return f.entry_year<=range.to&&S.fmStage.has(fmGroup(f))&&(S.fmStatus==='all'||(S.fmStatus==='active')===!exited(f))&&(!q||f.name.toLowerCase().includes(q)||id.toLowerCase().includes(q))});
  const val=(id,k)=>{const f=actors[id],bank=f.stage==='bank',y=f.yearly.filter(r=>inRange(r.year)),l=y.at(-1)||{},gone=exited(f)&&f.exit_year<range.from;return{name:f.name,stage:FM_GROUPS.indexOf(fmGroup(f)),category:catLabel(f),region:f.region||'–',arch:bank?'–':l.archetype||f.archetype,revenue:gone?null:sumBy(y,'revenue'),profit:gone?null:sumBy(y,'profit'),cash:bank?l.equity:l.cash,share:bank?l.deposit_share:l.market_share,status:exited(f)?f.exit_year:0}[k]};
  const [sk,sd]=S.fmSort;ids.sort((a,b)=>{const x=val(a,sk),y=val(b,sk);return x==null?y==null?0:1:y==null?-1:(x>y?1:x<y?-1:0)*sd});
- $('#fm-table').innerHTML=`<thead><tr>${cols.map(([k,l,n])=>`<th class="sort ${n?'num':''} ${sk===k?(sd>0?'asc':'desc'):''}" data-k="${k}" tabindex="0">${l}</th>`).join('')}</tr></thead><tbody>${ids.length?ids.map(id=>{const f=actors[id],bank=f.stage==='bank';return`<tr class="click ${S.fmFirm===id?'current':''}" data-actor="${esc(id)}"><td><span class="dot" style="background:${stageColor()[fmGroup(f)]}"></span>${esc(f.name)}</td><td>${esc(fmGroupLabel(fmGroup(f)))}</td><td>${esc(catLabel(f))}${f.importer?' (Import)':''}</td><td>${esc(REGION[f.region]||val(id,'region'))}</td><td>${esc(ARCH[val(id,'arch')]||val(id,'arch'))}</td><td class="num">${chf(val(id,'revenue'))}</td><td class="num">${chf(val(id,'profit'))}</td><td class="num">${chf(val(id,'cash'))}</td><td class="num">${pct(val(id,'share'))}${bank?'<small> Einlagen</small>':''}</td><td><span class="badge ${exited(f)?'off':'ok'}">${exited(f)?(bank?'pleite':'ausgeschieden')+' in Jahr '+f.exit_year:'aktiv'}</span><small> im Markt seit Jahr ${f.entry_year}</small></td></tr>`}).join(''):`<tr><td colspan="10">${empty('Keine Firma oder Bank passt zu Suche und Filter.')}</td></tr>`}</tbody>`;
+ $('#fm-table').innerHTML=`<thead><tr>${cols.map(([k,l,n])=>`<th class="sort ${n?'num':''} ${sk===k?(sd>0?'asc':'desc'):''}" data-k="${k}" tabindex="0">${l}</th>`).join('')}</tr></thead><tbody>${ids.length?ids.map(id=>{const f=actors[id],bank=f.stage==='bank';return`<tr class="click ${S.fmFirm===id?'current':''}" data-actor="${esc(id)}"><td><span class="dot" style="background:${stageColor()[fmGroup(f)]}"></span>${esc(f.name)}</td><td>${esc(fmGroupLabel(fmGroup(f)))}</td><td>${esc(catLabel(f))}${f.importer?' (Import)':''}</td><td>${esc(REGION[f.region]||val(id,'region'))}</td><td>${esc(ARCH[val(id,'arch')]||val(id,'arch'))}</td><td class="num" data-value="${val(id,'revenue')}">${chf(val(id,'revenue'))}</td><td class="num" data-value="${val(id,'profit')}">${chf(val(id,'profit'))}</td><td class="num" data-value="${val(id,'cash')}">${chf(val(id,'cash'))}</td><td class="num" data-value="${val(id,'share')==null?'':(val(id,'share'))*100}">${pct(val(id,'share'))}${bank?'<small> Einlagen</small>':''}</td><td><span class="badge ${exited(f)?'off':'ok'}">${exited(f)?(bank?'pleite':'ausgeschieden')+' in Jahr '+f.exit_year:'aktiv'}</span><small> im Markt seit Jahr ${f.entry_year}</small></td></tr>`}).join(''):`<tr><td colspan="10">${empty('Keine Firma oder Bank passt zu Suche und Filter.')}</td></tr>`}</tbody>`;
  $$('#fm-table th.sort').forEach(th=>{const go=()=>{const k=th.dataset.k;S.fmSort=[k,S.fmSort[0]===k?-S.fmSort[1]:(['name','stage','category','region','arch'].includes(k)?1:-1)];renderFirms()};th.onclick=go;th.onkeydown=e=>{if(e.key==='Enter')go()}});
  $$('#fm-table tr[data-actor]').forEach(r=>{r.tabIndex=0;const go=()=>{showActor(r.dataset.actor)};r.onclick=go;r.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();go()}}});
  renderFirmDetail();$$('#fm-detail [data-close-actor]').forEach(b=>b.onclick=closeActor)}
@@ -485,7 +494,7 @@ function renderBankDetail(id){const root=$('#fm-detail'),f=bankActors()['bank:'+
  const costs=[['interest_income','Kreditzinsen',1],['fee_income','Gebühren',1],['interest_expense','Einlagezinsen',-1],['refinancing_cost','Refinanzierung SNB',-1],['operating_cost','Betriebskosten',-1],['write_offs','Abschreibungen',-1]];
  chart('bd-income',{type:'bar',data:{labels:y.map(r=>r.year),datasets:costs.map(([key,label,sign],i)=>({label,data:y.map(r=>sign*(r[key]||0)),backgroundColor:pal()[i],stack:'income'}))},options:{scales:{x:{stacked:true},y:{stacked:true,...fmtAxis('chf')}},plugins:{tooltip:{callbacks:{label:c=>c.dataset.label+': '+chf(c.parsed.y)}}}}});
  const end=y.find(r=>r.year===range.to),customers=end?.customer_ids||[];
- $('#bd-customer-list').innerHTML=customers.length?customers.map(fid=>`<li><a href="#firms" data-firm="${esc(fid)}">${esc(fname(fid))}</a><span class="badge">${(end.house_customer_ids||[]).includes(fid)?'Hausbank':'Zweitkonto'}</span></li>`).join(''):'<li>Keine Kunden im letzten Jahr des Zeitraums.</li>';wireFirmLinks($('#bd-customer-list'));
+ $('#bd-customer-list').innerHTML=customers.length?customers.map(fid=>`<li><a href="#firms" data-firm="${esc(fid)}">${actorLabel(fid)}</a><span class="badge">${(end.house_customer_ids||[]).includes(fid)?'Hausbank':'Zweitkonto'}</span></li>`).join(''):'<li>Keine Kunden im letzten Jahr des Zeitraums.</li>';wireFirmLinks($('#bd-customer-list'));
  $('#bd-events').innerHTML=eventList((D.bank_events||[]).filter(e=>e.bank_id===id&&inRange(e.year)))
 }
 function firmBankLine(id){const rows=(D.banks||[]).filter(b=>b.year===range.to&&(b.customer_ids||[]).includes(id));rows.sort((a,b)=>Number((b.house_customer_ids||[]).includes(id))-Number((a.house_customer_ids||[]).includes(id)));
@@ -585,15 +594,15 @@ function renderCompare(){const actors={...D.firms,...bankActors()},actor=id=>act
  $('#cp-summary').innerHTML='<thead><tr><th>Firma</th><th>Letztes Jahr</th><th>Durchschnitt</th><th>Bestes Jahr</th><th>Schlechtestes Jahr</th></tr></thead><tbody>'+stats.map(r=>`<tr><td><span class="dot" style="background:${pal()[cmpColors[r.id]]}"></span>${esc(actorName(r.id))}</td>${r.values.map((v,i)=>`<td class="num ${v!=null&&v===best[i]?'best':''}">${v!=null&&v===best[i]?'<strong>':''}${format(v)}${i>=2&&v!=null?' (Jahr '+r.pairs.find(p=>p[1]===v)[0]+')':''}${v!=null&&v===best[i]?'</strong>':''}</td>`).join('')}</tr>`).join('')+'</tbody>'}
 
 function ledgerHtml(id){const rows=(D.offence_ledger||[]).filter(r=>inRange(r.year)&&(!id||r.firm===id));
- return `<div class="card"><h3>Hat es sich gelohnt?</h3><div class="kpis">${kpi('lohnend:',nf(rows.filter(r=>r.paid_off).length)+' von '+nf(rows.length))}</div><p class="hint">Schaden ist eine Schätzung aus Reputationsverlust und Vorjahresumsatz.</p>${rows.length?`<div class="table-wrap"><table><thead><tr><th>Firma</th><th>Straftat</th><th>Jahr</th><th>Gewinn</th><th>Busse</th><th>Schaden</th><th>Netto</th><th>Urteil</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${esc(fname(r.firm))}</td><td>${esc(({lohndumping:'Lohndumping',pfusch:'Pfusch bei Rohstoffen',steuerhinterziehung:'Steuerhinterziehung'})[r.offence]||r.offence)}</td><td>${r.year}</td>${['gain','fine','damage','net'].map(k=>`<td class="num">${chf(r[k])}</td>`).join('')}<td><span class="badge ${r.paid_off?'ok':'off'}">${r.paid_off?'lohnend':'nicht lohnend'}</span></td></tr>`).join('')}</tbody></table></div>`:empty('Keine Straftaten im Zeitraum.')}</div>`}
+ return `<div class="card"><h3>Hat es sich gelohnt?</h3><div class="kpis">${kpi('lohnend:',nf(rows.filter(r=>r.paid_off).length)+' von '+nf(rows.length))}</div><p class="hint">Schaden ist eine Schätzung aus Reputationsverlust und Vorjahresumsatz.</p>${rows.length?`<div class="table-wrap"><table id="ledger-${id||'state'}"><thead><tr><th>Firma</th><th>Straftat</th><th>Jahr</th><th>Gewinn</th><th>Busse</th><th>Schaden</th><th>Netto</th><th>Urteil</th></tr></thead><tbody>${rows.map(r=>`<tr data-paid-off="${r.paid_off}"><td>${actorLabel(r.firm)}</td><td>${esc(({lohndumping:'Lohndumping',pfusch:'Pfusch bei Rohstoffen',steuerhinterziehung:'Steuerhinterziehung'})[r.offence]||r.offence)}</td><td>${r.year}</td>${['gain','fine','damage','net'].map(k=>`<td class="num" data-value="${r[k]}">${chf(r[k])}</td>`).join('')}<td><span class="badge ${r.paid_off?'ok':'off'}">${r.paid_off?'lohnend':'nicht lohnend'}</span></td></tr>`).join('')}</tbody></table></div>`:empty('Keine Straftaten im Zeitraum.')}</div>`}
 
-function renderStructure(){$('#ms-legend').innerHTML=['factory','distributor','wholesaler','retailer'].map(st=>`<span class="dot" style="background:${stageColor()[st]}"></span>${STAGE[st]}`).join(' · ')+' · Austritte: × Konkurs · ◆ Übernahme · ▲ Vergiftung';const brands=new Map();for(const r of D.brands||[]){if(r.year>range.to)continue;const old=brands.get(r.brand);brands.set(r.brand,{...r,first:old?Math.min(old.first,r.year):r.year})}
- $('#ms-brands').innerHTML=Object.entries(CAT).map(([cat,name])=>`<details><summary>${name}</summary><ul class="list">${[...brands.values()].filter(b=>b.category===cat).map(b=>`<li><b>${esc(b.name)}</b> · ${esc(fname(b.owner))} · seit Jahr ${b.first} · ${esc(({cheap:'Discount',standard:'Standard',premium:'Premium'})[b.positioning]||b.positioning)} · ${esc((b.traits||[]).map(t=>({wine:'Wein',spirits:'Spirituosen',lager:'Lager',craft:'Craft',discount:'Discount',import:'Import',alkoholfrei:'Alkoholfrei'})[t]||t).join(', '))}</li>`).join('')||'<li>Keine Marken vorhanden.</li>'}</ul></details>`).join('');
- const groups=[...Object.keys(CAT).map(c=>['Hersteller · '+CAT[c],f=>f.stage==='factory'&&!f.importer&&f.category===c]),['Hersteller · Import',f=>f.stage==='factory'&&f.importer],...['distributor','wholesaler','retailer'].map(st=>[STAGE[st],f=>f.stage===st])];
+function renderStructure(){$('#ms-legend').innerHTML=['factory','distributor','wholesaler','retailer','bank'].map(st=>`<span class="dot" style="background:${stageColor()[st]}"></span>${st==='bank'?'Banken':STAGE[st]}`).join(' · ')+' · Austritte: × Konkurs · ◆ Übernahme · ▲ Vergiftung';const brands=new Map();for(const r of D.brands||[]){if(r.year>range.to)continue;const old=brands.get(r.brand);brands.set(r.brand,{...r,first:old?Math.min(old.first,r.year):r.year})}
+ $('#ms-brands').innerHTML=Object.entries(CAT).map(([cat,name])=>`<details><summary>${name}</summary><ul class="list">${[...brands.values()].filter(b=>b.category===cat).map(b=>`<li><b>${esc(b.name)}</b> · ${actorLabel(b.owner)} · seit Jahr ${b.first} · ${esc(({cheap:'Discount',standard:'Standard',premium:'Premium'})[b.positioning]||b.positioning)} · ${esc((b.traits||[]).map(t=>({wine:'Wein',spirits:'Spirituosen',lager:'Lager',craft:'Craft',discount:'Discount',import:'Import',alkoholfrei:'Alkoholfrei'})[t]||t).join(', '))}</li>`).join('')||'<li>Keine Marken vorhanden.</li>'}</ul></details>`).join('');
+ const groups=[...Object.keys(CAT).map(c=>['Hersteller · '+CAT[c],f=>f.stage==='factory'&&!f.importer&&f.category===c]),['Hersteller · Import',f=>f.stage==='factory'&&f.importer],...['distributor','wholesaler','retailer'].map(st=>[STAGE[st],f=>f.stage===st]),['Banken',f=>f.stage==='bank']];
  const x=y=>290+(y-range.from)*650/Math.max(1,range.to-range.from+1),end=y=>x(y+1);let top=35,svg='';
  for(const y of years.filter(inRange).filter((y,i)=>i%Math.max(1,Math.ceil((range.to-range.from+1)/15))===0))svg+=`<text x="${x(y)}" y="18" font-size="12">${y}</text>`;
  for(const [title,predicate] of groups){svg+=`<text x="10" y="${top}" font-weight="bold">${title}</text>`;top+=25;
-  for(const f of Object.values(D.firms).filter(predicate).filter(f=>f.entry_year<=range.to&&(!f.exit_year||f.exit_year>=range.from))){const start=Math.max(range.from,f.entry_year),last=Math.min(range.to,f.exit_year||D.meta.years),exit=D.events.find(e=>e.firm===f.id&&['bankruptcy','takeover','poisoning'].includes(e.event)),marker={bankruptcy:'×',takeover:'◆',poisoning:'▲'}[exit?.event]||'';
+  for(const f of Object.values({...D.firms,...bankActors()}).filter(predicate).filter(f=>f.entry_year<=range.to&&(!f.exit_year||f.exit_year>=range.from))){const start=Math.max(range.from,f.entry_year),last=Math.min(range.to,f.exit_year||D.meta.years),exit=D.events.find(e=>e.firm===f.id&&['bankruptcy','takeover','poisoning'].includes(e.event)),marker={bankruptcy:'×',takeover:'◆',poisoning:'▲'}[exit?.event]||(f.stage==='bank'&&f.exit_year?'?':'');
    svg+=`<g data-firm="${esc(f.id)}" role="button" aria-label="${esc(f.name)}: Jahr ${f.entry_year} bis ${f.exit_year||D.meta.years}"><title>${esc(f.name)} · ${esc(ARCH[f.archetype]||f.archetype)} · Jahr ${f.entry_year}–${f.exit_year||D.meta.years}${exit?' · '+EVENT[exit.event]:''}</title><text x="10" y="${top+14}" font-size="12">${esc(f.name)}</text><rect x="${x(start)}" y="${top}" width="${Math.max(3,end(last)-x(start)-3)}" height="20" rx="3" fill="${stageColor()[f.stage]}"/>${f.exit_year&&inRange(f.exit_year)?`<text x="${end(last)-12}" y="${top+16}" font-size="18">${marker}</text>`:''}</g>`;top+=28}
   top+=16}
  $('#ms-timeline').innerHTML=`<svg viewBox="0 0 970 ${top}" aria-label="Firmen nach Stufe und Lebensdauer">${svg}</svg>`;wireFirmLinks($('#ms-timeline'))}
@@ -606,7 +615,7 @@ function renderChain(){lines('ch-margin',byStage('margin_'),{fmt:'pct'});lines('
  const s=sys();chart('ch-build',{type:'bar',data:{labels:s.map(x=>x.year),datasets:[{label:'Ausbauten',data:s.map(x=>x.expansions),backgroundColor:pal()[0]+'bb'},{label:'Neue Standorte',data:s.map(x=>x.new_sites),backgroundColor:pal()[2]+'bb'}]},options:{scales:{x:{stacked:true,grid:{display:false}},y:{stacked:true}}}})}
 function renderHoldings(){lines('fi-stakes',[{label:'Gehaltene Beteiligungen',get:x=>x.stakes_held},{label:'Dividenden',get:x=>x.dividends,axis:'y2',fmt:'chf'}]);
  const end=(D.holdings||[]).filter(h=>h.action==null&&h.year===Math.max(...(D.holdings||[]).filter(x=>x.action==null).map(x=>x.year),0));
- $('#fi-holdings').innerHTML='<thead><tr><th>Eigentümer</th><th>Beteiligung an</th><th class="num">Anteil</th><th class="num">Dividenden</th></tr></thead><tbody>'+(end.length?end.sort((a,b)=>b.share-a.share).map(h=>`<tr class="click" data-firm="${esc(h.owner)}"><td>${esc(fname(h.owner))}</td><td>${esc(fname(h.target))}</td><td class="num">${pct(h.share)}</td><td class="num">${chf(h.dividends)}</td></tr>`).join(''):`<tr><td colspan="4">${empty('Am Ende des Laufs hält keine Firma Anteile an einer anderen.')}</td></tr>`)+'</tbody>';wireFirmLinks($('#fi-holdings'))}
+ $('#fi-holdings').innerHTML='<thead><tr><th>Eigentümer</th><th>Beteiligung an</th><th class="num">Anteil</th><th class="num">Dividenden</th></tr></thead><tbody>'+(end.length?end.sort((a,b)=>b.share-a.share).map(h=>`<tr class="click" data-firm="${esc(h.owner)}"><td>${actorLabel(h.owner)}</td><td>${actorLabel(h.target)}</td><td class="num" data-value="${h.share==null?'':(h.share)*100}">${pct(h.share)}</td><td class="num" data-value="${h.dividends}">${chf(h.dividends)}</td></tr>`).join(''):`<tr><td colspan="4">${empty('Am Ende des Laufs hält keine Firma Anteile an einer anderen.')}</td></tr>`)+'</tbody>';wireFirmLinks($('#fi-holdings'))}
 function renderBanks(){
  lines('fi-policy',[{label:'Leitzins',get:x=>x.policy_rate},{label:'Teuerung',get:x=>x.inflation},{label:'Konjunkturlücke',get:x=>x.output_gap}],{fmt:'pct'});
  const history=D.banks||[],rows=history.filter(b=>inRange(b.year)),ids=[...new Set(rows.map(b=>b.bank_id))];
@@ -616,7 +625,7 @@ function renderBanks(){
  $('#fi-bank-year').textContent=year?'Stand: Jahr '+year:'';
  $('#fi-banks').innerHTML='<thead><tr>'+['Name','Kunden','Eigenkapital','Eigenkapitalquote','Kredite','Einlagen','Gewinn','Abschreibungen','Abgelehnte Kredite','Gebühren','Status'].map(n=>`<th>${n}</th>`).join('')+'</tr></thead><tbody>'+(last.length?last.map(b=>{
   const failed=history.filter(r=>r.bank_id===b.bank_id&&!r.active&&r.year<=year).map(r=>r.year),since=failed.length?Math.min(...failed):year;
-  return `<tr><td>${bankLink(b.bank_id,b.name)}</td><td class="num">${nf(b.customers)}</td><td class="num">${chf(b.equity)}</td><td class="num">${pct(bankRatio(b))}</td><td class="num">${chf(b.loans)}</td><td class="num">${chf(b.deposits)}</td><td class="num">${chf(b.profit)}</td><td class="num">${chf(b.write_offs)}</td><td class="num">${nf(b.credit_rejections||0)}</td><td class="num">${chf(b.fee_income||0)}</td><td>${b.active?'aktiv':'pleite seit Jahr '+since}</td></tr>`
+  return `<tr><td>${bankLink(b.bank_id,b.name)}</td><td class="num" data-value="${b.customers}">${nf(b.customers)}</td><td class="num" data-value="${b.equity}">${chf(b.equity)}</td><td class="num" data-value="${bankRatio(b)==null?'':(bankRatio(b))*100}">${pct(bankRatio(b))}</td><td class="num" data-value="${b.loans}">${chf(b.loans)}</td><td class="num" data-value="${b.deposits}">${chf(b.deposits)}</td><td class="num" data-value="${b.profit}">${chf(b.profit)}</td><td class="num" data-value="${b.write_offs}">${chf(b.write_offs)}</td><td class="num" data-value="${b.credit_rejections||0}">${nf(b.credit_rejections||0)}</td><td class="num" data-value="${b.fee_income||0}">${chf(b.fee_income||0)}</td><td>${b.active?'aktiv':'pleite seit Jahr '+since}</td></tr>`
  }).join(''):`<tr><td colspan="11">${empty('Keine Bankberichte für dieses Jahr.')}</td></tr>`)+'</tbody>';wireBankLinks($('#fi-banks'))}
 // Points are closes of calendar buckets within each simulation year.
 function stockPoints(period){const s=D.stocks||{days:[],years:[]},points=s.days.map((_,i)=>i).filter(i=>inRange(s.years[i]));
@@ -652,12 +661,12 @@ function renderStocks(){const s=D.stocks||{days:[],years:[],index:[],prices:{}},
  $('#sx-options').innerHTML=ids.filter(id=>!S.stockFirms.includes(id)).map(id=>`<option value="${esc(fname(id)+' ('+id+')')}"></option>`).join('');
  $('#sx-search').onchange=e=>{const v=e.target.value.trim().toLowerCase(),id=ids.find(id=>(fname(id)+' ('+id+')').toLowerCase()===v||id.toLowerCase()===v||fname(id).toLowerCase()===v);if(id){addStock(id);e.target.value=''}else $('#sx-selection-hint').textContent='Wähle eine Firma aus der Vorschlagsliste.'};
  $('#sx-selection-hint').textContent=`${S.stockFirms.length} von 5 Firmen ausgewählt. Bei späterem Börsengang gilt der erste verfügbare Kurs als Start.`;
- $('#sx-selected').innerHTML=S.stockFirms.map(id=>`<button class="chip" data-remove-stock="${esc(id)}" aria-label="${esc(fname(id))} aus Vergleich entfernen">${esc(fname(id))} ×</button>`).join('');
+ $('#sx-selected').innerHTML=S.stockFirms.map(id=>`<button class="chip" data-remove-stock="${esc(id)}" aria-label="${actorLabel(id)} aus Vergleich entfernen">${actorLabel(id)} ×</button>`).join('');
  $$('#sx-selected button').forEach(b=>b.onclick=()=>{S.stockFirms=S.stockFirms.filter(id=>id!==b.dataset.removeStock);render()});
  renderStockChart('sx-compare',S.stockFirms,true,period,null);
  const first=all[0],final=all.at(-1),rows=ids.filter(id=>s.prices[id][final]!=null).map(id=>({id,price:s.prices[id][final],cap:s.prices[id][final]*(D.meta.shares_per_firm||1000000),change:s.prices[id][first]>0?s.prices[id][final]/s.prices[id][first]-1:null}));
- const name=r=>`<a href="#firms" data-firm="${esc(r.id)}">${esc(fname(r.id))}</a>`;
- $('#sx-top').innerHTML='<thead><tr><th>Name</th><th>Stufe</th><th>Kurs</th><th>Veränderung</th><th>Börsenwert</th></tr></thead><tbody>'+rows.sort((a,b)=>b.cap-a.cap).slice(0,10).map(r=>`<tr class="click" tabindex="0" data-stock-add="${esc(r.id)}"><td>${name(r)}</td><td>${esc(fmGroupLabel(fmGroup(firm(r.id))))}</td><td class="num">${nf(r.price,4)} CHF</td><td class="num">${pct(r.change)}</td><td class="num">${chf(r.cap)}</td></tr>`).join('')+(rows.length?'':'<tr><td colspan="5">Keine kotierten Firmen am Ende des Zeitraums.</td></tr>')+'</tbody>';
+ const name=r=>`<a href="#firms" data-firm="${esc(r.id)}">${actorLabel(r.id)}</a>`;
+ $('#sx-top').innerHTML='<thead><tr><th>Name</th><th>Stufe</th><th>Kurs</th><th>Veränderung</th><th>Börsenwert</th></tr></thead><tbody>'+rows.sort((a,b)=>b.cap-a.cap).slice(0,10).map(r=>`<tr class="click" tabindex="0" data-stock-add="${esc(r.id)}"><td>${name(r)}</td><td>${esc(fmGroupLabel(fmGroup(firm(r.id))))}</td><td class="num" data-value="${r.price}">${nf(r.price,4)} CHF</td><td class="num" data-value="${r.change==null?'':(r.change)*100}">${pct(r.change)}</td><td class="num" data-value="${r.cap}">${chf(r.cap)}</td></tr>`).join('')+(rows.length?'':'<tr><td colspan="5">Keine kotierten Firmen am Ende des Zeitraums.</td></tr>')+'</tbody>';
  $$('#sx-top [data-stock-add]').forEach(r=>{r.onclick=e=>{if(!e.target.closest('[data-firm]'))addStock(r.dataset.stockAdd)};r.onkeydown=e=>{if(e.target===r&&(e.key==='Enter'||e.key===' ')){e.preventDefault();addStock(r.dataset.stockAdd)}}});wireFirmLinks($('#sx-top'));
  const movers=rows.filter(r=>r.change!=null),list=(title,rs)=>'<h4>'+title+'</h4><ul class="list">'+(rs.length?rs.map(r=>`<li>${name(r)} <span>${pct(r.change)}</span></li>`).join(''):'<li>Keine Firmen mit passenden Kursen.</li>')+'</ul>';
  $('#sx-movers').innerHTML=list('Gewinner',movers.filter(r=>r.change>0).sort((a,b)=>b.change-a.change).slice(0,5))+list('Verlierer',movers.filter(r=>r.change<0).sort((a,b)=>a.change-b.change).slice(0,5));wireFirmLinks($('#sx-movers'));
@@ -677,13 +686,13 @@ function renderState(){renderLaws();$('#st-ledger').innerHTML=ledgerHtml();const
  chart('st-fear',{type:'bar',data:{labels:s.map(x=>x.year),datasets:[{label:'Vergiftungen',data:s.map(x=>x.poisonings),backgroundColor:css('--bad')+'cc',yAxisID:'y'},{type:'line',label:'Angst (Nachfrageminus)',data:s.map(x=>x.fear),borderColor:pal()[4],pointRadius:0,yAxisID:'y2'}]},options:{scales:{x:{grid:{display:false}},y:{ticks:{precision:0}},y2:{position:'right',grid:{display:false},...fmtAxis('pct')}}}});
  chart('st-tko',{type:'bar',data:{labels:s.map(x=>x.year),datasets:[{label:'Übernahmen',data:s.map(x=>x.takeovers),backgroundColor:pal()[0]+'bb'},{label:'Verboten',data:s.map(x=>x.takeovers_blocked),backgroundColor:pal()[1]+'bb'},{label:'Zerschlagungen',data:s.map(x=>x.breakups),backgroundColor:pal()[4]+'bb'}]},options:{scales:{x:{grid:{display:false}}}}});
  const e=evs().filter(x=>['offence_detected','poisoning','takeover','breakup'].includes(x.event)).reverse();
- $('#st-table').innerHTML='<thead><tr><th>Jahr</th><th>Art</th><th>Firma</th><th>Details</th></tr></thead><tbody>'+(e.length?e.map(x=>`<tr class="click" data-firm="${esc(x.firm)}"><td>${x.year}</td><td>${esc(EVENT[x.event])}</td><td>${esc(fname(x.firm))}</td><td>${esc(pretty(x.details))}</td></tr>`).join(''):`<tr><td colspan="4">${empty('Keine Urteile oder Eingriffe im Zeitraum.')}</td></tr>`)+'</tbody>';wireFirmLinks($('#st-table'))}
+ $('#st-table').innerHTML='<thead><tr><th>Jahr</th><th>Art</th><th>Firma</th><th>Details</th></tr></thead><tbody>'+(e.length?e.map(x=>`<tr class="click" data-firm="${esc(x.firm)}"><td>${x.year}</td><td>${esc(EVENT[x.event])}</td><td>${actorLabel(x.firm)}</td><td>${esc(pretty(x.details))}</td></tr>`).join(''):`<tr><td colspan="4">${empty('Keine Urteile oder Eingriffe im Zeitraum.')}</td></tr>`)+'</tbody>';wireFirmLinks($('#st-table'))}
 function renderRnd(){const s=sys(),r=(D.rnd||[]).filter(x=>inRange(x.end_year));const ok=r.filter(x=>x.success).length;
  $('#rd-kpis').innerHTML=[kpi('Projekte gestartet',nf(sumBy(s,'rnd_started'))),kpi('Abgeschlossen',nf(r.length),r.length?pct(ok/r.length)+' erfolgreich':''),kpi('Ausgaben',chf(sumBy(s,'rnd_project_spend'))),kpi('Neue Marken',nf(r.filter(x=>x.success&&/^(new brand|neue Marke)/.test(String(x.result))).length))].join('');
  chart('rd-count',{type:'bar',data:{labels:s.map(x=>x.year),datasets:[{label:'Erfolg',data:s.map(x=>x.rnd_successes),backgroundColor:css('--good')+'bb'},{label:'Fehlschlag',data:s.map(x=>x.rnd_failures),backgroundColor:css('--bad')+'bb'},{type:'line',label:'Gestartet',data:s.map(x=>x.rnd_started),borderColor:pal()[2],pointRadius:0}]},options:{scales:{x:{stacked:true,grid:{display:false}},y:{stacked:true}}}});
  lines('rd-spend',[{label:'Ausgaben',get:x=>x.rnd_project_spend}],{fmt:'chf'});
  const P={leichtere_flaschen:'Leichtere Flaschen',waermerueckgewinnung:'Wärmerückgewinnung',ausbeute_optimierung:'Ausbeute-Optimierung',routenplanung:'Routenplanung',lagerautomation:'Lagerautomation',robotik:'Robotik',prozessautomation:'Prozessautomation',rezeptur_optimierung:'Rezeptur-Optimierung',neue_marke:'Neue Marke',alkoholfreies_bier:'Alkoholfreies Bier'};
- $('#rd-table').innerHTML='<thead><tr><th>Firma</th><th>Projekt</th><th class="num">Start</th><th class="num">Ende</th><th class="num">Kosten</th><th>Ergebnis</th></tr></thead><tbody>'+(r.length?r.slice().reverse().map(x=>`<tr class="click" data-firm="${esc(x.firm)}"><td>${esc(fname(x.firm))}</td><td>${esc(P[x.project]||x.project)}</td><td class="num">${x.start_year}</td><td class="num">${x.end_year}</td><td class="num">${chf(x.cost)}</td><td>${x.success?'<span class="badge ok">'+esc(pretty(x.result))+'</span>':'<span class="badge off">kein Ergebnis</span>'}</td></tr>`).join(''):`<tr><td colspan="6">${empty('Im Zeitraum wurde kein Projekt abgeschlossen.')}</td></tr>`)+'</tbody>';wireFirmLinks($('#rd-table'))}
+ $('#rd-table').innerHTML='<thead><tr><th>Firma</th><th>Projekt</th><th class="num">Start</th><th class="num">Ende</th><th class="num">Kosten</th><th>Ergebnis</th></tr></thead><tbody>'+(r.length?r.slice().reverse().map(x=>`<tr class="click" data-success="${x.success}" data-new-brand="${x.success&&/^(new brand|neue Marke)/.test(String(x.result))}" data-firm="${esc(x.firm)}"><td>${actorLabel(x.firm)}</td><td>${esc(P[x.project]||x.project)}</td><td class="num">${x.start_year}</td><td class="num">${x.end_year}</td><td class="num" data-value="${x.cost}">${chf(x.cost)}</td><td>${x.success?'<span class="badge ok">'+esc(pretty(x.result))+'</span>':'<span class="badge off">kein Ergebnis</span>'}</td></tr>`).join(''):`<tr><td colspan="6">${empty('Im Zeitraum wurde kein Projekt abgeschlossen.')}</td></tr>`)+'</tbody>';wireFirmLinks($('#rd-table'))}
 
 // --- Ereignisse ----------------------------------------------------------
 function renderEvents(){const all=evs();const counts={};all.forEach(e=>counts[e.event]=(counts[e.event]||0)+1);
@@ -694,7 +703,7 @@ function renderEvents(){const all=evs();const counts={};all.forEach(e=>counts[e.
  $('#ev-all').onclick=()=>{S.evTypes=new Set(types);renderEvents()};$('#ev-none').onclick=()=>{S.evTypes=new Set();renderEvents()};
  const q=$('#ev-search').value.trim().toLowerCase();
  const rows=all.filter(e=>S.evTypes.has(e.event)&&(!q||fname(e.firm).toLowerCase().includes(q)||String(e.details).toLowerCase().includes(q))).reverse();
- $('#ev-table').innerHTML='<thead><tr><th class="num">Jahr</th><th class="num">Tag</th><th>Art</th><th>Firma</th><th>Details</th></tr></thead><tbody>'+(rows.length?rows.slice(0,S.evLimit).map(e=>`<tr${e.firm?` class="click" data-firm="${esc(e.firm)}"`:''}><td class="num">${e.year}</td><td class="num">${e.day}</td><td>${esc(EVENT[e.event]||e.event)}</td><td>${esc(e.firm?fname(e.firm):'Markt')}</td><td>${esc(pretty(e.details))}</td></tr>`).join(''):`<tr><td colspan="5">${empty('Keine Ereignisse für diese Auswahl. Wähle mehr Arten oder ändere die Suche.')}</td></tr>`)+'</tbody>';
+ $('#ev-table').innerHTML='<thead><tr><th class="num">Jahr</th><th class="num">Tag</th><th>Art</th><th>Firma</th><th>Details</th></tr></thead><tbody>'+(rows.length?rows.map(e=>`<tr${e.firm?` class="click" data-firm="${esc(e.firm)}"`:''}><td class="num">${e.year}</td><td class="num">${e.day}</td><td>${esc(EVENT[e.event]||e.event)}</td><td>${actorLabel(e.firm)}</td><td>${esc(pretty(e.details))}</td></tr>`).join(''):`<tr><td colspan="5">${empty('Keine Ereignisse für diese Auswahl. Wähle mehr Arten oder ändere die Suche.')}</td></tr>`)+'</tbody>';
  $('#ev-more').hidden=rows.length<=S.evLimit;$('#ev-more').textContent=`Weitere anzeigen (${nf(rows.length-S.evLimit)} übrig)`;$('#ev-more').onclick=()=>{S.evLimit+=200;renderEvents()};wireFirmLinks($('#ev-table'))}
 $('#ev-search').oninput=()=>{S.evLimit=200;renderEvents()};$('#fm-search').oninput=()=>renderFirms();
 
@@ -726,7 +735,7 @@ function renderMap(){const regs=D.regions||[];const root=$('#map-svg');
  root.innerHTML=svg+'</svg>';
  $('#map-legend').innerHTML=S.mapLayer==='firms'?STAGES.map(st=>`<span class="dot" style="background:${stageColor()[st]}"></span>${STAGE[st]}`).join(' · ')+' · Kreisgrösse = Kapazität · schematische Karte':`Hell = tief, dunkel = hoch${S.mapLayer==='margin'?' · rot = negative Marge':''} · Jahr ${year} · schematische Karte`;
  $('#map-title').textContent=`${MAP_LAYERS[S.mapLayer]} · Jahr ${year}`;
- $('#map-table').innerHTML='<thead><tr><th>Region</th><th class="num">Bevölkerung</th><th class="num">Händler</th><th class="num">Umsatz</th><th class="num">Marge Händler</th></tr></thead><tbody>'+regs.map(r=>{const x=rows[r.name]||{};return`<tr><td>${esc(REGION[r.name]||r.name)}</td><td class="num">${pct(x.population_share)}</td><td class="num">${nf(x.retailers)}</td><td class="num">${chf(x.consumer_revenue)}</td><td class="num">${pct(x.mean_retail_margin)}</td></tr>`}).join('')+'</tbody>'}
+ $('#map-table').innerHTML='<thead><tr><th>Region</th><th class="num">Bevölkerung</th><th class="num">Händler</th><th class="num">Umsatz</th><th class="num">Marge Händler</th></tr></thead><tbody>'+regs.map(r=>{const x=rows[r.name]||{};return`<tr><td>${esc(REGION[r.name]||r.name)}</td><td class="num" data-value="${x.population_share==null?'':(x.population_share)*100}">${pct(x.population_share)}</td><td class="num" data-value="${x.retailers}">${nf(x.retailers)}</td><td class="num" data-value="${x.consumer_revenue}">${chf(x.consumer_revenue)}</td><td class="num" data-value="${x.mean_retail_margin==null?'':(x.mean_retail_margin)*100}">${pct(x.mean_retail_margin)}</td></tr>`}).join('')+'</tbody>'}
 const HABIT={light:'gelegentlich',regular:'regelmässig'};
 S.ppClass=null;
 function renderPeople(){const rows=(D.classes||[]).filter(r=>r.year<=range.to);if(!rows.length){$('#pp-grid').innerHTML=`<tr><td>${empty('Keine Kundenklassen in diesem Lauf.')}</td></tr>`;return}
@@ -839,9 +848,10 @@ $('#flow').addEventListener('click',e=>{if(e.target.id==='flow')closeFlow()});
    wait.innerHTML=esc(pretty(a.answer)).replace(/\n/g,'<br>')+(a.sources&&a.sources.length?`<div class="hint" style="margin-top:6px">Quellen: ${a.sources.map(esc).join(' · ')}</div>`:'')}
   catch(err){wait.innerHTML='Keine Antwort vom Chat-Server. Läuft <code>python -m market_sim.serve</code> und ist das Sprachmodell erreichbar?'}
   finally{$('#chat-send').disabled=false;input.focus()}}})();
-const VIEWS={chronicle:renderChronicle,map:renderMap,structure:renderStructure,overview:renderOverview,market:()=>{renderMarket();renderPeople()},firms:renderFirms,compare:renderCompare,chain:renderChain,finance:renderFinance,stocks:renderStocks,state:renderState,rnd:renderRnd,events:renderEvents};
+const VIEWS={chronicle:renderChronicle,map:renderMap,overview:renderOverview,market:()=>{renderMarket();renderPeople();renderStructure()},firms:renderFirms,compare:renderCompare,chain:renderChain,finance:renderFinance,stocks:renderStocks,state:renderState,rnd:renderRnd,events:renderEvents};
 function render(){destroy();VIEWS[S.tab]()}
 showTab(location.hash.slice(1)||'overview');viewHistory.push(viewSnapshot());viewIndex=0;viewReady=true;history.replaceState({dashboardView:0},'', '#'+S.tab);history.scrollRestoration='manual';backState();
+__TABLE_FILTERS__
 </script></body></html>'''
 
 

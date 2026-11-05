@@ -188,6 +188,22 @@ def test_payout_keeps_target_capital_and_is_logged():
     assert firms["firm_00"].cash == -1000
 
 
+def test_bank_event_amounts_use_swiss_whole_francs():
+    firms = runtimes(1)
+    banking = BankingSystem(BankingConfig(second_account_enabled=False), 0, firms)
+    bank = banking.primary_bank("firm_00")
+    banking.reject("firm_00", bank, 571704335.25, 1, 1)
+    assert banking.credit_events[0]["details"].endswith("571'704'335 CHF")
+    bank.interest_income = 571704335.25
+    events = []
+    banking.year_end(firms, BankConfig(), 1, 1, 365, events)
+    payouts = [event for event in events if event["event"] == "bank_payout"]
+    assert payouts
+    import re
+    assert all(re.search(r"\d{1,3}(?:'\d{3})+ CHF", event["details"]) for event in payouts)
+    assert all(not re.search(r"\d[,.]\d", event["details"]) for event in payouts)
+
+
 @pytest.mark.parametrize("restructure", [False, True])
 def test_bankruptcy_write_off_exactly_once(restructure):
     runner, _ = build_runner(days_per_year=2)

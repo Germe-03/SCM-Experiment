@@ -47,9 +47,18 @@ def test_write_dashboard_html(tmp_path):
     assert "Aare Markt AG" in content
     assert CHART_JS_URL in content
     assert 'id="actor-selector"' in content
-    for tab in ("overview", "market", "map", "firms", "compare", "structure", "chain", "finance", "stocks", "state", "rnd", "events", "chronicle"):
+    for tab in ("overview", "market", "map", "firms", "compare", "chain", "finance", "stocks", "state", "rnd", "events", "chronicle"):
         assert f'data-tab="{tab}"' in content
         assert f'id="tab-{tab}"' in content
+    assert 'data-tab="structure"' not in content
+    assert 'id="tab-structure"' not in content
+    assert '<dialog id="structure"' in content
+    assert 'id="structure-open"' in content.split('id="tab-firms"')[1].split('</section>')[0]
+    assert 'Was es zu kaufen gibt' in content.split('id="tab-market"')[1].split('id="tab-map"')[0]
+    assert "setAttribute('aria-label','Filter für '+label)" in content
+    assert "table.id==='ev-table'&&label==='Details'" in content
+    for table in ('fm-table', 'rd-table', 'ev-table', 'fi-banks', 'sx-top', 'fi-holdings'):
+        assert repr(table) in content
     assert 'data-tab="people"' not in content
     assert 'id="tab-people"' not in content
     market = content.split('id="tab-market"')[1].split('</section>')[0]

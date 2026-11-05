@@ -1,13 +1,13 @@
 // Exercise the actual navigation functions with browser history and scroll state.
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
 const source=fs.readFileSync(process.argv[2],'utf8'),nodes=new Map(),listeners={};
-const node=id=>{if(!nodes.has(id))nodes.set(id,{scrollTop:0,open:false,close(){this.open=false},addEventListener(){},appendChild(child){child.parentElement=this}});return nodes.get(id)};
+const node=id=>{if(!nodes.has(id))nodes.set(id,{scrollTop:0,open:false,close(){this.open=false},showModal(){this.open=true},addEventListener(){},appendChild(child){child.parentElement=this}});return nodes.get(id)};
 const tabs=['overview','market','firms','compare'].map(tab=>({dataset:{tab},setAttribute(){},focus(){}}));
 const S={tab:'overview',fmFirm:null,cmp:[],flow:null},stack=[];let pos=-1;
 const window={scrollY:0,scrollTo({top}){this.scrollY=top},addEventListener(name,fn){listeners[name]=fn}};
 const location={hash:'#overview'};
 const history={replaceState(state,_,hash){stack[pos]={state,hash};location.hash=hash},pushState(state,_,hash){stack.splice(++pos);stack.push({state,hash});location.hash=hash},back(){const entry=stack[--pos];location.hash=entry.hash;listeners.popstate({state:entry.state});listeners.hashchange()}};
-const context={S,window,history,location,document:{body:node('body')},range:{from:1,to:3},$:node,$$:selector=>selector==='nav.tabs button'?tabs:[],render(){},store:{set(){}},requestAnimationFrame:fn=>fn(),openFlow(id,year,sel){S.flow={id,year,sel};node('#flow').open=true}};
+const context={S,window,history,location,document:{body:node('body')},range:{from:1,to:3},$:node,$$:selector=>selector==='nav.tabs button'?tabs:[],render(){},renderStructure(){},store:{set(){}},requestAnimationFrame:fn=>fn(),openFlow(id,year,sel){S.flow={id,year,sel};node('#flow').open=true}};
 vm.createContext(context);
 vm.runInContext(source.slice(source.indexOf('const tabs=$$'),source.indexOf('// --- charts')),context);
 vm.runInContext('viewHistory.push(viewSnapshot());viewIndex=0;viewReady=true;backState()',context);
@@ -28,4 +28,11 @@ history.back();assert.equal(S.tab,'market');assert.equal(window.scrollY,125);
 history.back();assert.equal(S.tab,'overview');assert.equal(window.scrollY,321);assert.equal(node('#view-back').disabled,true);
 vm.runInContext("openTab('people')",context);assert.equal(S.tab,'market');assert.equal(window.scrollY,0);
 let prevented=false;tabs[1].onkeydown({key:'ArrowLeft',altKey:true,preventDefault(){prevented=true}});assert.equal(prevented,false);
+vm.runInContext("openTab('structure')",context);
+assert.equal(S.tab,'firms');assert.equal(node('#structure').open,true);
+node('#structure').scrollTop=77;
+vm.runInContext('closeStructure()',context);assert.equal(node('#structure').open,false);
+history.back();assert.equal(node('#structure').open,true);assert.equal(node('#structure').scrollTop,77);
+history.back();assert.equal(S.tab,'market');assert.equal(node('#structure').open,false);
+location.hash='#structure';listeners.hashchange();assert.equal(S.tab,'firms');assert.equal(node('#structure').open,true);
 console.log('View history, details, modal year, scroll, legacy link and native Alt+Left passed.');
