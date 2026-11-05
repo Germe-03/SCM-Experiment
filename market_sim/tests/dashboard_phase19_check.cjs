@@ -78,6 +78,12 @@ const bankEnd=D.banks.find(b=>b.bank_id==='B1'&&b.year===2);
   assert.equal(charts.get('bd-income').data.datasets[i+2].data[0],-(bankEnd[key]||0)));
 const customer=D.banks.find(b=>b.bank_id==='B1'&&b.year===2).customer_ids[0];
 assert.match(vm.runInContext(`firmBankLine(${JSON.stringify(customer)})`,context),/data-bank=/);
+{const saved=D.banks,to=vm.runInContext('range.to',context);
+ D.banks=[{bank_id:'BZ',name:'Zweit AG',year:to,customer_ids:['fx'],house_customer_ids:[]},{bank_id:'BH',name:'Haus AG',year:to,customer_ids:['fx','fy'],house_customer_ids:['fx','fy']}];
+ assert.match(vm.runInContext("firmBankLine('fx')",context),/Hausbank: <a[^>]*data-bank="BH"[^>]*>Haus AG<\/a> · Zweitbank: <a[^>]*data-bank="BZ"/);
+ assert.match(vm.runInContext("firmBankLine('fy')",context),/Zweitbank: keine/);
+ assert.match(vm.runInContext("firmBankLine('nobody')",context),/Keine Kontoverbindung/);
+ D.banks=saved;}
 const link={dataset:{bank:'B1'}};
 context.linkRoot={querySelectorAll:()=>[link]};
 vm.runInContext('wireBankLinks(linkRoot)',context);

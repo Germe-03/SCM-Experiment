@@ -28,7 +28,22 @@ class CommercialBank:
     failed_year: int = 0
 
     @property
+    def balance_total(self) -> float:
+        """Bilanzsumme: assets are loans plus SNB reserves (deposits + equity - loans, if positive);
+        liabilities are deposits, equity and SNB refinancing for any shortfall. Both sides equal
+        max(loans, deposits + equity)."""
+        return max(0.0, self.loans, self.deposits + self.equity)
+
+    @property
     def capital_ratio(self) -> float:
+        """Eigenkapitalquote = Eigenkapital / Bilanzsumme (reports and dashboard)."""
+        total = self.balance_total
+        return self.equity / total if total > 0 else 0.0
+
+    @property
+    def risk_weighted_ratio(self) -> float:
+        """Equity / loans: SNB reserves carry no risk weight, so only loans count. Lending
+        limit, payout and the firms' safety judgement keep using this ratio (as before Phase 33)."""
         # A debt-free bank has no capital requirement; keep CSV values finite.
         return self.equity / self.loans if self.loans > 0 else (1.0 if self.equity > 0 else 0.0)
 
@@ -77,7 +92,7 @@ class BankingSystem:
         def score(bid):
             bank = self.banks[bid]
             return (-cfg.interest_weight * bank.margin
-                    + cfg.safety_weight * max(-1.0, min(1.0, bank.capital_ratio))
+                    + cfg.safety_weight * max(-1.0, min(1.0, bank.risk_weighted_ratio))
                     + cfg.random_weight * noise[bid])
 
         return max(candidates, key=score)
@@ -242,7 +257,7 @@ class BankingSystem:
                     def score(bid):
                         candidate = self.banks[bid]
                         return (-self.cfg.interest_weight * candidate.margin
-                                + self.cfg.safety_weight * max(-1.0, min(1.0, candidate.capital_ratio))
+                                + self.cfg.safety_weight * max(-1.0, min(1.0, candidate.risk_weighted_ratio))
                                 + self.cfg.random_weight * noise[bid])
 
                     new = max(candidates, key=score)
@@ -343,6 +358,7 @@ class BankingSystem:
             founded_year=b.founded_year, margin=b.margin,
             year=year, bank_id=b.id, name=b.name, equity=b.equity, loans=b.loans,
             deposits=b.deposits, capital_ratio=b.capital_ratio, profit=b.year_profit,
+            balance_total=b.balance_total, risk_weighted_ratio=b.risk_weighted_ratio,
             interest_income=b.interest_income, interest_expense=b.interest_expense,
             refinancing_cost=b.refinancing_cost, operating_cost=b.operating_cost,
             write_offs=b.write_offs, customers=sum(b.id in a for a in self.accounts.values()),
@@ -372,7 +388,7 @@ class BankingSystem:
             noise = {bid: self._rng.random() for bid in bank_ids}
             primary = self.primary_bank(firm_id)
             if (runtime.cash <= deposit_threshold(bank_config, runtime, price_index)
-                    and primary.capital_ratio >= cfg.target_capital_ratio):
+                    and primary.risk_weighted_ratio >= cfg.target_capital_ratio):
                 continue
             candidates = [bid for bid in bank_ids if bid not in shares and self.banks[bid].active]
             if not candidates:
@@ -381,7 +397,7 @@ class BankingSystem:
             def score(bid):
                 bank = self.banks[bid]
                 return (-cfg.interest_weight * bank.margin
-                        + cfg.safety_weight * max(-1.0, min(1.0, bank.capital_ratio))
+                        + cfg.safety_weight * max(-1.0, min(1.0, bank.risk_weighted_ratio))
                         + cfg.random_weight * noise[bid])
 
             second = max(candidates, key=score)

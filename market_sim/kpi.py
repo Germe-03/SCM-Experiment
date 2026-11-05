@@ -60,6 +60,9 @@ class BankAnnualReport(BaseModel):
     margin: float = 0.0
     credit_rejections: int = 0
     fee_income: float = 0.0
+    # capital_ratio = equity / balance_total (Bilanzsumme); risk_weighted_ratio = equity / loans.
+    balance_total: float = 0.0
+    risk_weighted_ratio: float = 0.0
     year: int
     bank_id: str
     name: str

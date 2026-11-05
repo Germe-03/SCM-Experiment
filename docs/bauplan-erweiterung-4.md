@@ -311,3 +311,45 @@ Vorlage: «Offene Punkte» in `docs/bauplan-banken-boerse.md`.
   Umsetzungen). Übernahme: Patent an die Käuferin; Konkurs: Patent verfällt.
   Ereignisse `patent_granted` (Börse +0.05), `patent_expired`; Export `D.patents`.
   Tests: `test_patents.py` (10); 321 Tests grün.
+- **Phase 33, 2026-11-05:** Eigenkapitalquote der Banken = Eigenkapital /
+  Bilanzsumme. Bilanzsumme = grösserer Wert aus Krediten oder Einlagen +
+  Eigenkapital (Aktiven: Kredite plus SNB-Reserven; Passiven: Einlagen,
+  Eigenkapital und SNB-Refinanzierung für eine Lücke). `CommercialBank` hat neu
+  `balance_total`, `capital_ratio` (neu definiert) und `risk_weighted_ratio`
+  (Eigenkapital / Kredite, die alte Quote). `bank_reports.csv` und `D.banks`
+  zeigen alle drei Werte. Das Dashboard rechnete schon mit derselben Formel
+  (`bankRatio`). Entscheid: Kreditgrenze (`min_capital_ratio` 10 %),
+  Ausschüttungsgrenze (`target_capital_ratio` 15 %), Sicherheitswertung bei der
+  Bankwahl und Auslöser für Zweitkonten rechnen weiter mit Eigenkapital /
+  Kredite. Das entspricht einer risikogewichteten Quote: SNB-Reserven haben das
+  Risikogewicht 0. Grund: Mit der Bilanzsumme schwankt die Quote mit den
+  Einlagen und nicht mit dem Kreditrisiko. Die Schwellen hätten sich so nicht
+  vergleichbar umrechnen lassen. Dadurch bleibt das Verhalten unverändert (gleiche
+  Seeds, gleiche Ergebnisse). Firmendetail: «Hausbank: … · Zweitbank: …» mit
+  Link zur Bankdetailansicht (vorher «Bank: … (Hausbank/Zweitkonto)»). Tests:
+  `test_banking.py` (+1), `dashboard_phase19_check.cjs` ergänzt; 322 Tests grün.
+  **10-Seed-Messung** (Seeds 1–10, je 50 Jahre, `market_sim.experiment`):
+
+  | | Mittel | Min | Max |
+  |---|---|---|---|
+  | Firmenkonkurse total | 71.5 | 51 | 110 |
+  | Gewinn aller Firmen total | 31,5 Mia. | −17,2 Mia. | 77,0 Mia. |
+  | Bankpleiten | 1.5 | 0 | 4 |
+  | Neue Banken | 3.5 | 3 | 5 |
+  | Aktive Banken im Jahr 50 | 5.0 | 3 | 6 |
+  | Zweitkonten eröffnet | 40.8 | 34 | 47 |
+  | Kreditablehnungen | 199 | 157 | 270 |
+  | Abschreibungen der Banken total | 8,29 Mia. | 5,44 Mia. | 13,5 Mia. |
+  | Gewinn der Banken total | 9,92 Mia. | −0,61 Mia. | 23,8 Mia. |
+  | EK-Quote (EK / Bilanzsumme), Mittel aller Bankjahre | 21.0 % | 18.0 % | 25.3 % |
+  | EK-Quote im Jahr 50 (Mittel aktiver Banken) | 17.9 % | 6.8 % | 26.3 % |
+  | Tiefste EK-Quote einer Bank (pro Seed) | 3.1 % | 0.3 % | 7.6 % |
+  | Leitzins im Mittel | 0.63 % | 0.27 % | 0.95 % |
+  | Teuerung im Mittel | 0.94 % | 0.74 % | 1.11 % |
+  | Börsenindex Jahr 50 | 6272 | 428 | 12'140 |
+
+  Die alte Quote (EK / Kredite) erreichte pro Seed Höchstwerte von 12'900 %
+  bis 1'742'000 %. Die neue Quote bleibt zwischen 0 und 100 %. Nur neu gegründete
+  Banken ohne Kunden zeigen 100 %. Bankpleiten gab es in 6 von 10 Seeds
+  (Seed 4: 4 Pleiten, 110 Konkurse, nur noch 3 Banken). In 3 Seeds ist der
+  Gewinn aller Firmen über 50 Jahre negativ.
