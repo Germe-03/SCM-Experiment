@@ -296,14 +296,15 @@ const TREND={none:'kein Trend',craft_welle:'Craft-Welle',alkoholfrei:'Alkoholfre
 const trendText=d=>String(d).split(/->|→/).map(x=>TREND[x.trim()]||x.trim()).join(' → ');
 const REGION={genfersee:'Genferseeregion',bern:'Bern',jura_freiburg:'Jura/Freiburg/Neuenburg',nordwestschweiz:'Nordwestschweiz',zuerich:'Zürich',ostschweiz:'Ostschweiz',zentralschweiz:'Zentralschweiz',tessin:'Tessin'};
 // Firm ids and region keys in event texts become readable names.
-const pretty=t=>String(t??'').replace(/\b(?:B\d+|[a-z]+(?:_[a-z0-9]+)*)\b/g,m=>D.firms[m]?.name||bankActors()['bank:'+m]?.name||REGION[m]||m);
+const pretty=t=>String(t??'').replace(/\b(?:B\d+|[a-z]+(?:_[a-z0-9]+)*)\b/g,m=>D.firms[m]?.name||bankActors()['bank:'+m]?.name||REGION[m]||m).replace(/(-?\d{1,3}(?:['’]\d{3})+|-?\d{4,}) Mio\. CHF/g,(m,x)=>{const v=+x.replace(/['’]/g,'');return Math.abs(v)>=1000?mia(v/1000):m});
+const mia=x=>x.toFixed(2).replace('.',',')+' Mia. CHF';
 Object.assign(EVENT,{policy_rate_changed:'Leitzins geändert',credit_rejected:'Kredit abgelehnt',account_opened:'Zweitkonto eröffnet',bank_switched:'Bankwechsel',bank_failed:'Bankpleite',bank_entry:'Neue Bank',bank_payout:'Bank schüttet aus',exchange_opened:'Börse eröffnet',listed:'Börsengang',delisted:'Dekotiert',stock_crash:'Börsencrash'});
 const KEY_EVENTS=new Set(['law_enacted','trend_change','recession','raw_material_shortage','cost_shock','poisoning','breakup','wage_push']);
 const firm=id=>D.firms[id],fname=id=>firm(id)?.name||bankActors()[id]?.name||bankActors()['bank:'+id]?.name||id||'Markt';
 const stageLabel=f=>f?.channel==='restaurant'?'Gastronomie':STAGE[f?.stage]||'';
 const nf=(v,d=0)=>v==null||isNaN(v)?'—':new Intl.NumberFormat('de-CH',{maximumFractionDigits:d}).format(v);
 const pct=v=>v==null||isNaN(v)?'—':new Intl.NumberFormat('de-CH',{style:'percent',maximumFractionDigits:1}).format(v);
-const chf=v=>{if(v==null||isNaN(v))return'—';const a=Math.abs(v);return a>=1e9?nf(v/1e9,2)+' Mrd. CHF':a>=1e6?nf(v/1e6,1)+' Mio. CHF':nf(v)+' CHF'};
+const chf=v=>{if(v==null||isNaN(v))return'—';const a=Math.abs(v);return a>=1e9?mia(v/1e9):a>=1e6?nf(v/1e6,1)+' Mio. CHF':nf(v)+' CHF'};
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const store={get(k,d){try{return JSON.parse(localStorage.getItem('bm-'+k))??d}catch{return d}},set(k,v){try{localStorage.setItem('bm-'+k,JSON.stringify(v))}catch{}}};
 const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();

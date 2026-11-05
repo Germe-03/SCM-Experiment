@@ -7,8 +7,8 @@ function columnNumber(cell){
  if(!cell)return null;
  if(cell.dataset.value!==undefined){const v=Number(cell.dataset.value);return cell.dataset.value!==''&&Number.isFinite(v)?v:null}
  const text=cell.textContent.trim().replace(/[’'\s]/g,'').replace('−','-');
- if(!/^[+-]?\d+(?:[.,]\d+)?(?:%|CHF|Mio\.CHF|Mrd\.CHF)?$/.test(text))return null;
- return parseFloat(text.replace(',','.'))*(text.includes('Mrd.')?1e9:text.includes('Mio.')?1e6:1);
+ if(!/^[+-]?\d+(?:[.,]\d+)?(?:%|CHF|Mio\.CHF|Mrd\.CHF|Mia\.CHF)?$/.test(text))return null;
+ return parseFloat(text.replace(',','.'))*((text.includes('Mrd.')||text.includes('Mia.'))?1e9:text.includes('Mio.')?1e6:1);
 }
 function columnMatches(value,filter){
  if(!filter)return true;

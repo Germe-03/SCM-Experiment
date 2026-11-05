@@ -54,3 +54,20 @@ def test_chat_context_picks_the_right_year_and_firm(data):
 def test_chat_answer_lists_its_sources(data):
     reply = answer(data, FakeLLM(), "Was passierte in Jahr 5?")
     assert reply["sources"] == ["Jahresbericht Jahr 5"] and reply["answer"]
+
+
+def test_amounts_from_one_thousand_millions_are_billions():
+    from market_sim.texts import _chf, _readable
+    assert _chf(52e6) == "52 Mio. CHF"
+    assert _chf(2.652e9) == "2,65 Mia. CHF"
+    assert _chf(-2.652e9) == "-2,65 Mia. CHF"
+    assert _readable("Verlust 2'652'000'000 CHF") == "Verlust 2,65 Mia. CHF"
+    assert _readable("Kredit 51,609,492 CHF, Gebühr 500 CHF") == "Kredit 52 Mio. CHF, Gebühr 500 CHF"
+    assert unchecked_numbers("Der Verlust betrug 2,65 Mia. CHF.", "- Verlust: 2,65 Mia. CHF") == []
+
+
+def test_facts_use_billions_for_large_totals(data):
+    import re
+    from market_sim.texts import year_facts
+    facts = year_facts(data, data["system"][-1]["year"])
+    assert not re.search(r"\d{1,3}(?:'\d{3})+ Mio\. CHF", facts)

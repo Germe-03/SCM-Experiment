@@ -26,7 +26,8 @@ SYSTEM = (
     "Verwende ausschliesslich die gegebenen Fakten. Erfinde keine Zahlen, Namen oder Ursachen. "
     "Regeln für Zahlen: Jede Zahl in deinem Text muss genau so in den FAKTEN stehen, Ziffer für Ziffer. "
     "Rechne nichts aus: keine Summen, Differenzen, Durchschnitte, Prozent-Veränderungen oder Verhältnisse. "
-    "Runde nicht und rechne nicht um (nicht Mio. in Mrd., nicht CHF in Prozent). "
+    "Runde nicht und rechne nicht um (nicht Mio. in Mia., nicht CHF in Prozent). "
+    "Schreibe Beträge mit Mio. und Mia. genau so wie in den FAKTEN (z. B. 52 Mio. CHF, 2,65 Mia. CHF). "
     "Nenne keine Mitarbeiterzahlen, Marktanteile, Preise oder Mengen, die nicht in den FAKTEN stehen. "
     "Brauchst du eine Zahl, die nicht dasteht, beschreibe es mit Worten (z. B. 'stark gestiegen', 'fast halbiert'). "
     "Die Jahre heissen 'Jahr 1', 'Jahr 2' und so weiter; nenne nie Kalenderjahre wie 2002. "
@@ -38,11 +39,18 @@ def _mio(value: float) -> str:
     return f"{value / 1e6:,.0f}".replace(",", "'")
 
 
+def _chf(value: float) -> str:
+    """52 Mio. CHF below 1'000 Mio., from there 2,65 Mia. CHF (comma, two decimals)."""
+    if abs(round(value / 1e6)) >= 1000:
+        return f"{value / 1e9:.2f}".replace(".", ",") + " Mia. CHF"
+    return f"{_mio(value)} Mio. CHF"
+
+
 def _readable(details: str) -> str:
     """Write amounts like 51'609'492 CHF (or 51,609,492 CHF from the bank events) as 52 Mio. CHF."""
     def to_mio(match: re.Match) -> str:
         value = float(match.group(1).replace("'", "").replace(",", ""))
-        return f"{_mio(value)} Mio. CHF" if abs(value) >= 1e6 else match.group(0)
+        return _chf(value) if abs(value) >= 1e6 else match.group(0)
     return re.sub(r"(-?\d{1,3}(?:['’,]\d{3})+|-?\d+) CHF", to_mio, str(details))
 
 
@@ -58,9 +66,9 @@ def firm_facts(data: dict, firm_id: str) -> str:
         best = max(active, key=lambda y: y.get("profit", 0))
         worst = min(active, key=lambda y: y.get("profit", 0))
         total = sum(y.get("profit", 0) for y in active)
-        lines.append(f"Gewinn insgesamt: {_mio(total)} Mio. CHF")
-        lines.append(f"Bestes Jahr: Jahr {best['year']} mit {_mio(best['profit'])} Mio. CHF Gewinn")
-        lines.append(f"Schlechtestes Jahr: Jahr {worst['year']} mit {_mio(worst['profit'])} Mio. CHF Gewinn")
+        lines.append(f"Gewinn insgesamt: {_chf(total)}")
+        lines.append(f"Bestes Jahr: Jahr {best['year']} mit {_chf(best['profit'])} Gewinn")
+        lines.append(f"Schlechtestes Jahr: Jahr {worst['year']} mit {_chf(worst['profit'])} Gewinn")
         share = max(active, key=lambda y: y.get("market_share") or 0)
         if share.get("market_share"):
             lines.append(f"Höchster Marktanteil: {share['market_share'] * 100:.0f} Prozent in Jahr {share['year']}")
@@ -85,7 +93,7 @@ def year_facts(data: dict, year: int) -> str:
     active = sum(kpi.get(f"active_firms_{s}", 0) for s in STAGE_DE)
     lines = [
         f"Jahr {year}",
-        f"Gewinn aller Firmen: {_mio(kpi['total_profit'])} Mio. CHF",
+        f"Gewinn aller Firmen: {_chf(kpi['total_profit'])}",
         f"Anteil bediente Nachfrage: {kpi['service_level'] * 100:.0f} Prozent",
         f"Aktive Firmen: {active}",
         f"Markteintritte: {kpi.get('market_entries', 0)}, Konkurse: {kpi.get('bankruptcies', 0)}, Übernahmen: {kpi.get('takeovers', 0)}",
@@ -100,13 +108,13 @@ def year_facts(data: dict, year: int) -> str:
     if banks:
         active_banks = [b for b in banks if b["active"]]
         lines.append(f"Banken: {len(active_banks)} aktiv, Eigenkapital zusammen "
-                     f"{_mio(sum(b['equity'] for b in active_banks))} Mio. CHF, Kredite "
-                     f"{_mio(sum(b['loans'] for b in active_banks))} Mio. CHF, Einlagen "
-                     f"{_mio(sum(b['deposits'] for b in active_banks))} Mio. CHF")
+                     f"{_chf(sum(b['equity'] for b in active_banks))}, Kredite "
+                     f"{_chf(sum(b['loans'] for b in active_banks))}, Einlagen "
+                     f"{_chf(sum(b['deposits'] for b in active_banks))}")
         for b in sorted(banks, key=lambda b: -b["equity"]):
             status = "" if b["active"] else ", in diesem Jahr pleite gegangen"
-            lines.append(f"Bank {b['name']}: {b['customers']} Kunden, Eigenkapital {_mio(b['equity'])} Mio. CHF, "
-                         f"Gewinn {_mio(b['profit'])} Mio. CHF{status}")
+            lines.append(f"Bank {b['name']}: {b['customers']} Kunden, Eigenkapital {_chf(b['equity'])}, "
+                         f"Gewinn {_chf(b['profit'])}{status}")
     if kpi.get("stock_index"):
         lines.append(f"Börsenindex: {kpi['stock_index']:.0f} Punkte, {kpi.get('listed_firms', 0)} Firmen an der Börse")
     profits = []
@@ -116,8 +124,8 @@ def year_facts(data: dict, year: int) -> str:
             profits.append((row.get("profit", 0), firm["name"]))
     profits.sort()
     if profits:
-        lines.append("Grösste Gewinner: " + ", ".join(f"{n} ({_mio(p)} Mio. CHF)" for p, n in profits[-2:][::-1]))
-        lines.append("Grösste Verlierer: " + ", ".join(f"{n} ({_mio(p)} Mio. CHF)" for p, n in profits[:2]))
+        lines.append("Grösste Gewinner: " + ", ".join(f"{n} ({_chf(p)})" for p, n in profits[-2:][::-1]))
+        lines.append("Grösste Verlierer: " + ", ".join(f"{n} ({_chf(p)})" for p, n in profits[:2]))
     names = {fid: f["name"] for fid, f in data["firms"].items()}
     for e in [e for e in data.get("events", []) if e["year"] == year and e["event"] in YEAR_EVENTS][:6]:
         who = f" ({names.get(e['firm'], e['firm'])})" if e.get("firm") else ""

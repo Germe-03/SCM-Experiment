@@ -165,3 +165,11 @@ def test_disabled_banking_and_stocks():
     data = build_dashboard_data(result, network, config, 0)
     assert data["banks"] == []
     assert data["stocks"] == {"days": [], "years": [], "index": [], "prices": {}}
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node is optional for Python-only installations")
+def test_dashboard_shows_billions_as_mia():
+    import market_sim.dashboard as dashboard
+    subprocess.run(["node", str(Path(__file__).with_name("dashboard_money_check.cjs")), dashboard.__file__],
+                   check=True, capture_output=True, text=True)
+
