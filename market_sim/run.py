@@ -176,7 +176,10 @@ def write_outputs(result: RunResult, out_dir: str | Path) -> list[Path]:
             paths.append(path)
     path = directory / "offence_ledger.csv"
     with path.open("w", newline="", encoding="utf-8") as output:
-        writer = csv.DictWriter(output, fieldnames=["firm", "offence", "year", "gain", "fine", "damage", "net", "paid_off"])
+        fields = ["firm", "offence", "year", "gain", "fine", "damage", "net", "paid_off"]
+        # Phase 26: patent infringement rows also carry the compensation and the holder.
+        fields += [key for key in ("compensation", "holder") if any(key in row for row in result.offence_ledger)]
+        writer = csv.DictWriter(output, fieldnames=fields)
         writer.writeheader()
         writer.writerows(result.offence_ledger)
     paths.append(path)

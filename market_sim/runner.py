@@ -170,7 +170,7 @@ class SimulationRunner:
         self.state_actor = StateActor(self, seed) if config.state.enabled else None
         self.lab = ((ResearchTreeLab if config.research.trees_enabled else ResearchLab)(self, seed)
                     if config.research.enabled else None)
-        self.patent_office = (PatentOffice(self) if config.patents.enabled
+        self.patent_office = (PatentOffice(self, seed) if config.patents.enabled
                               and isinstance(self.lab, ResearchTreeLab) else None)
         self._restaurant_templates = [f.model_copy(deep=True) for f in self._firms() if f.channel == "restaurant"]
         self._store_templates = [f.model_copy(deep=True) for f in self._firms()

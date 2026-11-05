@@ -183,7 +183,7 @@ ARCHETYPE_DE = {"low_cost": "Discount", "standard": "Standard", "premium": "Prem
 TREND_DE = {"craft_welle": "Craft-Welle", "alkoholfrei": "Alkoholfrei", "sparwelle": "Sparwelle",
             "tradition": "Tradition", "wein_boom": "Wein-Boom"}
 OFFENCE_DE = {"lohndumping": "Lohndumping", "pfusch": "Pfusch bei Rohstoffen",
-              "steuerhinterziehung": "Steuerhinterziehung"}
+              "steuerhinterziehung": "Steuerhinterziehung", "patentverletzung": "Patentverletzung"}
 REGION_DE = {"genfersee": "Genferseeregion", "bern": "Bern", "jura_freiburg": "Jura/Freiburg/Neuenburg",
              "nordwestschweiz": "Nordwestschweiz", "zuerich": "Zürich", "ostschweiz": "Ostschweiz",
              "zentralschweiz": "Zentralschweiz", "tessin": "Tessin"}

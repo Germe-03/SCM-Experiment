@@ -141,8 +141,17 @@ class ResearchTreeLab(ResearchLab):
                     "details": event_detail,
                 })
             else:
+                employees_before, brands_before = firm.employees, self._brands
                 detail = self._apply_stage(runner, firm, stage)
                 self.progress.setdefault(firm_id, {})[name] = "implemented"
+                # Phase 26: remember how to undo an illegally implemented stage.
+                office = getattr(runner, "patent_office", None)
+                if office is not None and (firm_id, tree, name) in office.infringements:
+                    office.on_implemented(firm_id, tree, name, {
+                        "employees_before": employees_before,
+                        "employees_after": firm.employees,
+                        "brand_id": f"{firm_id}_rd{self._brands:02d}" if self._brands > brands_before else None,
+                    })
                 self.reports.append({
                     "firm": firm_id,
                     "project": name,
@@ -185,6 +194,18 @@ class ResearchTreeLab(ResearchLab):
                 if self.progress.get(firm.id, {}).get(stage.name) == "researched"
                 and not (office is not None and office.blocked(firm.id, tree, stage.name))
             ]
+            infringing = False
+            if not pending and office is not None and office.infringement_enabled:
+                # Phase 26: a willing firm may implement a patented stage anyway.
+                for candidate in self.stages.get(tree, {}).values():
+                    if (
+                        self.progress.get(firm.id, {}).get(candidate.name) == "researched"
+                        and office.blocked(firm.id, tree, candidate.name)
+                        and office.consider_infringement(runner, state, firm, tree, candidate)
+                    ):
+                        pending = [candidate]
+                        infringing = True
+                        break
             if pending:
                 stage = pending[0]
                 label = PROJECT_DE.get(stage.name, stage.name)
@@ -211,6 +232,8 @@ class ResearchTreeLab(ResearchLab):
                             f"{stage.implementation_days} Tage"
                         ),
                     })
+                elif infringing:
+                    office.infringements.pop((firm.id, tree, stage.name), None)
                 continue
 
             options = self.options(firm)
@@ -296,3 +319,54 @@ class ResearchTreeLab(ResearchLab):
                     )
             return f"Reifezeit −{stage.effect:.0%}"
         return self._apply(runner, firm, stage)
+
+    def undo_stage(self, runner: SimulationRunner, firm, stage: ResearchStageConfig, record: dict) -> None:
+        """Phase 26: reverse an implemented stage (use stopped after a patent infringement)."""
+        env = runner.env
+        progress = self.progress.setdefault(firm.id, {})
+        if progress.get(stage.name) == "implemented":
+            progress[stage.name] = "researched"
+        kind, effect = stage.kind, stage.effect
+        keep = 1 - effect
+        if kind == "productivity":
+            firm.productivity_per_employee /= 1 + effect
+        elif kind == "cost_reduction" and keep > 0:
+            env.process_cost_factor[firm.id] = env.process_cost_factor.get(firm.id, 1.0) / keep
+        elif kind == "component_reduction" and keep > 0:
+            factors = env.component_factor.setdefault(firm.id, {})
+            factors[stage.component] = factors.get(stage.component, 1.0) / keep
+        elif kind == "storage_automation" and keep > 0:
+            env.runtimes[firm.id].holding_cost /= keep
+        elif kind == "transport_efficiency" and keep > 0:
+            if env.geography is not None:
+                factors = env.geography.transport_factor
+                factors[firm.id] = factors.get(firm.id, 1.0) / keep
+        elif kind == "robotics":
+            before = record.get("employees_before", firm.employees)
+            after = record.get("employees_after", firm.employees)
+            if after > 0 and before > 0:
+                firm.employees = max(1, firm.employees + before - after)
+                env.runtimes[firm.id].employees = firm.employees
+                firm.productivity_per_employee /= before / after
+        elif kind in ("new_brand", "alkoholfrei"):
+            book = env.brand_book
+            brand_id = record.get("brand_id")
+            if book is not None and brand_id:
+                if not hasattr(book, "stopped_brands"):
+                    book.stopped_brands = set()
+                book.stopped_brands.add(brand_id)
+                book.production_share[brand_id] = 0.0
+        elif kind == "reputation":
+            firm.reputation = max(0.0, firm.reputation - effect)
+        elif kind == "margin":
+            bonus = getattr(env.brand_book, "markup_bonus", None)
+            if bonus is not None and firm.id in bonus:
+                bonus[firm.id] /= 1 + effect
+        elif kind == "maturation" and keep > 0:
+            book = env.brand_book
+            if book is not None:
+                for brand_id in book.brands_of(firm.id):
+                    brand = book.brands[brand_id]
+                    if brand.maturation_days > 0:
+                        brand.maturation_days = round(brand.maturation_days / keep)
+        # awareness: knowledge of the store cannot be taken back.
