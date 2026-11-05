@@ -421,6 +421,47 @@ geography:
   site_fraction: 0.30
   site_coverage_gap: 0.70
 
+# Phase 28: the Post replaces the anonymous transport service (only with geography).
+# One uniform tariff for all regions, at most 5 % change per year; a loss is covered
+# by the federal state (bundesbeitrag, only shown). Off until calibrated.
+carriers:
+  enabled: false
+  post:
+    start_rate: 1.4
+    margin: 0.03
+    max_tariff_step: 0.05
+    fixed_cost_per_day: 40000
+    variable_rate: 0.9
+    capacity_per_day: 2000
+    expand_utilization: 0.9
+    expand_step: 0.2
+    expansion_delay_days: 365
+  # Phase 29: private couriers pick regions where the uniform tariff leaves a margin.
+  couriers:
+    enabled: true
+    entry_probability: 0.15
+    min_margin: 0.15
+    max_entries_per_year: 1
+    start_cash: 5000000
+    variable_rate: 0.8
+    density_exponent: 0.5
+    fixed_cost_per_day_per_region: 4000
+    expected_share: 0.3
+    capacity_per_region: 300
+    damage_probability: [0.001, 0.01]
+    delay_probability: [0.02, 0.10]
+    delay_days: 2
+    undercut: [0.05, 0.20]
+    min_markup: 0.05
+    credit_limit: 2500000
+    interest_spread: 0.03
+    expand_probability: 0.3
+    abandon_after_years: 2
+    takeover_probability: 0.2
+    max_region_share: 0.6
+  switching_cost_share: 0.02
+  delay_cost_per_unit_day: 5.0
+
 # Phase 6: the state. True detection rates and fines are hidden from the firms; some
 # offences pay off because the fine is smaller than the gain. Cigarettes: not built (TODO).
 state:

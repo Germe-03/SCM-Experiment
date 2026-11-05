@@ -390,3 +390,52 @@ Vorlage: «Offene Punkte» in `docs/bauplan-banken-boerse.md`.
   Kommissionier-Roboter), Patentverletzung nur in Seed 2 (2 Jahre, 1-mal entdeckt).
   Dashboard im Browser geprüft (F&E-Baum, Patente, Finanzen, Staat, Firmendetails).
   Offen: Hersteller-Bäume werden kaum genutzt (Kosten und Kassenbedingung prüfen).
+- **Phase 28, 2026-11-05:** Neues Modul `carriers.py` (`Carrier`, `CarrierMarket`), Block
+  `carriers` in `market.yaml` (`enabled: false` bis zur Kalibrierung). Die Post ersetzt den
+  namenlosen Dienst: `Geography.unit_transport_cost` und die Wahl eigene Flotte/Dienst
+  fragen den Posttarif statt `service_rate`. Einheitstarif für alle Regionen, einmal im Jahr
+  aus Kosten pro Einheit-km plus Marge, höchstens 5 % Änderung. Kosten: Fixkosten Netz und
+  Personal (x Preisindex x mittlerer Lohnindex, wachsen mit der Kapazität) plus variable
+  Kosten pro km. Verlust deckt der Bund (`bundesbeitrag`, nur angezeigt, Ereignis), die
+  Post geht nie pleite und nimmt keine Kredite. Kapazität pro Tag: Überlast hält Pakete
+  zurück, sie gehen Tage später ab (längere Lieferzeit), nichts geht verloren; bei hoher
+  Auslastung baut die Post nach `expansion_delay_days` aus. Kein eigener Zufall: Der
+  Schadenwurf in `ship()` bleibt gleich, darum ist ein Lauf mit Tarif 1.4 fest und
+  unbegrenzter Kapazität genau gleich wie ohne Post (Test). Ausgabe `carrier_report.csv`,
+  `RunResult.carriers`. Tests: `test_carriers.py` (7); 328 Tests grün.
+- **Phase 29, 2026-11-05:** Neues Modul `couriers.py` (`CourierMarket` erbt von
+  `CarrierMarket`), Block `carriers.couriers` (an, wirkt nur mit `carriers.enabled`).
+  **Entscheid:** Kuriere sind leichte Akteure im `CourierMarket` mit Kasse, Kreditlimite
+  (Zins = Leitzins + Aufschlag), Konkurs und Übernahme (Wettbewerbsbehörde: keine
+  Übernahme über 60 % Kurieranteil einer Region), keine fünfte Firmenstufe; die volle
+  Firmenmaschine (Bank, Börse, Strategien) hätte die Phase vervielfacht. Eintritt pro
+  Region (ein Zufallswurf pro Region und Jahr, eigener Zufall `couriers-{seed}`), nur wenn
+  der Posttarif die Kurierkosten um `min_margin` übersteigt; Kurierkosten pro km sind in
+  dünn besiedelten Regionen höher (`density_exponent`), darum starten Kuriere in der
+  Genferseeregion und in Zürich, das Tessin bleibt bei der Post. Regionen ausbauen bei
+  Gewinn, aufgeben nach zwei Verlustjahren. Preis je Region frei: unter der Post je nach
+  Risikobereitschaft, nie unter Kosten plus Aufschlag; risikofreudige Kuriere sind
+  billiger, aber weniger zuverlässig. Verlader im Dienstmodus wählen jährlich pro
+  Kundenregion nach Gesamtkosten (Preis x km + erwarteter Schaden + Verspätung aus dem
+  Vorjahr + Wechselkosten). Eigene Flotte oder Kauf bleibt die Jahreswahl pro Firma
+  (Flottenfixkosten lassen sich nicht auf Regionen aufteilen). Kalibrierung: Wechselkosten
+  als Anteil der Transportrechnung statt des Warenwerts, Verspätungskosten eigener Wert
+  `delay_cost_per_unit_day` (5 CHF), Kurier-Schadenquote 0,1–1 %; sonst gewann nie ein
+  Kurier. Seed 0, 8 Jahre: 2 Eintritte (Genfersee, Zürich), 30 Wechsel, eine Übernahme,
+  Regionen auf- und zugemacht. Tests: `test_couriers.py` (6); 334 Tests grün.
+- **Phase 30, 2026-11-05:** Neuer Reiter «Transport» (`dashboard_carriers.js`, eingefügt
+  über `__CARRIERS__`): Kennzahlen, Marktanteile eigene Flotte / Post / Kuriere,
+  Posttarif und Bundesbeitrag, mittlere Verspätung, Kuriere pro Region als kleine Karte,
+  Tabelle aller Anbieter. Export `D.carriers`, `carrier_report.csv` (seit Phase 28).
+  Gesetze (Restmonopol, Konzessionsabgabe, Tariffreiheit) **nicht gebaut**: sie brauchen
+  neue Gesetzesarten in `laws.py` und Eingriffe in Tarif und Wahl, also nicht klein.
+  Messlauf 3 Seeds x 50 Jahre, aus / an (Kuriere an): Die Post gerät in eine Spirale.
+  Kuriere nehmen ihr dichte Strecken weg, die Fixkosten bleiben, der Tarif steigt jedes
+  Jahr um 5 % bis 3,2–3,7 CHF, am Ende fahren alle Verlader mit eigener Flotte (Anteil
+  Post und Kuriere 0 %). Bundesbeitrag total 0,73–0,81 Mia. CHF. Gewinne aller Firmen
+  total ändern sich stark (Seed 0: 9,2 → 42,0 Mia., Seed 1: −17,1 → −33,3 Mia.,
+  Seed 2: 12,7 → −42,5 Mia.), Konkurse 72/80/92 → 56/92/119, Servicegrad Seed 2
+  0,97 → 0,78. Darum bleibt `carriers.enabled: false`. Nötig vor dem Einschalten: Post-
+  Fixkosten an das tatsächliche Volumen anpassen (oder bei Volumenverlust senken),
+  Tarifspirale dämpfen und prüfen, warum der Servicegrad fällt (Verspätungen, Konkurse
+  von Kurieren mit Kunden). Tests: `test_dashboard_carriers.py` (2).

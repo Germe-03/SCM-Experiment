@@ -146,6 +146,7 @@ def build_dashboard_data(
         "rnd": list(result.rnd_reports),
         "patents": list(result.patents),
         "rnd_trees": _rnd_trees(config),
+        "carriers": list(result.carriers),
         "offence_ledger": list(result.offence_ledger),
         "holdings": list(result.holdings),
         "laws": list(result.laws),

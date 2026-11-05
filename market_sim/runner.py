@@ -71,6 +71,8 @@ class RunResult:
     class_reports: list[dict[str, object]] = field(default_factory=list)
     rnd_reports: list[dict[str, object]] = field(default_factory=list)
     patents: list[dict[str, object]] = field(default_factory=list)
+    # Phase 28: one row per year and carrier (Post, later couriers).
+    carriers: list[dict[str, object]] = field(default_factory=list)
     offence_ledger: list[dict[str, object]] = field(default_factory=list)
     holdings: list[dict[str, object]] = field(default_factory=list)
     laws: list[dict[str, object]] = field(default_factory=list)
@@ -251,6 +253,8 @@ class SimulationRunner:
             brand_reports=list(state.brand_reports), class_reports=list(state.class_reports),
             rnd_reports=list(self.lab.reports) if self.lab is not None else [],
             patents=self.patent_office.report() if self.patent_office is not None else [],
+            carriers=list(self.env.geography.carriers.reports)
+            if self.env.geography is not None and self.env.geography.carriers is not None else [],
             holdings=list(self.holdings.history) + self.holdings.snapshot(state.year) if self.holdings is not None else [],
             laws=assess_laws(self.laws.enacted, [k.model_dump() for k in state.system_kpis], self.config.laws)
             if self.laws is not None else [],

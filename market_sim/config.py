@@ -669,6 +669,64 @@ class PatentInfringementConfig(ConfigModel):
     belief_spread: float = Field(default=0.5, ge=0)
 
 
+class PostConfig(ConfigModel):
+    """Phase 28: the Post, one uniform tariff, never bankrupt, no loans."""
+
+    # Base tariff in CHF per sim-unit and km (before fuel index), as the old service_rate.
+    start_rate: float = Field(default=1.4, ge=0)
+    margin: float = Field(default=0.03, ge=0)
+    # Largest tariff change per year (share); 0 keeps the tariff fixed.
+    max_tariff_step: float = Field(default=0.05, ge=0)
+    # Network and staff per day (times price index and mean wage index), grows with capacity.
+    fixed_cost_per_day: float = Field(default=40_000.0, ge=0)
+    variable_rate: float = Field(default=0.9, ge=0)
+    # Units per day; 0 = unlimited. Overload waits (longer lead time), nothing is lost.
+    capacity_per_day: float = Field(default=2000.0, ge=0)
+    expand_utilization: float = Field(default=0.9, ge=0)
+    expand_step: float = Field(default=0.2, ge=0)
+    expansion_delay_days: int = Field(default=365, ge=0)
+
+
+class CourierConfig(ConfigModel):
+    """Phase 29: private couriers enter regions where the Post tariff leaves a margin."""
+
+    enabled: bool = False
+    entry_probability: float = Field(default=0.15, ge=0, le=1)
+    min_margin: float = Field(default=0.15, ge=0)
+    max_entries_per_year: int = Field(default=1, ge=0)
+    start_cash: float = Field(default=5_000_000.0, ge=0)
+    variable_rate: float = Field(default=0.8, ge=0)
+    # Sparse regions cost more per km: x (mean population share / share) ** exponent.
+    density_exponent: float = Field(default=0.5, ge=0)
+    fixed_cost_per_day_per_region: float = Field(default=4000.0, ge=0)
+    # Share of a region's transport volume a courier expects to win when planning entry.
+    expected_share: float = Field(default=0.3, gt=0, le=1)
+    capacity_per_region: float = Field(default=300.0, ge=0)
+    damage_probability: list[float] = Field(default_factory=lambda: [0.001, 0.01])
+    delay_probability: list[float] = Field(default_factory=lambda: [0.02, 0.10])
+    delay_days: int = Field(default=2, ge=0)
+    undercut: list[float] = Field(default_factory=lambda: [0.05, 0.20])
+    min_markup: float = Field(default=0.05, ge=0)
+    credit_limit: float = Field(default=2_500_000.0, ge=0)
+    interest_spread: float = Field(default=0.03, ge=0)
+    expand_probability: float = Field(default=0.3, ge=0, le=1)
+    abandon_after_years: int = Field(default=2, ge=1)
+    takeover_probability: float = Field(default=0.2, ge=0, le=1)
+    # Competition authority: no takeover above this courier share of a region.
+    max_region_share: float = Field(default=0.6, ge=0, le=1)
+
+
+class CarriersConfig(ConfigModel):
+    """Phase 28-30: the Post (and later couriers) replace the anonymous transport service."""
+
+    enabled: bool = False
+    post: PostConfig = Field(default_factory=PostConfig)
+    couriers: CourierConfig = Field(default_factory=CourierConfig)
+    # CHF a shipper expects to lose per unit and day of late delivery (learned delay).
+    delay_cost_per_unit_day: float = Field(default=5.0, ge=0)
+    switching_cost_share: float = Field(default=0.02, ge=0)
+
+
 class PatentsConfig(ConfigModel):
     """Phase 25: patents on the first research success of patentable stages (no licences)."""
 
@@ -929,6 +987,7 @@ class MarketConfig(ConfigModel):
     long_run: LongRunConfig = Field(default_factory=LongRunConfig)
     categories: CategoriesConfig = Field(default_factory=CategoriesConfig)
     geography: GeographyConfig = Field(default_factory=GeographyConfig)
+    carriers: CarriersConfig = Field(default_factory=CarriersConfig)
     state: StateConfig = Field(default_factory=StateConfig)
     research: ResearchConfig = Field(default_factory=ResearchConfig)
     patents: PatentsConfig = Field(default_factory=PatentsConfig)
