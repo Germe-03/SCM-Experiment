@@ -183,6 +183,8 @@ def test_payout_keeps_target_capital_and_is_logged():
     events = []
     banking.year_end(firms, BankConfig(), 1, 1, 365, events)
     assert bank.equity == 150
+    assert bank.risk_weighted_ratio == 0.15
+    assert bank.balance_total == 1000
     assert bank.capital_ratio == 0.15
     assert len(events) == 1 and events[0]["event"] == "bank_payout"
     assert firms["firm_00"].cash == -1000
@@ -305,3 +307,29 @@ def test_config_validation(values):
     assert load_market_config().banking.enabled
     with pytest.raises(ValidationError):
         BankingConfig(**values)
+
+
+def test_capital_ratio_uses_balance_total():
+    firms = runtimes(2)
+    banking = BankingSystem(BankingConfig(second_account_enabled=False, payout_ratio=0,
+                                          entry_enabled=False), 0, firms)
+    bank = banking.primary_bank("firm_00")
+    bank.equity = 100
+    # Few loans, many deposits: Bilanzsumme = deposits + equity, not the loans.
+    bank.loans, bank.deposits = 20, 900
+    assert bank.balance_total == 1000
+    assert bank.capital_ratio == pytest.approx(0.1)
+    assert bank.risk_weighted_ratio == pytest.approx(5.0)
+    # Loans above deposits + equity are refinanced at the SNB: Bilanzsumme = loans.
+    bank.loans, bank.deposits = 2000, 900
+    assert bank.balance_total == 2000
+    assert bank.capital_ratio == pytest.approx(0.05)
+    bank.equity, bank.loans, bank.deposits = 0, 0, 0
+    assert bank.capital_ratio == 0.0
+    reports = banking.year_end(firms, BankConfig(), 1, 1, 365, [])
+    for report in reports:
+        live = banking.banks[report.bank_id]
+        assert report.balance_total == pytest.approx(max(live.loans, live.deposits + live.equity))
+        assert report.capital_ratio == pytest.approx(live.equity / report.balance_total)
+        assert 0 <= report.capital_ratio <= 1
+        assert report.risk_weighted_ratio == pytest.approx(live.risk_weighted_ratio)

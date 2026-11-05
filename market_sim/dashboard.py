@@ -504,7 +504,8 @@ function renderBankDetail(id){const root=$('#fm-detail'),f=bankActors()['bank:'+
  $('#bd-events').innerHTML=eventList((D.bank_events||[]).filter(e=>e.bank_id===id&&inRange(e.year)))
 }
 function firmBankLine(id){const rows=(D.banks||[]).filter(b=>b.year===range.to&&(b.customer_ids||[]).includes(id));rows.sort((a,b)=>Number((b.house_customer_ids||[]).includes(id))-Number((a.house_customer_ids||[]).includes(id)));
- return '<p>Bank: '+(rows.length?rows.map(b=>bankLink(b.bank_id,b.name)+' ('+((b.house_customer_ids||[]).includes(id)?'Hausbank':'Zweitkonto')+')').join(', '):'Keine Kontoverbindung im letzten Jahr des Zeitraums.')+'</p>'}
+ const role=h=>rows.filter(b=>(b.house_customer_ids||[]).includes(id)===h).map(b=>bankLink(b.bank_id,b.name)).join(', ')||'keine';
+ return '<p>'+(rows.length?'Hausbank: '+role(true)+' · Zweitbank: '+role(false):'Bank: Keine Kontoverbindung im letzten Jahr des Zeitraums.')+'</p>'}
 const DEC_GROUP={price_band:'Preis',wage_level:'Lohn',overtime_level:'Lohn',r_and_d_budget:'F&E',rnd_started:'F&E',offence:'Straftaten',expand_started:'Investitionen',site_started:'Investitionen',takeover_bought:'Investitionen',transport_mode:'Investitionen',transport_switch:'Investitionen',archetype:'Strategie',strategy_change:'Strategie',risk_tolerance:'Strategie',target_safety_stock_days:'Strategie'};
 const DEC_LABEL={price_band:'Preisband',wage_level:'Lohn',overtime_level:'Überstunden',r_and_d_budget:'F&E-Budget',rnd_started:'F&E-Projekt',offence:'Straftat',expand_started:'Ausbau',site_started:'Neuer Standort',takeover_bought:'Übernahme',transport_mode:'Transport',transport_switch:'Transportwechsel',archetype:'Strategie',strategy_change:'Strategiewechsel',risk_tolerance:'Risikobereitschaft',target_safety_stock_days:'Lagerziel (Tage)'};
 const OFFENCE={lohndumping:'Lohndumping',pfusch:'Pfusch bei Rohstoffen',steuerhinterziehung:'Steuerhinterziehung'};
