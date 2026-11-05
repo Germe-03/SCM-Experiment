@@ -368,3 +368,16 @@ Vorlage: «Offene Punkte» in `docs/bauplan-banken-boerse.md`.
   Banken ohne Kunden zeigen 100 %. Bankpleiten gab es in 6 von 10 Seeds
   (Seed 4: 4 Pleiten, 110 Konkurse, nur noch 3 Banken). In 3 Seeds ist der
   Gewinn aller Firmen über 50 Jahre negativ.
+- **Phase 27 (Dashboard-Teil), 2026-11-05:** Neue Datei `market_sim/dashboard_rnd.js`
+  (Platzhalter `__RND__`), Export `D.rnd_trees` (leer ohne Bäume). Reiter F&E: Baum pro
+  Branche als SVG (Chips, eingefärbt nach erforscht/umgesetzt bis Ende Zeitraum, Patent
+  mit Inhaber und Ablaufjahr, «gesperrt»), Tabelle «Patente» mit Spaltenfilter, Spalte
+  «Schritt» in der Projekttabelle, Ausgaben aufgeteilt in Forschung, Umsetzung,
+  Patentgebühren, Schadenersatz (Aufteilung aus abgeschlossenen Projekten geschätzt).
+  Firmendetails: kleiner eigener Baum, eigene Patente, Schadenersatz bezahlt/erhalten.
+  Finanzen: Karte mit denselben vier Posten. Staat: Patentverletzungen (vorbereitet für
+  Phase 26: `compensation`, `holder`), Ledger mit Spalte Schadenersatz falls vorhanden.
+  Geldfluss: F&E getrennt in Forschung/Umsetzung, `schadenersatz:<Firma>` mit
+  Partnername. Texte: Fakten zu umgesetzten Stufen, Patenten, Schadenersatz und
+  Patentverletzungen. Tests: `dashboard_phase27_check.cjs`, `test_phase27_dashboard.py`
+  (4); 325 Tests grün. Offen: Messlauf 3 Seeds × 50 Jahre, Sichtprüfung im Browser.

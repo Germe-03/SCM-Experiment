@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from market_sim.config import MarketConfig
+from market_sim.kpi import PROJECT_DE
 from market_sim.models import STAGES, SupplyNetwork
 from market_sim.runner import RunResult
 
@@ -49,6 +50,18 @@ def _stock_weekly(rows: list[dict[str, Any]]) -> dict[str, Any]:
         # Small nominal prices must retain precision for rebased comparisons.
         "prices": {fid: [round(row[fid], 6) if row.get(fid) is not None else None
                          for row in closes] for fid in ids},
+    }
+
+
+def _rnd_trees(config: MarketConfig) -> dict[str, list[dict[str, Any]]]:
+    """Phase 27: research tree definitions for the tree graphics (empty when trees are off)."""
+    if not config.research.trees_enabled:
+        return {}
+    return {
+        tree: [{"name": s.name, "label": PROJECT_DE.get(s.name, s.name), "requires": list(s.requires),
+                "complexity": s.complexity, "patentable": s.patentable, "branch": s.branch,
+                "categories": list(s.categories)} for s in stages]
+        for tree, stages in config.research.trees.items()
     }
 
 
@@ -132,6 +145,7 @@ def build_dashboard_data(
         "classes": list(result.class_reports),
         "rnd": list(result.rnd_reports),
         "patents": list(result.patents),
+        "rnd_trees": _rnd_trees(config),
         "offence_ledger": list(result.offence_ledger),
         "holdings": list(result.holdings),
         "laws": list(result.laws),

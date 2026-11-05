@@ -1,6 +1,6 @@
 // Shared column filters. State belongs to a stable table ID, not to its DOM rows.
 const tableFilters = new Map();
-const filterTables = new Set(['fm-table','rd-table','ev-table','fi-banks','sx-top','fi-holdings','etf-table']);
+const filterTables = new Set(['fm-table','rd-table','ev-table','fi-banks','sx-top','fi-holdings','etf-table','rd-patents','st-patent-table']);
 let filterPopup = null;
 function closeColumnFilter(){if(filterPopup){const {panel,button}=filterPopup;panel.remove();button.setAttribute('aria-expanded','false');filterPopup=null}}
 function columnNumber(cell){

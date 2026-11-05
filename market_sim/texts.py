@@ -10,13 +10,15 @@ from __future__ import annotations
 import re
 from collections import defaultdict
 
+from market_sim.kpi import PROJECT_DE
 from market_sim.llm import unchecked_numbers
 
 STAGE_DE = {"retailer": "Detailhandel", "wholesaler": "Grosshandel", "distributor": "Verteilung", "factory": "Hersteller"}
 CAT_DE = {"beer": "Bier", "wine": "Wein", "spirits": "Spirituosen"}
 EXIT_DE = {"bankruptcy": "Konkurs", "takeover": "Übernahme", "poisoning": "Vergiftung"}
 KEY_EVENTS = {"takeover", "poisoning", "offence_detected", "rnd_success", "site_finished", "expand_finished",
-              "restructuring", "strategy_change", "bankruptcy", "stake_bought", "breakup", "spin_off"}
+              "restructuring", "strategy_change", "bankruptcy", "stake_bought", "breakup", "spin_off",
+              "rnd_implemented", "patent_granted", "patent_expired"}
 YEAR_EVENTS = {"recession", "raw_material_shortage", "cost_shock", "wage_push", "trend_change", "poisoning",
                "law_enacted", "breakup", "heat_summer", "harvest_failure",
                "bank_failed", "bank_entry", "exchange_opened"}
@@ -54,6 +56,95 @@ def _readable(details: str) -> str:
     return re.sub(r"(-?\d{1,3}(?:['’,]\d{3})+|-?\d+) CHF", to_mio, str(details))
 
 
+def _stage_label(data: dict, tree, name) -> str:
+    trees = data.get("rnd_trees") or {}
+    tree_lists = [trees.get(tree, [])] if tree is not None else trees.values()
+    for entries in tree_lists:
+        for entry in entries:
+            if entry.get("name") == name:
+                return entry.get("label", PROJECT_DE.get(name, name))
+    return PROJECT_DE.get(name, name)
+
+
+def _name(data: dict, firm_id) -> str:
+    if firm_id is None:
+        return ""
+    return data["firms"].get(firm_id, {}).get("name", firm_id)
+
+
+def rnd_firm_lines(data: dict, firm_id: str) -> list[str]:
+    lines = []
+    implemented = sorted(
+        (row for row in data.get("rnd") or []
+         if row.get("firm") == firm_id and row.get("step") == "implementation"),
+        key=lambda row: row.get("end_year", 0))
+    labels = []
+    for row in implemented:
+        label = _stage_label(data, row.get("tree"), row.get("stage") or row.get("project") or row.get("name"))
+        if label not in labels:
+            labels.append(label)
+    if labels:
+        lines.append(f"Forschungsstufen umgesetzt: {len(labels)} ({', '.join(labels)})")
+
+    for patent in data.get("patents") or []:
+        if patent.get("holder") == firm_id or patent.get("first_holder") == firm_id:
+            label = _stage_label(data, patent.get("tree"), patent.get("stage"))
+            lines.append(f"Patent auf {label} von Jahr {patent.get('granted_year')} bis Jahr "
+                         f"{patent.get('expires_year')}, Gebühr {_chf(patent.get('fee') or 0)}")
+
+    paid = received = 0
+    firm = (data.get("firms") or {}).get(firm_id, {})
+    for row in firm.get("yearly", []) or []:
+        for key, value in (row.get("cash_flows") or {}).items():
+            if key.startswith("schadenersatz:"):
+                if value < 0:
+                    paid += -value
+                elif value > 0:
+                    received += value
+    if paid > 0:
+        lines.append(f"Schadenersatz bezahlt: {_chf(paid)}")
+    if received > 0:
+        lines.append(f"Schadenersatz erhalten: {_chf(received)}")
+
+    for row in data.get("offence_ledger") or []:
+        if row.get("firm") == firm_id and row.get("offence") == "patentverletzung":
+            lines.append(f"Patentverletzung entdeckt in Jahr {row.get('year')}: Busse "
+                         f"{_chf(row.get('fine') or 0)}, Schadenersatz "
+                         f"{_chf(row.get('compensation') or 0)}")
+    return lines
+
+
+def rnd_year_lines(data: dict, year: int) -> list[str]:
+    lines = []
+    rnd_rows = [row for row in data.get("rnd") or [] if row.get("end_year") == year]
+    impl = sum(row.get("step") == "implementation" for row in rnd_rows)
+    res = sum(row.get("step") != "implementation" and row.get("success") is True for row in rnd_rows)
+    if impl + res > 0:
+        lines.append(f"Forschung: {impl} Stufen umgesetzt, {res} Stufen erfolgreich erforscht")
+
+    for patent in data.get("patents") or []:
+        label = _stage_label(data, patent.get("tree"), patent.get("stage"))
+        if patent.get("granted_year") == year:
+            holder = patent.get("first_holder", patent.get("holder"))
+            lines.append(f"Patent erteilt: {_name(data, holder)} für {label} bis Jahr "
+                         f"{patent.get('expires_year')}")
+        if patent.get("end_year") == year:
+            if patent.get("status") == "expired":
+                lines.append(f"Patent abgelaufen: {label} von {_name(data, patent.get('holder'))}")
+            elif patent.get("status") == "lapsed":
+                lines.append(f"Patent verfallen: {label} von {_name(data, patent.get('holder'))}")
+
+    for row in data.get("offence_ledger") or []:
+        if row.get("year") == year and row.get("offence") == "patentverletzung":
+            line = (f"Patentverletzung entdeckt: {_name(data, row.get('firm'))}, Busse "
+                    f"{_chf(row.get('fine') or 0)}, Schadenersatz "
+                    f"{_chf(row.get('compensation') or 0)}")
+            if row.get("holder"):
+                line += f" an {_name(data, row.get('holder'))}"
+            lines.append(line)
+    return lines
+
+
 def firm_facts(data: dict, firm_id: str) -> str:
     firm = data["firms"][firm_id]
     yearly = firm.get("yearly", [])
@@ -80,6 +171,7 @@ def firm_facts(data: dict, firm_id: str) -> str:
         lines.append(f"Austritt: Jahr {firm['exit_year']}")
     else:
         lines.append("Am Ende noch aktiv")
+    lines.extend(rnd_firm_lines(data, firm_id))
     events = [e for e in firm.get("events", []) if e["event"] in KEY_EVENTS][-8:]
     for e in events:
         lines.append(f"Jahr {e['year']}: {e['event'].replace('_', ' ')} – {_readable(e['details'])}")
@@ -126,6 +218,7 @@ def year_facts(data: dict, year: int) -> str:
     if profits:
         lines.append("Grösste Gewinner: " + ", ".join(f"{n} ({_chf(p)})" for p, n in profits[-2:][::-1]))
         lines.append("Grösste Verlierer: " + ", ".join(f"{n} ({_chf(p)})" for p, n in profits[:2]))
+    lines.extend(rnd_year_lines(data, year))
     names = {fid: f["name"] for fid, f in data["firms"].items()}
     for e in [e for e in data.get("events", []) if e["year"] == year and e["event"] in YEAR_EVENTS][:6]:
         who = f" ({names.get(e['firm'], e['firm'])})" if e.get("firm") else ""

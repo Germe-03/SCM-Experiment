@@ -24,8 +24,10 @@ def write_dashboard_html(data: dict, path: str | Path) -> Path:
     filters = Path(__file__).with_name("dashboard_filters.js").read_text(encoding="utf-8")
     stocks = Path(__file__).with_name("dashboard_stocks.js").read_text(encoding="utf-8")
     etfs = Path(__file__).with_name("dashboard_etfs.js").read_text(encoding="utf-8")
+    rnd = Path(__file__).with_name("dashboard_rnd.js").read_text(encoding="utf-8")
     html = (_HTML.replace("__DATA__", payload).replace("__CHART_JS__", CHART_JS_URL)
-            .replace("__TABLE_FILTERS__", filters).replace("__STOCK_COMPARE__", stocks).replace("__ETFS__", etfs))
+            .replace("__TABLE_FILTERS__", filters).replace("__STOCK_COMPARE__", stocks).replace("__ETFS__", etfs)
+            .replace("__RND__", rnd))
     target.write_text(html, encoding="utf-8")
     return target
 
@@ -227,6 +229,7 @@ body:has(dialog[open]){overflow:hidden}
   <div class="card"><h3>Eintritte, Konkurse, Strategiewechsel</h3><div class="chart"><canvas id="fi-churn"></canvas></div></div>
   <div class="card"><h3>Konzentration (HHI der Händler)</h3><div class="chart"><canvas id="fi-hhi"></canvas></div></div>
   <div class="card"><h3>Arbeitsmarkt</h3><p class="hint">Offene Stellen, abgeworbene Arbeitskräfte und Lohnniveau (1 = ohne Knappheit).</p><div class="chart"><canvas id="fi-labor"></canvas></div></div>
+  <div class="card wide"><h3>Forschung, Umsetzung, Patentgebühren und Schadenersatz</h3><p class="hint">Alle Firmen zusammen. Schadenersatz: was Patentverletzer an die Inhaber zahlen. Forschung und Umsetzung geschätzt aus den abgeschlossenen Projekten.</p><div class="chart"><canvas id="fi-rnd"></canvas></div></div>
   <div class="card"><h3>Beteiligungen und Dividenden</h3><div class="chart"><canvas id="fi-stakes"></canvas></div></div>
   <div class="card"><h3>Wer hält was (Ende des Zeitraums)</h3><div class="table-wrap"><table id="fi-holdings"></table></div></div>
  </div>
@@ -255,6 +258,7 @@ body:has(dialog[open]){overflow:hidden}
   <div class="card"><h3>Vergiftungen und Angst</h3><div class="chart"><canvas id="st-fear"></canvas></div></div>
   <div class="card"><h3>Übernahmen und Wettbewerbsaufsicht</h3><div class="chart"><canvas id="st-tko"></canvas></div></div>
   <div class="card wide"><h3>Gesetze</h3><p class="hint">Eine Folge wird erst gezeigt, wenn sie nach mindestens drei Jahren deutlich grösser ist als die normale Schwankung vor dem Gesetz.</p><div class="table-wrap"><table id="st-laws"></table></div></div>
+  <div class="card wide"><h3>Patentverletzungen</h3><p class="hint">Wer eine patentierte Stufe ohne Erlaubnis nutzt, zahlt bei Entdeckung eine Busse an den Staat und Schadenersatz an den Inhaber.</p><div id="st-patents"></div></div>
   <div class="card wide"><h3>Urteile und Eingriffe</h3><div class="table-wrap"><table id="st-table"></table></div></div>
  </div>
 </section>
@@ -263,7 +267,9 @@ body:has(dialog[open]){overflow:hidden}
  <div class="kpis" id="rd-kpis"></div>
  <div class="grid">
   <div class="card"><h3>Projekte pro Jahr</h3><div class="chart"><canvas id="rd-count"></canvas></div></div>
-  <div class="card"><h3>Ausgaben für Projekte</h3><div class="chart"><canvas id="rd-spend"></canvas></div></div>
+  <div class="card"><h3>Ausgaben: Forschung, Umsetzung, Patente</h3><p class="hint">Aufteilung in Forschung und Umsetzung geschätzt aus den abgeschlossenen Projekten.</p><div class="chart"><canvas id="rd-spend"></canvas></div></div>
+  <div class="card wide"><h3>Forschungsbäume</h3><p class="hint">Pro Branche ein Baum. Pfeile zeigen, welche Stufe zuerst umgesetzt sein muss. Farbe: wie viele Firmen eine Stufe erforscht oder umgesetzt haben. Solange ein Patent läuft, dürfen andere die Stufe nicht umsetzen.</p><div class="chips" id="rd-tree-chips" role="group" aria-label="Branche" style="margin-bottom:10px"></div><div id="rd-tree" style="overflow-x:auto"></div></div>
+  <div class="card wide"><h3>Patente</h3><div class="table-wrap"><table id="rd-patents"></table></div></div>
   <div class="card wide"><h3>Alle abgeschlossenen Projekte</h3><div class="table-wrap"><table id="rd-table"></table></div></div>
  </div>
 </section>
@@ -508,7 +514,7 @@ function firmBankLine(id){const rows=(D.banks||[]).filter(b=>b.year===range.to&&
  return '<p>'+(rows.length?'Hausbank: '+role(true)+' · Zweitbank: '+role(false):'Bank: Keine Kontoverbindung im letzten Jahr des Zeitraums.')+'</p>'}
 const DEC_GROUP={price_band:'Preis',wage_level:'Lohn',overtime_level:'Lohn',r_and_d_budget:'F&E',rnd_started:'F&E',offence:'Straftaten',expand_started:'Investitionen',site_started:'Investitionen',takeover_bought:'Investitionen',transport_mode:'Investitionen',transport_switch:'Investitionen',archetype:'Strategie',strategy_change:'Strategie',risk_tolerance:'Strategie',target_safety_stock_days:'Strategie'};
 const DEC_LABEL={price_band:'Preisband',wage_level:'Lohn',overtime_level:'Überstunden',r_and_d_budget:'F&E-Budget',rnd_started:'F&E-Projekt',offence:'Straftat',expand_started:'Ausbau',site_started:'Neuer Standort',takeover_bought:'Übernahme',transport_mode:'Transport',transport_switch:'Transportwechsel',archetype:'Strategie',strategy_change:'Strategiewechsel',risk_tolerance:'Risikobereitschaft',target_safety_stock_days:'Lagerziel (Tage)'};
-const OFFENCE={lohndumping:'Lohndumping',pfusch:'Pfusch bei Rohstoffen',steuerhinterziehung:'Steuerhinterziehung'};
+const OFFENCE={lohndumping:'Lohndumping',pfusch:'Pfusch bei Rohstoffen',steuerhinterziehung:'Steuerhinterziehung',patentverletzung:'Patentverletzung'};
 const EXIT_TYPE={bankruptcy:'Konkurs',takeover:'Übernahme',poisoning:'Vergiftung'};
 S.decFilter=new Set(Object.values(DEC_GROUP));
 function decText(d){const v=d.value;if(d.decision==='price_band')return`${nf(v.min,2)}–${nf(v.max,2)} CHF (Basis ${nf(v.base,2)})`;
@@ -546,6 +552,7 @@ function renderFirmDetail(){const root=$('#fm-detail');destroy();if(S.tab!=='fir
  <div class="card"><h3>Reputation und Qualität</h3><div class="chart"><canvas id="fd-rep"></canvas></div></div><div class="card"><h3>Ereignisse dieser Firma</h3><ul class="list" id="fd-events" style="max-height:270px;overflow:auto"></ul></div>
  <div class="card wide" id="fd-story" hidden></div>
  ${D.stocks?.prices?.[id]?'<div class="card wide"><h3>Börsenkurs</h3>'+etfMembership(id)+'<div id="fd-index-switch">'+stockIndexSwitch('fd',true)+'</div><p class="hint" id="fd-stock-empty"></p><div class="chart"><canvas id="fd-price"></canvas></div></div>':''}
+ ${firmRndHtml(id)}
  <div class="card wide" id="fd-exit" hidden></div>
  <div class="card wide"><h3>Entscheidungen</h3><p class="hint">Pro Jahr nur, was sich geändert hat, dazu Straftaten, Investitionen und Projekte.</p><div class="chips" id="fd-dec-filter" style="margin-bottom:10px"></div><ul class="list" id="fd-decisions" style="max-height:420px;overflow:auto"></ul></div></div></div>`;
  wireBankLinks(root);
@@ -601,8 +608,8 @@ function renderCompare(){const actors={...D.firms,...bankActors()},actor=id=>act
  const best=[0,1,2,3].map(i=>Math.max(...stats.map(r=>r.values[i]).filter(v=>v!=null)));
  $('#cp-summary').innerHTML='<thead><tr><th>Firma</th><th>Letztes Jahr</th><th>Durchschnitt</th><th>Bestes Jahr</th><th>Schlechtestes Jahr</th></tr></thead><tbody>'+stats.map(r=>`<tr><td><span class="dot" style="background:${pal()[cmpColors[r.id]]}"></span>${esc(actorName(r.id))}</td>${r.values.map((v,i)=>`<td class="num ${v!=null&&v===best[i]?'best':''}">${v!=null&&v===best[i]?'<strong>':''}${format(v)}${i>=2&&v!=null?' (Jahr '+r.pairs.find(p=>p[1]===v)[0]+')':''}${v!=null&&v===best[i]?'</strong>':''}</td>`).join('')}</tr>`).join('')+'</tbody>'}
 
-function ledgerHtml(id){const rows=(D.offence_ledger||[]).filter(r=>inRange(r.year)&&(!id||r.firm===id));
- return `<div class="card"><h3>Hat es sich gelohnt?</h3><div class="kpis">${kpi('lohnend:',nf(rows.filter(r=>r.paid_off).length)+' von '+nf(rows.length))}</div><p class="hint">Schaden ist eine Schätzung aus Reputationsverlust und Vorjahresumsatz.</p>${rows.length?`<div class="table-wrap"><table id="ledger-${id||'state'}"><thead><tr><th>Firma</th><th>Straftat</th><th>Jahr</th><th>Gewinn</th><th>Busse</th><th>Schaden</th><th>Netto</th><th>Urteil</th></tr></thead><tbody>${rows.map(r=>`<tr data-paid-off="${r.paid_off}"><td>${actorLabel(r.firm)}</td><td>${esc(({lohndumping:'Lohndumping',pfusch:'Pfusch bei Rohstoffen',steuerhinterziehung:'Steuerhinterziehung'})[r.offence]||r.offence)}</td><td>${r.year}</td>${['gain','fine','damage','net'].map(k=>`<td class="num" data-value="${r[k]}">${chf(r[k])}</td>`).join('')}<td><span class="badge ${r.paid_off?'ok':'off'}">${r.paid_off?'lohnend':'nicht lohnend'}</span></td></tr>`).join('')}</tbody></table></div>`:empty('Keine Straftaten im Zeitraum.')}</div>`}
+function ledgerHtml(id){const rows=(D.offence_ledger||[]).filter(r=>inRange(r.year)&&(!id||r.firm===id)),money=['gain','fine',...(rows.some(r=>r.compensation!=null)?['compensation']:[]),'damage','net'];
+ return `<div class="card"><h3>Hat es sich gelohnt?</h3><div class="kpis">${kpi('lohnend:',nf(rows.filter(r=>r.paid_off).length)+' von '+nf(rows.length))}</div><p class="hint">Schaden ist eine Schätzung aus Reputationsverlust und Vorjahresumsatz.</p>${rows.length?`<div class="table-wrap"><table id="ledger-${id||'state'}"><thead><tr><th>Firma</th><th>Straftat</th><th>Jahr</th><th>Gewinn</th><th>Busse</th>${money.includes('compensation')?'<th>Schadenersatz</th>':''}<th>Schaden</th><th>Netto</th><th>Urteil</th></tr></thead><tbody>${rows.map(r=>`<tr data-paid-off="${r.paid_off}"><td>${actorLabel(r.firm)}</td><td>${esc(OFFENCE[r.offence]||r.offence)}</td><td>${r.year}</td>${money.map(k=>`<td class="num" data-value="${r[k]??0}">${chf(r[k]??0)}</td>`).join('')}<td><span class="badge ${r.paid_off?'ok':'off'}">${r.paid_off?'lohnend':'nicht lohnend'}</span></td></tr>`).join('')}</tbody></table></div>`:empty('Keine Straftaten im Zeitraum.')}</div>`}
 
 function renderStructure(){$('#ms-legend').innerHTML=['factory','distributor','wholesaler','retailer','bank'].map(st=>`<span class="dot" style="background:${stageColor()[st]}"></span>${st==='bank'?'Banken':STAGE[st]}`).join(' · ')+' · Austritte: × Konkurs · ◆ Übernahme · ▲ Vergiftung';const brands=new Map();for(const r of D.brands||[]){if(r.year>range.to)continue;const old=brands.get(r.brand);brands.set(r.brand,{...r,first:old?Math.min(old.first,r.year):r.year})}
  $('#ms-brands').innerHTML=Object.entries(CAT).map(([cat,name])=>`<details><summary>${name}</summary><ul class="list">${[...brands.values()].filter(b=>b.category===cat).map(b=>`<li><b>${esc(b.name)}</b> · ${actorLabel(b.owner)} · seit Jahr ${b.first} · ${esc(({cheap:'Discount',standard:'Standard',premium:'Premium'})[b.positioning]||b.positioning)} · ${esc((b.traits||[]).map(t=>({wine:'Wein',spirits:'Spirituosen',lager:'Lager',craft:'Craft',discount:'Discount',import:'Import',alkoholfrei:'Alkoholfrei'})[t]||t).join(', '))}</li>`).join('')||'<li>Keine Marken vorhanden.</li>'}</ul></details>`).join('');
@@ -681,14 +688,14 @@ function renderStocks(){const s=D.stocks||{days:[],years:[],index:[],prices:{}},
  chart('sx-stages',{type:'line',data:{labels:points.map(i=>stockLabel(i,period)),datasets:FM_GROUPS.filter(g=>g!=='bank').map(g=>{const values=stockStageSeries(g);return stockDataset(fmGroupLabel(g),stockNormal(points.map(i=>values[i]),all.map(i=>values[i]).find(v=>v>0)),stageColor()[g])})},options:stockOptions(points,period)});
  $('#sx-events').innerHTML=eventList((D.events||[]).filter(e=>inRange(e.year)&&['exchange_opened','listed','delisted'].includes(e.event)))
 }
-function renderFinance(){renderBanks();renderHoldings();lines('fi-labor',[{label:'Offene Stellen',get:x=>x.open_positions},{label:'Abgeworben',get:x=>x.poached_workers},{label:'Lohnniveau',get:x=>x.wage_index_mean,axis:'y2'}]);lines('fi-negative',byGroup('negative_interest_',r=>r.negative_interest_cost||0,'chf'),{fmt:'chf'});lines('fi-debt',byGroup('debt_',r=>Math.max(0,-(r.cash||0)),'chf',true),{fmt:'chf'});lines('fi-interest',byGroup('interest_cost_',r=>r.interest_cost||0,'chf'),{fmt:'chf'});
+function renderFinance(){renderBanks();renderHoldings();renderRndMoney('fi-rnd');lines('fi-labor',[{label:'Offene Stellen',get:x=>x.open_positions},{label:'Abgeworben',get:x=>x.poached_workers},{label:'Lohnniveau',get:x=>x.wage_index_mean,axis:'y2'}]);lines('fi-negative',byGroup('negative_interest_',r=>r.negative_interest_cost||0,'chf'),{fmt:'chf'});lines('fi-debt',byGroup('debt_',r=>Math.max(0,-(r.cash||0)),'chf',true),{fmt:'chf'});lines('fi-interest',byGroup('interest_cost_',r=>r.interest_cost||0,'chf'),{fmt:'chf'});
  const s=sys(),restr=y=>D.events.filter(e=>e.year===y&&e.event==='restructuring').length;
  chart('fi-churn',{type:'bar',data:{labels:s.map(x=>x.year),datasets:[{label:'Eintritte',data:s.map(x=>x.market_entries),backgroundColor:pal()[0]+'bb'},{label:'Konkurse',data:s.map(x=>x.bankruptcies),backgroundColor:css('--bad')+'bb'},{label:'Sanierungen',data:s.map(x=>restr(x.year)),backgroundColor:pal()[3]+'bb'},{type:'line',label:'Strategiewechsel',data:s.map(x=>x.strategy_changes),borderColor:pal()[4],pointRadius:0}]},options:{scales:{x:{grid:{display:false}}}}});
  lines('fi-hhi',[{label:'HHI',get:x=>x.market_concentration}])}
 function renderLaws(){const laws=(D.laws||[]).filter(l=>l.year<=range.to);
  const badge=v=>v==='Folge erkennbar'?'<span class="badge ok">Folge erkennbar</span>':v==='keine klare Folge erkennbar'?'<span class="badge">keine klare Folge erkennbar</span>':'<span class="badge">Folgen noch unklar</span>';
  $('#st-laws').innerHTML='<thead><tr><th class="num">Jahr</th><th>Gesetz</th><th>Beurteilung</th><th>Was sich verändert hat</th></tr></thead><tbody>'+(laws.length?laws.map(l=>`<tr><td class="num">${l.year}</td><td>${esc(l.title_de)}</td><td>${badge(l.verdict)}<br><small>${l.years_observed} Jahre beobachtet</small></td><td>${l.findings.length?l.findings.map(f=>`${esc(f.label_de)}: ${['offences','offences_detected'].includes(f.metric)?nf(f.before,1)+' → '+nf(f.after,1):pct(f.before)+' → '+pct(f.after)}`).join('<br>'):'—'}</td></tr>`).join(''):`<tr><td colspan="4">${empty('Bis zu diesem Jahr wurde kein neues Gesetz erlassen.')}</td></tr>`)+'</tbody>'}
-function renderState(){renderLaws();$('#st-ledger').innerHTML=ledgerHtml();const s=sys();$('#st-kpis').innerHTML=[kpi('Steuern',chf(sumBy(s,'taxes')),'im Zeitraum'),kpi('Straftaten',nf(sumBy(s,'offences')),nf(sumBy(s,'offences_detected'))+' entdeckt'),kpi('Bussen',chf(sumBy(s,'fines'))),kpi('Vergiftungen',nf(sumBy(s,'poisonings'))),kpi('Übernahmen',nf(sumBy(s,'takeovers')),nf(sumBy(s,'takeovers_blocked'))+' verboten'),kpi('Zerschlagungen',nf(sumBy(s,'breakups')))].join('');
+function renderState(){renderLaws();renderPatentOffences();$('#st-ledger').innerHTML=ledgerHtml();const s=sys();$('#st-kpis').innerHTML=[kpi('Steuern',chf(sumBy(s,'taxes')),'im Zeitraum'),kpi('Straftaten',nf(sumBy(s,'offences')),nf(sumBy(s,'offences_detected'))+' entdeckt'),kpi('Bussen',chf(sumBy(s,'fines'))),kpi('Vergiftungen',nf(sumBy(s,'poisonings'))),kpi('Übernahmen',nf(sumBy(s,'takeovers')),nf(sumBy(s,'takeovers_blocked'))+' verboten'),kpi('Zerschlagungen',nf(sumBy(s,'breakups')))].join('');
  chart('st-off',{type:'bar',data:{labels:s.map(x=>x.year),datasets:[{label:'Begangen',data:s.map(x=>x.offences),backgroundColor:pal()[3]+'99'},{label:'Entdeckt',data:s.map(x=>x.offences_detected),backgroundColor:css('--bad')+'cc'}]},options:{scales:{x:{grid:{display:false}}}}});
  lines('st-money',[{label:'Steuern',get:x=>x.taxes},{label:'Bussen',get:x=>x.fines}],{fmt:'chf'});
  chart('st-fear',{type:'bar',data:{labels:s.map(x=>x.year),datasets:[{label:'Vergiftungen',data:s.map(x=>x.poisonings),backgroundColor:css('--bad')+'cc',yAxisID:'y'},{type:'line',label:'Angst (Nachfrageminus)',data:s.map(x=>x.fear),borderColor:pal()[4],pointRadius:0,yAxisID:'y2'}]},options:{scales:{x:{grid:{display:false}},y:{ticks:{precision:0}},y2:{position:'right',grid:{display:false},...fmtAxis('pct')}}}});
@@ -698,9 +705,9 @@ function renderState(){renderLaws();$('#st-ledger').innerHTML=ledgerHtml();const
 function renderRnd(){const s=sys(),r=(D.rnd||[]).filter(x=>inRange(x.end_year));const ok=r.filter(x=>x.success).length;
  $('#rd-kpis').innerHTML=[kpi('Projekte gestartet',nf(sumBy(s,'rnd_started'))),kpi('Abgeschlossen',nf(r.length),r.length?pct(ok/r.length)+' erfolgreich':''),kpi('Ausgaben',chf(sumBy(s,'rnd_project_spend'))),kpi('Neue Marken',nf(r.filter(x=>x.success&&/^(new brand|neue Marke)/.test(String(x.result))).length))].join('');
  chart('rd-count',{type:'bar',data:{labels:s.map(x=>x.year),datasets:[{label:'Erfolg',data:s.map(x=>x.rnd_successes),backgroundColor:css('--good')+'bb'},{label:'Fehlschlag',data:s.map(x=>x.rnd_failures),backgroundColor:css('--bad')+'bb'},{type:'line',label:'Gestartet',data:s.map(x=>x.rnd_started),borderColor:pal()[2],pointRadius:0}]},options:{scales:{x:{stacked:true,grid:{display:false}},y:{stacked:true}}}});
- lines('rd-spend',[{label:'Ausgaben',get:x=>x.rnd_project_spend}],{fmt:'chf'});
+ renderRndMoney('rd-spend');renderRndTrees();renderPatentTable();
  const P={leichtere_flaschen:'Leichtere Flaschen',waermerueckgewinnung:'Wärmerückgewinnung',ausbeute_optimierung:'Ausbeute-Optimierung',routenplanung:'Routenplanung',lagerautomation:'Lagerautomation',robotik:'Robotik',prozessautomation:'Prozessautomation',rezeptur_optimierung:'Rezeptur-Optimierung',neue_marke:'Neue Marke',alkoholfreies_bier:'Alkoholfreies Bier',prognose_software:'Prognose-Software',smart_factory:'Smart Factory',hefezucht:'Eigene Hefezucht',mehrwegsystem:'Mehrwegsystem',klimaneutrale_brauerei:'Klimaneutrale Brauerei',alkoholfreies_produkt:'Alkoholfreies Produkt',neue_geschmacksrichtung:'Neue Geschmacksrichtung',kuerzere_reifezeit:'Kürzere Reifezeit',kuehlkette:'Kühlkette',kommissionier_roboter:'Kommissionier-Roboter',bestellprognose:'Bestellprognose',self_checkout:'Self-Checkout',kundenkarte:'Kundenkarte',onlineshop:'Onlineshop mit Lieferdienst',kassensystem:'Kassen- und Reservationssystem',kuechenautomation:'Küchenautomation',hausbier:'Hausbier und Signature-Drinks'};
- $('#rd-table').innerHTML='<thead><tr><th>Firma</th><th>Projekt</th><th class="num">Start</th><th class="num">Ende</th><th class="num">Kosten</th><th>Ergebnis</th></tr></thead><tbody>'+(r.length?r.slice().reverse().map(x=>`<tr class="click" data-success="${x.success}" data-new-brand="${x.success&&/^(new brand|neue Marke)/.test(String(x.result))}" data-firm="${esc(x.firm)}"><td>${actorLabel(x.firm)}</td><td>${esc(P[x.project]||x.project)}</td><td class="num">${x.start_year}</td><td class="num">${x.end_year}</td><td class="num" data-value="${x.cost}">${chf(x.cost)}</td><td>${x.success?'<span class="badge ok">'+esc(pretty(x.result))+'</span>':'<span class="badge off">kein Ergebnis</span>'}</td></tr>`).join(''):`<tr><td colspan="6">${empty('Im Zeitraum wurde kein Projekt abgeschlossen.')}</td></tr>`)+'</tbody>';wireFirmLinks($('#rd-table'))}
+ $('#rd-table').innerHTML='<thead><tr><th>Firma</th><th>Projekt</th><th>Schritt</th><th class="num">Start</th><th class="num">Ende</th><th class="num">Kosten</th><th>Ergebnis</th></tr></thead><tbody>'+(r.length?r.slice().reverse().map(x=>`<tr class="click" data-success="${x.success}" data-new-brand="${x.success&&/^(new brand|neue Marke)/.test(String(x.result))}" data-firm="${esc(x.firm)}"><td>${actorLabel(x.firm)}</td><td>${esc(P[x.project]||x.project)}</td><td>${rndStep(x)}</td><td class="num">${x.start_year}</td><td class="num">${x.end_year}</td><td class="num" data-value="${x.cost}">${chf(x.cost)}</td><td>${x.success?'<span class="badge ok">'+esc(pretty(x.result))+'</span>':'<span class="badge off">kein Ergebnis</span>'}</td></tr>`).join(''):`<tr><td colspan="7">${empty('Im Zeitraum wurde kein Projekt abgeschlossen.')}</td></tr>`)+'</tbody>';wireFirmLinks($('#rd-table'))}
 
 // --- Ereignisse ----------------------------------------------------------
 function renderEvents(){const all=evs();const counts={};all.forEach(e=>counts[e.event]=(counts[e.event]||0)+1);
@@ -773,7 +780,7 @@ const FLOW_NODES=[
  {k:'lieferanten',label:'Lieferanten',x:840,y:300,c:6,lout:'Einkauf'},
  {k:'staat',label:'Staat',x:480,y:62,c:4,lout:'Steuern, Zoll, Bussen'},
  {k:'beteiligungen',label:'Beteiligungen',x:180,y:92,c:5,lin:'Dividenden, Kapital',lout:'Dividenden, Käufe'},
- {k:'forschung',label:'Forschung',x:780,y:92,c:8,lout:'F&E'},
+ {k:'forschung',label:'Forschung',x:780,y:92,c:8,lin:'Schadenersatz',lout:'F&E, Schadenersatz'},
  {k:'personal',label:'Mitarbeitende',x:180,y:508,c:1,lout:'Löhne'},
  {k:'bank',label:'Bank',x:480,y:540,c:7,lin:'Schuldenschnitt',lout:'Zinsen'},
  {k:'betrieb',label:'Betrieb & Logistik',x:780,y:508,c:2,lout:'Fixkosten, Transport, Lager'}];
@@ -788,10 +795,10 @@ function flowGroups(id,year){const r=firm(id).yearly.find(x=>x.year===year)||{},
  put('personal','out','Löhne',r.wage_cost,'');put('personal','out','Einstellung',r.hiring_cost,'Kosten für neue Mitarbeitende');
  put('betrieb','out','Fixkosten',r.fixed_cost,'Miete, Maschinen, Abschreibungen');put('betrieb','out','Handling & Transport',r.handling_cost,'');
  put('betrieb','out','Lager',r.holding_cost,'');put('betrieb','out','Rückstand',r.backlog_cost,'Strafkosten für offene Aufträge');
- put('forschung','out','F&E',r.rnd_cost,'Forschungsprojekte');put('bank','out','Zinsen',r.interest_cost,'');
- for(const [k,v] of Object.entries(cf)){const [g,other='']=k.split(':'),grp=g==='staat'?'staat':['bank','bankpleite'].includes(g)?'bank':Object.hasOwn(FLOW_CF,g)?'beteiligungen':'betrieb';
-  const info=g==='staat'?(FLOW_REASON[other]||(other.startsWith('Busse')?'Straftat wurde entdeckt':'')):g==='bankpleite'?'Verlust bei Bankpleite (nur 30 % gesichert)':g==='bank'?(FLOW_REASON[other]||''):FLOW_CF[g]||'';
-  put(grp,v>0?'in':'out',flowName(k),Math.abs(v),info,D.firms[other]?other:null)}
+ const rs=rndSplit((D.rnd||[]).filter(x=>x.firm===id),year,r.rnd_cost||0);put('forschung','out','Forschung',rs.research,'Forschungsprojekte');put('forschung','out','Umsetzung',rs.implementation,'Umsetzung erforschter Stufen');put('bank','out','Zinsen',r.interest_cost,'');
+ for(const [k,v] of Object.entries(cf)){const [g,other='']=k.split(':'),grp=g==='staat'?'staat':g==='schadenersatz'?'forschung':['bank','bankpleite'].includes(g)?'bank':Object.hasOwn(FLOW_CF,g)?'beteiligungen':'betrieb';
+  const info=g==='schadenersatz'?'Schadenersatz wegen Patentverletzung':g==='staat'?(FLOW_REASON[other]||(other.startsWith('Busse')?'Straftat wurde entdeckt':'')):g==='bankpleite'?'Verlust bei Bankpleite (nur 30 % gesichert)':g==='bank'?(FLOW_REASON[other]||''):FLOW_CF[g]||'';
+  put(grp,v>0?'in':'out',g==='schadenersatz'?(v>0?'Schadenersatz von ':'Schadenersatz an ')+(D.firms[other]?fname(other):other):flowName(k),Math.abs(v),info,D.firms[other]?other:null)}
  for(const g of Object.values(G)){g.in.sort((a,b)=>b.v-a.v);g.out.sort((a,b)=>b.v-a.v)}
  return G}
 const sumV=a=>a.reduce((s,x)=>s+x.v,0);
@@ -862,6 +869,7 @@ showTab(location.hash.slice(1)||'overview');viewHistory.push(viewSnapshot());vie
 __TABLE_FILTERS__
 __STOCK_COMPARE__
 __ETFS__
+__RND__
 </script></body></html>'''
 
 
