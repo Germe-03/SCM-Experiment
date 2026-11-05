@@ -294,6 +294,9 @@ class BrandBook:
             for b in own:
                 share = self.brand_wanted.get(b, 0) / wanted if wanted else 1 / len(own)
                 self.production_share[b] = max(floor_share, share)
+        # Phase 26: brands whose use was stopped (patent infringement) are no longer produced.
+        for b in getattr(self, "stopped_brands", ()):
+            self.production_share[b] = 0.0
         class_rows = [{
             "year": year, "consumer_class": name, "demand": stats.demand, "bought": stats.bought,
             "persons": self.classes[name].persons,

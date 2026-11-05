@@ -653,10 +653,27 @@ class ResearchStageConfig(ResearchProjectConfig):
     patentable: bool = False
 
 
+class PatentInfringementConfig(ConfigModel):
+    """Phase 26: willing firms may implement a patented stage illegally (own random stream)."""
+
+    enabled: bool = False
+    detection_probability: float = Field(default=0.5, ge=0, le=1)
+    fine_fixed: float = Field(default=3_000_000.0, ge=0)
+    fine_revenue_share: float = Field(default=0.01, ge=0)
+    # Minimum compensation to the patent holder (x price index).
+    min_damages: float = Field(default=5_000_000.0, ge=0)
+    # Estimated yearly gain = stage effect x last year's revenue x this factor.
+    advantage_per_effect: float = Field(default=0.2, ge=0)
+    reputation_hit: float = Field(default=0.05, ge=0, le=1)
+    # Believed detection = true value x e^u, u uniform in [-spread, spread], fixed per firm.
+    belief_spread: float = Field(default=0.5, ge=0)
+
+
 class PatentsConfig(ConfigModel):
     """Phase 25: patents on the first research success of patentable stages (no licences)."""
 
     enabled: bool = False
+    infringement: PatentInfringementConfig = Field(default_factory=PatentInfringementConfig)
     min_years: int = Field(default=3, ge=1)
     max_years: int = Field(default=5, ge=1)
     # Fee = (base_fee + fee_per_year x years) x price index, paid once to the state.

@@ -536,6 +536,18 @@ patents:
   rich_cash_multiple: 20.0
   long_archetypes: [premium]
   short_archetypes: [low_cost]
+  # Phase 26: «willige» Firmen setzen eine fremd patentierte Stufe trotzdem um, wenn der
+  # erwartete Vorteil die geschätzte Strafe übersteigt. Bei Entdeckung: Busse an den Staat,
+  # Schadenersatz an den Patentinhaber (mindestens min_damages), Wirkung weg, Reputation sinkt.
+  infringement:
+    enabled: true
+    detection_probability: 0.5
+    fine_fixed: 3000000
+    fine_revenue_share: 0.01
+    min_damages: 5000000
+    advantage_per_effect: 0.2
+    reputation_hit: 0.05
+    belief_spread: 0.5
 
 # Phase 10: marketing builds awareness (0..1) of brands and stores; it fades every year.
 marketing:

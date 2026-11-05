@@ -311,3 +311,18 @@ Vorlage: «Offene Punkte» in `docs/bauplan-banken-boerse.md`.
   Umsetzungen). Übernahme: Patent an die Käuferin; Konkurs: Patent verfällt.
   Ereignisse `patent_granted` (Börse +0.05), `patent_expired`; Export `D.patents`.
   Tests: `test_patents.py` (10); 321 Tests grün.
+- **Phase 26, 2026-11-05:** Patentverletzung bleibt ausserhalb von `state.offences`
+  (alte Zufallsfolgen bleiben gleich), Block `patents.infringement` in `market.yaml`
+  (an). `PatentOffice` hat einen eigenen Zufallsstrom: «willige» Firmen wägen bei einer
+  fremd patentierten, erforschten Stufe ab (Vorteil = Wirkung x Vorjahresumsatz x 0.2 x
+  Restlaufzeit gegen geschätzte Entdeckung x (Busse + Schadenersatz + Reputation)) und
+  setzen trotzdem um. Ab dem Jahr nach der Umsetzung jährlich 50 % Entdeckung: Busse an
+  den Staat («staat:Busse patentverletzung»), Schadenersatz an den Inhaber (mindestens
+  5 Mio. x Preisindex, «schadenersatz:…»), Reputation −5 %, Wirkung weg (`undo_stage`,
+  neue Marken werden nicht mehr produziert), Stufe wieder «erforscht», Ereignis
+  `offence_detected` (Börsenschock). Unentdeckt bis Ablauf oder Übernahme des Inhabers:
+  straflos. Zeilen «patentverletzung» in `offence_ledger` (mit Schadenersatz und
+  Inhaber, auch in der CSV). Mit ausgeschaltetem Schalter gleiche Ergebnisse wie vorher
+  (12-Jahres-Lauf geprüft). Seed 0, 30 Jahre: 1 Patent, keine Verletzung. Offen:
+  Dashboard zeigt «patentverletzung» noch ohne deutschen Namen. Tests:
+  `test_patent_infringement.py` (7); 328 Tests grün.
