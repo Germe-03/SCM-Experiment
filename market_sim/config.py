@@ -697,6 +697,12 @@ class StockMarketConfig(ConfigModel):
         "poisoning": -0.5, "firm_recall": -0.15, "recall": -0.15, "offence_detected": -0.1,
         "rnd_success": 0.1, "restructuring": -0.3})
     index_base: float = Field(default=1000.0, gt=0)
+    # Phase 23: ETFs as display-only baskets (not tradable yet), chain-linked like the index.
+    etfs_enabled: bool = True
+    etf_groups: list[Literal["region", "category", "stage"]] = Field(
+        default_factory=lambda: ["region", "category", "stage"])
+    etf_weighting: Literal["market_cap", "equal"] = "market_cap"
+    etf_base: float = Field(default=100.0, gt=0)
 
 
 class HoldingsConfig(ConfigModel):

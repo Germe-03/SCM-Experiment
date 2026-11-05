@@ -100,6 +100,11 @@ stock_market:
   revalue_days: 91
   event_shocks: {poisoning: -0.5, firm_recall: -0.15, recall: -0.15, offence_detected: -0.1, rnd_success: 0.1, restructuring: -0.3}
   index_base: 1000.0
+  # Phase 23: ETFs nur zur Anzeige (noch nicht kaufbar), nach Region, Kategorie und Stufe.
+  etfs_enabled: true
+  etf_groups: [region, category, stage]
+  etf_weighting: market_cap   # oder equal (gleichgewichtet)
+  etf_base: 100.0
 
 bank:
   loan_margin: 0.02

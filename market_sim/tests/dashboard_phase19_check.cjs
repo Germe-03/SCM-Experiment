@@ -8,7 +8,7 @@ const source = scripts[0], nodes = new Map(), charts = new Map();
 const $ = id => {if (!nodes.has(id)) nodes.set(id, {value:'',querySelectorAll:()=>[],querySelector:()=>null,scrollIntoView(){}}); return nodes.get(id)};
 const range = {from: 1, to: 2}, S = {fmStage:new Set(['bank']),fmStatus:'all',fmSort:['profit',-1],tab:'firms'};
 const periods=['week','month'].map(period=>({dataset:{period},setAttribute(){}}));
-const context = {D, S, range, $, store:{get:(k,d)=>d,set(){}}, $$: selector => selector==='#sx-period button'?periods:[],
+const context = {D, S, range, $, store:{get:(k,d)=>d,set(){}}, actorLabel:id=>D.firms[id]?.name||id, $$: selector => selector==='#sx-period button'?periods:[],
   inRange: y => y >= range.from && y <= range.to,
   sys: () => D.system.filter(x => x.year >= range.from && x.year <= range.to),
   firm: id => D.firms[id], fname: id => D.firms[id]?.name || id,
@@ -28,6 +28,17 @@ vm.runInContext(source.slice(source.indexOf('function bankActors()'), source.ind
 vm.runInContext(source.slice(source.indexOf('function renderBanks()'), source.indexOf('function renderFinance()')), context);
 vm.runInContext(source.slice(source.indexOf('// Aktienkurs im Reiter Vergleich')), context);
 vm.runInContext('renderBanks();renderStocks()', context);
+// Phase 23: ETF card in the stock tab.
+if (D.etfs) {
+  assert.match($('#etf-table').innerHTML, /<th>Grösste Firma<\/th>/);
+  assert.match($('#etf-table').innerHTML, /data-etf="region:/);
+  assert.ok(charts.get('etf-chart').data.datasets.length > 0);
+  assert.match($('#etf-members').innerHTML, /Mitglieder: ETF /);
+  vm.runInContext("S.etfKind='stage';renderEtfs()", context);
+  assert.match($('#etf-table').innerHTML, /data-etf="stage:/);
+  const anyFirm = D.etfs.definitions[0].members[0];
+  assert.match(vm.runInContext(`etfMembership(${JSON.stringify(anyFirm)})`, context), /Enthalten in: ETF /);
+}
 assert.match($('#fi-banks').innerHTML, /Eigenkapitalquote/);
 assert.equal(charts.get('fi-stocks').data.labels.length, 6);
 assert.equal(charts.get('fi-stocks').data.datasets.length, 2);

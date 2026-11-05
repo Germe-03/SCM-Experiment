@@ -15,13 +15,31 @@ def _weekly(values: list[float]) -> list[float]:
     return [sum(values[i:i + 7]) / len(values[i:i + 7]) for i in range(0, len(values), 7)]
 
 
-def _stock_weekly(rows: list[dict[str, Any]]) -> dict[str, Any]:
-    """Keep weekly and year-end closes, with gaps around listings."""
-    selected = sorted(set(range(6, len(rows), 7)) | {
+def _weekly_selection(rows: list[dict[str, Any]]) -> list[int]:
+    """Indices of weekly and year-end closes."""
+    return sorted(set(range(6, len(rows), 7)) | {
         i for i, row in enumerate(rows)
         if i == len(rows) - 1 or row["year"] != rows[i + 1]["year"]
     })
-    closes = [rows[i] for i in selected]
+
+
+def _etf_weekly(stock_rows: list[dict[str, Any]], etf_rows: list[dict[str, Any]],
+                definitions: list[dict[str, Any]], weighting: str) -> dict[str, Any] | None:
+    """Phase 23: ETF levels on the same weekly points as the share prices."""
+    if not definitions or len(etf_rows) != len(stock_rows):
+        return None
+    selected = _weekly_selection(stock_rows)
+    return {
+        "weighting": weighting,
+        "definitions": definitions,
+        "levels": {d["id"]: [round(etf_rows[i][d["id"]], 4) if etf_rows[i].get(d["id"]) is not None else None
+                             for i in selected] for d in definitions},
+    }
+
+
+def _stock_weekly(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Keep weekly and year-end closes, with gaps around listings."""
+    closes = [rows[i] for i in _weekly_selection(rows)]
     ids = sorted({key for row in rows for key in row} - {"global_day", "year", "day", "index"})
     rounded = lambda value: round(value, 2) if value is not None else None
     return {
@@ -106,6 +124,8 @@ def build_dashboard_data(
         "banks": [item.model_dump(mode="json") for item in result.bank_history],
         "bank_events": bank_events,
         "stocks": _stock_weekly(result.stock_daily),
+        "etfs": _etf_weekly(result.stock_daily, result.etf_daily, result.etf_definitions,
+                            config.stock_market.etf_weighting),
         "events": list(result.events),
         "ranking": ranking,
         "brands": list(result.brand_reports),

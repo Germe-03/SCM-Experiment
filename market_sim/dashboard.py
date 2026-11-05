@@ -23,8 +23,9 @@ def write_dashboard_html(data: dict, path: str | Path) -> Path:
     payload = json.dumps(data, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
     filters = Path(__file__).with_name("dashboard_filters.js").read_text(encoding="utf-8")
     stocks = Path(__file__).with_name("dashboard_stocks.js").read_text(encoding="utf-8")
+    etfs = Path(__file__).with_name("dashboard_etfs.js").read_text(encoding="utf-8")
     html = (_HTML.replace("__DATA__", payload).replace("__CHART_JS__", CHART_JS_URL)
-            .replace("__TABLE_FILTERS__", filters).replace("__STOCK_COMPARE__", stocks))
+            .replace("__TABLE_FILTERS__", filters).replace("__STOCK_COMPARE__", stocks).replace("__ETFS__", etfs))
     target.write_text(html, encoding="utf-8")
     return target
 
@@ -241,6 +242,7 @@ body:has(dialog[open]){overflow:hidden}
   <div class="card"><h3>Grösste Börsenwerte</h3><p class="hint">Top 10 am Ende des Zeitraums. Zeile: zum Vergleich hinzufügen. Name: Firmendetails.</p><div class="table-wrap"><table id="sx-top"></table></div></div>
   <div class="card"><h3>Grösste Gewinner / Verlierer im Zeitraum</h3><p class="hint">Je fünf noch kotierte Firmen mit Kurs am Anfang und Ende des Zeitraums.</p><div id="sx-movers"></div></div>
   <div class="card wide"><details><summary>Index pro Stufe (Start = 100)</summary><p class="hint">Nach Kurs gewichtet, gleiche Aktienzahl je Firma. Ein- und Austritte werden ohne Kurssprung verkettet.</p><div class="chart"><canvas id="sx-stages"></canvas></div></details></div>
+  <div class="card wide"><h3>ETFs</h3><p class="hint">Körbe von Aktien, nur zur Anzeige (noch nicht kaufbar). Start = 100, nach Börsenwert gewichtet; Börsengänge und Austritte machen keinen Sprung. Zeile: Mitglieder mit Gewicht.</p><div class="chips" id="etf-kind" role="group" aria-label="ETF-Gruppe"></div><div class="chart"><canvas id="etf-chart"></canvas></div><div class="table-wrap"><table id="etf-table"></table></div><div id="etf-members"></div></div>
   <div class="card wide"><h3>Börsen-Ereignisse</h3><ul class="list" id="sx-events" style="max-height:260px;overflow:auto"></ul></div>
  </div>
 </section>
@@ -374,7 +376,7 @@ $('#structure').addEventListener('scroll',()=>{if(viewReady&&!restoringView)view
 // --- charts --------------------------------------------------------------
 const charts=[];
 function destroy(){while(charts.length)charts.pop().destroy()}
-function chart(id,cfg){const el=document.getElementById(id);if(!el)return;el.setAttribute('role','img');el.setAttribute('aria-label',el.closest('.card')?.querySelector('h3')?.textContent||id);
+function chart(id,cfg){const el=document.getElementById(id);if(!el)return;const old=window.Chart?.getChart(el);if(old){old.destroy();const k=charts.indexOf(old);if(k>=0)charts.splice(k,1)}el.setAttribute('role','img');el.setAttribute('aria-label',el.closest('.card')?.querySelector('h3')?.textContent||id);
  Chart.defaults.color=css('--muted');Chart.defaults.borderColor=css('--line');Chart.defaults.font.family='system-ui,-apple-system,Segoe UI,sans-serif';
  const o=cfg.options||{};cfg.options={responsive:true,maintainAspectRatio:false,animation:matchMedia('(prefers-reduced-motion: reduce)').matches?false:{duration:250},interaction:{mode:'index',intersect:false},
   plugins:{legend:{display:cfg.data.datasets.length>1,labels:{boxWidth:12,usePointStyle:true}},tooltip:{itemSort:(a,b)=>b.parsed.y-a.parsed.y},...(o.plugins||{})},...o};
@@ -542,7 +544,7 @@ function renderFirmDetail(){const root=$('#fm-detail');destroy();if(S.tab!=='fir
  <div class="card"><h3>Cash (Wochenschnitt)</h3><div class="chart"><canvas id="fd-cash"></canvas></div></div><div class="card"><h3>Lager und Rückstand (Wochenschnitt)</h3><div class="chart"><canvas id="fd-stock"></canvas></div></div>
  <div class="card"><h3>Reputation und Qualität</h3><div class="chart"><canvas id="fd-rep"></canvas></div></div><div class="card"><h3>Ereignisse dieser Firma</h3><ul class="list" id="fd-events" style="max-height:270px;overflow:auto"></ul></div>
  <div class="card wide" id="fd-story" hidden></div>
- ${D.stocks?.prices?.[id]?'<div class="card wide"><h3>Börsenkurs</h3><div id="fd-index-switch">'+stockIndexSwitch('fd',true)+'</div><p class="hint" id="fd-stock-empty"></p><div class="chart"><canvas id="fd-price"></canvas></div></div>':''}
+ ${D.stocks?.prices?.[id]?'<div class="card wide"><h3>Börsenkurs</h3>'+etfMembership(id)+'<div id="fd-index-switch">'+stockIndexSwitch('fd',true)+'</div><p class="hint" id="fd-stock-empty"></p><div class="chart"><canvas id="fd-price"></canvas></div></div>':''}
  <div class="card wide" id="fd-exit" hidden></div>
  <div class="card wide"><h3>Entscheidungen</h3><p class="hint">Pro Jahr nur, was sich geändert hat, dazu Straftaten, Investitionen und Projekte.</p><div class="chips" id="fd-dec-filter" style="margin-bottom:10px"></div><ul class="list" id="fd-decisions" style="max-height:420px;overflow:auto"></ul></div></div></div>`;
  wireBankLinks(root);
@@ -668,7 +670,7 @@ function renderStocks(){const s=D.stocks||{days:[],years:[],index:[],prices:{}},
  $('#sx-selection-hint').textContent=`${S.stockFirms.length} von 5 Firmen ausgewählt. Bei späterem Börsengang gilt der erste verfügbare Kurs als Start.`;
  $('#sx-selected').innerHTML=S.stockFirms.map(id=>`<button class="chip" data-remove-stock="${esc(id)}" aria-label="${actorLabel(id)} aus Vergleich entfernen">${actorLabel(id)} ×</button>`).join('');
  $$('#sx-selected button').forEach(b=>b.onclick=()=>{S.stockFirms=S.stockFirms.filter(id=>id!==b.dataset.removeStock);render()});
- $('#sx-index-switch').innerHTML=stockIndexSwitch('sx',true);wireStockIndexSwitch($('#sx-index-switch'),'sx',render);renderStockChart('sx-compare',S.stockFirms,stockIndexShown('sx',true),period,null);
+ $('#sx-index-switch').innerHTML=stockIndexSwitch('sx',true);wireStockIndexSwitch($('#sx-index-switch'),'sx',render);renderStockChart('sx-compare',S.stockFirms,stockIndexShown('sx',true),period,null);renderEtfs();
  const first=all[0],final=all.at(-1),rows=ids.filter(id=>s.prices[id][final]!=null).map(id=>({id,price:s.prices[id][final],cap:s.prices[id][final]*(D.meta.shares_per_firm||1000000),change:s.prices[id][first]>0?s.prices[id][final]/s.prices[id][first]-1:null}));
  const name=r=>`<a href="#firms" data-firm="${esc(r.id)}">${actorLabel(r.id)}</a>`;
  $('#sx-top').innerHTML='<thead><tr><th>Name</th><th>Stufe</th><th>Kurs</th><th>Veränderung</th><th>Börsenwert</th></tr></thead><tbody>'+rows.sort((a,b)=>b.cap-a.cap).slice(0,10).map(r=>`<tr class="click" tabindex="0" data-stock-add="${esc(r.id)}"><td>${name(r)}</td><td>${esc(fmGroupLabel(fmGroup(firm(r.id))))}</td><td class="num" data-value="${r.price}">${nf(r.price,4)} CHF</td><td class="num" data-value="${r.change==null?'':(r.change)*100}">${pct(r.change)}</td><td class="num" data-value="${r.cap}">${chf(r.cap)}</td></tr>`).join('')+(rows.length?'':'<tr><td colspan="5">Keine kotierten Firmen am Ende des Zeitraums.</td></tr>')+'</tbody>';
@@ -858,6 +860,7 @@ function render(){destroy();VIEWS[S.tab]()}
 showTab(location.hash.slice(1)||'overview');viewHistory.push(viewSnapshot());viewIndex=0;viewReady=true;history.replaceState({dashboardView:0},'', '#'+S.tab);history.scrollRestoration='manual';backState();
 __TABLE_FILTERS__
 __STOCK_COMPARE__
+__ETFS__
 </script></body></html>'''
 
 

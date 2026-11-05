@@ -57,6 +57,9 @@ class RunResult:
     system_kpis: list[SystemKPIs]
     bank_history: list[BankAnnualReport] = field(default_factory=list)
     stock_daily: list[dict[str, float]] = field(default_factory=list)
+    # Phase 23: ETF levels (rows aligned with stock_daily) and their definitions.
+    etf_daily: list[dict[str, float]] = field(default_factory=list)
+    etf_definitions: list[dict] = field(default_factory=list)
     daily_series: dict[str, dict[str, list[float]]] = field(default_factory=dict)
     days_total: int = 0
     financial_breakdown: dict[str, list[dict[str, float]]] = field(default_factory=dict)
@@ -233,6 +236,9 @@ class SimulationRunner:
             system_kpis=state.system_kpis,
             bank_history=list(state.bank_history),
             stock_daily=list(self.stock_market.daily_rows) if self.stock_market is not None else [],
+            etf_daily=list(self.stock_market.etfs.rows) if self.stock_market is not None and self.stock_market.etfs is not None else [],
+            etf_definitions=[dict(d, members=list(d['members'])) for _, d in sorted(self.stock_market.etfs.definitions.items())]
+            if self.stock_market is not None and self.stock_market.etfs is not None else [],
             daily_series=state.daily_series, days_total=state.global_day,
             financial_breakdown=state.financial_breakdown,
             exits=dict(self.exits), events=list(state.events),

@@ -26,6 +26,7 @@ class StockMarket:
         self._divisor: float | None = None
         self._event_pos = 0
         self.stats = {"listings": 0, "delistings": 0}
+        self.etfs = EtfBook(self.cfg) if self.cfg.etfs_enabled else None
 
     def fundamental(self, runner: SimulationRunner, state: RunState, firm_id: str) -> float:
         rt = runner.env.runtimes[firm_id]
@@ -107,6 +108,9 @@ class StockMarket:
             self.daily_rows.append({"global_day": global_day, "year": year, "day": day,
                                     "index": round(self.index, 4),
                                     **{fid: round(self.prices[fid], 4) for fid in sorted(self.listed)}})
+            if self.etfs is not None:
+                self.etfs.update({fid: runner.network.firm(fid) for fid in sorted(self.listed)},
+                                 {fid: self.prices[fid] for fid in sorted(self.listed)}, global_day, year, day)
 
         # Events emitted above are already handled for this day.
         self._event_pos = len(state.events)
@@ -114,3 +118,95 @@ class StockMarket:
     def year_end_stats(self) -> dict[str, float | int]:
         return {"stock_index": self.index, "market_cap": self.market_cap(),
                 "listed_firms": len(self.listed)}
+
+
+class EtfBook:
+    """Phase 23: chain-linked ETF levels per region, product category and stage (display only)."""
+
+    def __init__(self, cfg) -> None:
+        self.cfg = cfg
+        self.definitions: dict[str, dict] = {}
+        self.levels: dict[str, float] = {}
+        self.rows: list[dict] = []
+        self._last: dict[str, dict[str, float]] = {}
+
+    @staticmethod
+    def groups_for(firm: object) -> list[tuple[str, str]]:
+        groups = []
+        region = getattr(firm, "region")
+        stage = getattr(firm, "stage")
+        channel = getattr(firm, "channel")
+        category = getattr(firm, "category")
+
+        if region:
+            groups.append(("region", region))
+        if stage == "factory":
+            groups.append(("category", category))
+        groups.append(("stage", "restaurant" if stage == "retailer" and channel == "restaurant" else stage))
+        return groups
+
+    def update(self, members: dict[str, object], prices: dict[str, float],
+               global_day: int, year: int, day: int) -> None:
+        current: dict[str, set[str]] = {}
+        for firm_id in sorted(members):
+            for kind, key in self.groups_for(members[firm_id]):
+                if kind not in self.cfg.etf_groups:
+                    continue
+                etf_id = f"{kind}:{key}"
+                if etf_id not in self.definitions:
+                    self.definitions[etf_id] = {
+                        "id": etf_id,
+                        "kind": kind,
+                        "key": key,
+                        "members": [],
+                    }
+                current.setdefault(etf_id, set()).add(firm_id)
+                definition_members = self.definitions[etf_id]["members"]
+                if firm_id not in definition_members:
+                    definition_members.append(firm_id)
+                    definition_members.sort()
+
+        row = {"global_day": global_day, "year": year, "day": day}
+        for etf_id in sorted(self.definitions):
+            member_ids = current.get(etf_id, set())
+            priced_members = {fid for fid in member_ids if prices.get(fid, 0.0) > 0}
+            if not priced_members:
+                self._last[etf_id] = {}
+                continue
+
+            if etf_id not in self.levels:
+                self.levels[etf_id] = self.cfg.etf_base
+            else:
+                common = sorted(priced_members.intersection(self._last.get(etf_id, {})))
+                if common:
+                    if self.cfg.etf_weighting == "market_cap":
+                        factor = sum(prices[fid] for fid in common) / sum(
+                            self._last[etf_id][fid] for fid in common
+                        )
+                    else:
+                        factor = sum(
+                            prices[fid] / self._last[etf_id][fid] for fid in common
+                        ) / len(common)
+                    self.levels[etf_id] *= factor
+
+            self._last[etf_id] = {fid: prices[fid] for fid in priced_members}
+            row[etf_id] = round(self.levels[etf_id], 4)
+
+        self.rows.append(row)
+
+    def weights(self, etf_id: str, prices: dict[str, float]) -> dict[str, float]:
+        definition = self.definitions.get(etf_id)
+        if definition is None:
+            return {}
+
+        listed_members = [
+            fid for fid in definition["members"] if prices.get(fid, 0.0) > 0
+        ]
+        if not listed_members:
+            return {}
+
+        if self.cfg.etf_weighting == "market_cap":
+            total = sum(prices[fid] for fid in listed_members)
+            return {fid: prices[fid] / total for fid in listed_members}
+        weight = 1.0 / len(listed_members)
+        return {fid: weight for fid in listed_members}

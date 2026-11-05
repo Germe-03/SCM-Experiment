@@ -270,3 +270,15 @@ Vorlage: «Offene Punkte» in `docs/bauplan-banken-boerse.md`.
   ausgeblendet. Reiter Börse und Firmendetails: Schalter «Börsenindex einblenden»
   (an), Zustand pro Reiter gemerkt. Test: `dashboard_phase22_check.cjs`.
   Im Browser geprüft (Vergleich, Börse, Firmendetails).
+- **Phase 23, 2026-11-05:** `EtfBook` in `stock_market.py` (täglich nach den Kursen,
+  eigene Zeilen parallel zu `daily_rows`), ETFs pro Region (8), Kategorie (Bier,
+  Wein, Spirituosen, nur Hersteller inkl. Importeure) und Stufe (5); verkettet,
+  Start 100, Börsenwert- oder Gleichgewichtung. Schalter `etfs_enabled`,
+  `etf_groups`, `etf_weighting`, `etf_base` in `market.yaml`. Export `D.etfs`
+  (Definitionen, Wochenwerte). Dashboard: Karte «ETFs» im Reiter Börse mit
+  Umschalter, Tabelle mit Spaltenfilter, Mitglieder mit Gewicht, «Enthalten in»
+  in den Firmendetails (`dashboard_etfs.js`). `chart()` räumt eine alte Grafik
+  auf derselben Fläche jetzt selbst ab. Tests: `test_etfs.py` (10), ETF-Teil in
+  `dashboard_phase19_check.cjs`; 300 Tests grün. Seed 0, 50 Jahre: 16 ETFs;
+  einzelne ETFs fallen gegen 0 (z. B. Bier), weil die Kurse ihrer Mitglieder um
+  über 99 % abstürzen, Nachrechnung aus Wochenkursen bestätigt die Werte.
