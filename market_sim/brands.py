@@ -156,7 +156,10 @@ class BrandBook:
     def markup(self, firm: Firm) -> float:
         """Restaurants charge for service on top of the store price."""
         cfg = self.config.restaurants
-        return cfg.markup if cfg.enabled and firm.channel == "restaurant" else 1.0
+        if not (cfg.enabled and firm.channel == "restaurant"):
+            return 1.0
+        # Phase 24: house beer and signature drinks raise the markup of one restaurant.
+        return cfg.markup * getattr(self, "markup_bonus", {}).get(firm.id, 1.0)
 
     def retail_price(self, sell_price: float, brand: Brand, firm: Firm | None = None) -> float:
         markup = self.markup(firm) if firm is not None else 1.0

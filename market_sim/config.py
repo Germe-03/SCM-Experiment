@@ -614,8 +614,11 @@ class ResearchProjectConfig(ConfigModel):
     selection_weight: float = Field(default=1.0, gt=0)
     # productivity: more output per employee; cost_reduction: cheaper raw materials;
     # new_brand: a premium brand; alkoholfrei: an alcohol-free beer brand.
+    # Phase 24: reputation (+ points), awareness (store known better), margin (restaurant
+    # markup x (1 + effect)), maturation (wine matures effect share faster).
     kind: Literal["productivity", "cost_reduction", "new_brand", "alkoholfrei",
-                  "component_reduction", "transport_efficiency", "storage_automation", "robotics"]
+                  "component_reduction", "transport_efficiency", "storage_automation", "robotics",
+                  "reputation", "awareness", "margin", "maturation"]
     enabled: bool = True
     component: Literal["malt", "hops", "packaging", "energy"] | None = None
     cost: float = Field(gt=0)
@@ -628,9 +631,24 @@ class ResearchProjectConfig(ConfigModel):
     def validate_effect(self) -> Self:
         if self.kind == "component_reduction" and self.component is None:
             raise ValueError("component_reduction requires a component")
-        if self.kind in ("component_reduction", "transport_efficiency", "storage_automation", "robotics") and self.effect >= 1:
+        if self.kind in ("component_reduction", "transport_efficiency", "storage_automation", "robotics",
+                         "maturation") and self.effect >= 1:
             raise ValueError("reduction effects must be smaller than one")
         return self
+
+
+class ResearchStageConfig(ResearchProjectConfig):
+    """Phase 24: one stage of a research tree: research (cost x, uncertain), then implementation."""
+
+    requires: list[str] = Field(default_factory=list)
+    complexity: Literal["simple", "medium", "complex"] = "simple"
+    implementation_cost: float = Field(default=0.0, ge=0)
+    implementation_days: int = Field(default=90, gt=0)
+    # Branch of the tree that archetypes may prefer, e.g. "automation" or "marke".
+    branch: str = ""
+    # Only firms of these product categories (empty = all); requirements a firm cannot
+    # reach because of this restriction count as fulfilled.
+    categories: list[str] = Field(default_factory=list)
 
 
 class ResearchConfig(ConfigModel):
@@ -641,6 +659,15 @@ class ResearchConfig(ConfigModel):
     cash_cover: float = Field(default=3.0, ge=0)
     projects: list[ResearchProjectConfig] = Field(default_factory=list)
     preferences: dict[str, list[str]] = Field(default_factory=dict)
+    # Phase 24: one research tree per sector (factory, distributor, wholesaler, retailer,
+    # restaurant) instead of the loose projects above.
+    trees_enabled: bool = False
+    trees: dict[str, list[ResearchStageConfig]] = Field(default_factory=dict)
+    # Research discount for followers once another firm succeeded, by complexity.
+    follower_discount: dict[str, float] = Field(
+        default_factory=lambda: {"simple": 0.75, "medium": 0.5, "complex": 0.25})
+    # Archetype -> preferred branches of the trees.
+    branch_preferences: dict[str, list[str]] = Field(default_factory=dict)
 
 
 class MarketingConfig(ConfigModel):

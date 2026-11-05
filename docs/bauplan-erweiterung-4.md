@@ -282,3 +282,19 @@ Vorlage: «Offene Punkte» in `docs/bauplan-banken-boerse.md`.
   `dashboard_phase19_check.cjs`; 300 Tests grün. Seed 0, 50 Jahre: 16 ETFs;
   einzelne ETFs fallen gegen 0 (z. B. Bier), weil die Kurse ihrer Mitglieder um
   über 99 % abstürzen, Nachrechnung aus Wochenkursen bestätigt die Werte.
+- **Phase 24, 2026-11-05:** Entscheid David: Bankenbaum später, Wirkungen über
+  bestehende Hebel. Neues Modul `research_tree.py` (`ResearchTreeLab`, erbt von
+  `ResearchLab`), fünf Bäume in `market.yaml` (`research.trees`, Schalter
+  `trees_enabled: true`): Hersteller 15 Stufen, Verteilung, Grosshandel,
+  Detailhandel, Gastronomie je 3. Forschung, danach Umsetzung (fester Betrag), erst
+  die Umsetzung wirkt; Voraussetzungen, die eine Firma wegen ihrer Kategorie nie
+  erreicht, gelten als erfüllt (z. B. Wein: Neue Geschmacksrichtung ohne
+  alkoholfreies Produkt). Nachzügler-Rabatt 75/50/25 %, Vorlieben pro Archetyp
+  nach Ast (`branch_preferences`), Übernahme übergibt Fortschritt als «erforscht».
+  Neue Wirkungen: Reputation, Bekanntheit des Ladens, Marge im Lokal
+  (`BrandBook.markup_bonus`), kürzere Reifezeit. Alte Projekte bleiben bei
+  `trees_enabled: false` (Tests in `test_research.py` laufen so). Tests:
+  `test_research_tree.py` (11); 311 Tests grün. Seed 0, 50 Jahre: 153 Schritte
+  (66 Forschung erfolgreich, 31 Fehlschläge, 56 Umsetzungen), 63-mal
+  Nachzügler-Rabatt, Kosten total 5,00 Mia. CHF. Hinweis: Die Texte im Cache
+  `runs/texts_seed0_50y.json` stammen aus dem Lauf vor Phase 24.

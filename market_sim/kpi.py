@@ -190,7 +190,7 @@ REGION_DE = {"genfersee": "Genferseeregion", "bern": "Bern", "jura_freiburg": "J
 PROJECT_DE = {"leichtere_flaschen": "Leichtere Flaschen", "waermerueckgewinnung": "Wärmerückgewinnung",
               "ausbeute_optimierung": "Ausbeute-Optimierung", "routenplanung": "Routenplanung",
               "lagerautomation": "Lagerautomation", "robotik": "Robotik", "prozessautomation": "Prozessautomation", "rezeptur_optimierung": "Rezeptur-Optimierung",
-              "neue_marke": "Neue Marke", "alkoholfreies_bier": "Alkoholfreies Bier"}
+              "neue_marke": "Neue Marke", "alkoholfreies_bier": "Alkoholfreies Bier", "prognose_software": "Prognose-Software", "smart_factory": "Smart Factory", "hefezucht": "Eigene Hefezucht", "mehrwegsystem": "Mehrwegsystem", "klimaneutrale_brauerei": "Klimaneutrale Brauerei", "alkoholfreies_produkt": "Alkoholfreies Produkt", "neue_geschmacksrichtung": "Neue Geschmacksrichtung", "kuerzere_reifezeit": "Kürzere Reifezeit", "kuehlkette": "Kühlkette", "kommissionier_roboter": "Kommissionier-Roboter", "bestellprognose": "Bestellprognose", "self_checkout": "Self-Checkout", "kundenkarte": "Kundenkarte", "onlineshop": "Onlineshop mit Lieferdienst", "kassensystem": "Kassen- und Reservationssystem", "kuechenautomation": "Küchenautomation", "hausbier": "Hausbier und Signature-Drinks"}
 
 
 def chf(value: float) -> str:

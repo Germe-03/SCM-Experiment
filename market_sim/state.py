@@ -274,6 +274,9 @@ class StateActor:
         t_rt.stock = {}
         t_rt.inventory = 0
         t_rt.adjust_cash(-t_rt.cash, f"uebernommen:{buyer.id}")
+        # Phase 24: the buyer receives the research progress (implementation still to pay).
+        if hasattr(runner.lab, "transfer"):
+            runner.lab.transfer(target.id, buyer.id)
         runner.close_firm_now(target.id, year, state, "takeover", f"gekauft von {buyer.id} für {chf(price)}")
         runner.decision_log.record(year, buyer.id, "takeover_bought", {"target": target.id, "price": price}, "Übernahme eines finanziell angeschlagenen Konkurrenten")
         self.stats["takeovers"] += 1

@@ -14,6 +14,7 @@ from market_sim.region_report import RegionReporter
 from market_sim.longrun import LongRun
 from market_sim.state import StateActor
 from market_sim.research import ResearchLab
+from market_sim.research_tree import ResearchTreeLab
 from market_sim.marketing import Marketing
 from market_sim.holdings import Holdings
 from market_sim.stock_market import StockMarket
@@ -165,7 +166,8 @@ class SimulationRunner:
         self.long_run = LongRun(self, seed)
         self._scale_for_categories()
         self.state_actor = StateActor(self, seed) if config.state.enabled else None
-        self.lab = ResearchLab(self, seed) if config.research.enabled else None
+        self.lab = ((ResearchTreeLab if config.research.trees_enabled else ResearchLab)(self, seed)
+                    if config.research.enabled else None)
         self._restaurant_templates = [f.model_copy(deep=True) for f in self._firms() if f.channel == "restaurant"]
         self._store_templates = [f.model_copy(deep=True) for f in self._firms()
                                  if f.stage == "retailer" and f.channel != "restaurant"]

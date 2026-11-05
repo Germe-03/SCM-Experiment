@@ -476,6 +476,51 @@ research:
     growth: [prozessautomation, alkoholfreies_bier, robotik, routenplanung]
     standard: [prozessautomation, rezeptur_optimierung, leichtere_flaschen, lagerautomation]
     reliable: [prozessautomation, routenplanung, lagerautomation]
+  # Phase 24: ein Forschungsbaum pro Branche, jede Firma mit eigenem Fortschritt.
+  # Pro Stufe zuerst Forschung (cost, duration_days, success_probability), danach
+  # Umsetzung (implementation_cost, implementation_days, gleich für alle). Erst die
+  # Umsetzung wirkt. Nachzügler forschen günstiger (follower_discount nach complexity).
+  trees_enabled: true
+  follower_discount: {simple: 0.75, medium: 0.5, complex: 0.25}
+  branch_preferences:
+    premium: [marke, verpackung, energie, kunden, gastro]
+    low_cost: [automation, rezeptur, energie, lager]
+    growth: [automation, marke, logistik, kunden]
+    standard: [automation, rezeptur, verpackung, lager]
+    reliable: [automation, logistik, lager]
+  trees:
+    factory:
+      - {name: prozessautomation, branch: automation, complexity: simple, kind: productivity, effect: 0.15, cost: 60000000, duration_days: 540, success_probability: 0.6, implementation_cost: 30000000, implementation_days: 120}
+      - {name: robotik, branch: automation, complexity: medium, requires: [prozessautomation], kind: robotics, effect: 0.25, cost: 80000000, duration_days: 730, success_probability: 0.4, implementation_cost: 40000000, implementation_days: 180}
+      - {name: prognose_software, branch: automation, complexity: simple, kind: storage_automation, effect: 0.15, cost: 40000000, duration_days: 365, success_probability: 0.6, implementation_cost: 15000000, implementation_days: 90}
+      - {name: smart_factory, branch: automation, complexity: complex, requires: [robotik, prognose_software], kind: productivity, effect: 0.25, cost: 150000000, duration_days: 900, success_probability: 0.35, implementation_cost: 80000000, implementation_days: 240}
+      - {name: ausbeute_optimierung, branch: rezeptur, complexity: simple, kind: component_reduction, component: malt, effect: 0.08, cost: 30000000, duration_days: 365, success_probability: 0.5, implementation_cost: 10000000, implementation_days: 60}
+      - {name: rezeptur_optimierung, branch: rezeptur, complexity: medium, requires: [ausbeute_optimierung], kind: cost_reduction, effect: 0.08, cost: 50000000, duration_days: 365, success_probability: 0.5, implementation_cost: 20000000, implementation_days: 90}
+      - {name: hefezucht, branch: rezeptur, complexity: complex, requires: [rezeptur_optimierung], kind: cost_reduction, effect: 0.10, cost: 90000000, duration_days: 730, success_probability: 0.4, implementation_cost: 30000000, implementation_days: 120}
+      - {name: leichtere_flaschen, branch: verpackung, complexity: simple, kind: component_reduction, component: packaging, effect: 0.15, cost: 40000000, duration_days: 365, success_probability: 0.7, implementation_cost: 20000000, implementation_days: 90}
+      - {name: mehrwegsystem, branch: verpackung, complexity: medium, requires: [leichtere_flaschen], kind: component_reduction, component: packaging, effect: 0.20, cost: 70000000, duration_days: 540, success_probability: 0.5, implementation_cost: 40000000, implementation_days: 180}
+      - {name: waermerueckgewinnung, branch: energie, complexity: simple, kind: component_reduction, component: energy, effect: 0.20, cost: 60000000, duration_days: 540, success_probability: 0.6, implementation_cost: 30000000, implementation_days: 120}
+      - {name: klimaneutrale_brauerei, branch: energie, complexity: medium, requires: [waermerueckgewinnung], kind: reputation, effect: 0.05, cost: 80000000, duration_days: 730, success_probability: 0.5, implementation_cost: 50000000, implementation_days: 180}
+      - {name: neue_marke, branch: marke, complexity: simple, kind: new_brand, effect: 0.10, cost: 80000000, duration_days: 730, success_probability: 0.4, implementation_cost: 20000000, implementation_days: 90}
+      - {name: alkoholfreies_produkt, branch: marke, complexity: medium, requires: [neue_marke], categories: [beer], kind: alkoholfrei, cost: 70000000, duration_days: 540, success_probability: 0.5, implementation_cost: 20000000, implementation_days: 90}
+      - {name: neue_geschmacksrichtung, branch: marke, complexity: complex, requires: [alkoholfreies_produkt], kind: new_brand, effect: 0.10, cost: 90000000, duration_days: 730, success_probability: 0.4, implementation_cost: 25000000, implementation_days: 90}
+      - {name: kuerzere_reifezeit, branch: wein, complexity: medium, categories: [wine], kind: maturation, effect: 0.25, cost: 50000000, duration_days: 540, success_probability: 0.5, implementation_cost: 20000000, implementation_days: 90}
+    distributor:
+      - {name: routenplanung, branch: logistik, complexity: simple, kind: transport_efficiency, effect: 0.15, cost: 30000000, duration_days: 365, success_probability: 0.7, implementation_cost: 10000000, implementation_days: 60}
+      - {name: kuehlkette, branch: logistik, complexity: medium, requires: [routenplanung], kind: storage_automation, effect: 0.20, cost: 50000000, duration_days: 540, success_probability: 0.5, implementation_cost: 25000000, implementation_days: 120}
+      - {name: prognose_software, branch: logistik, complexity: complex, requires: [kuehlkette], kind: productivity, effect: 0.10, cost: 60000000, duration_days: 540, success_probability: 0.5, implementation_cost: 20000000, implementation_days: 90}
+    wholesaler:
+      - {name: lagerautomation, branch: lager, complexity: simple, kind: storage_automation, effect: 0.25, cost: 50000000, duration_days: 540, success_probability: 0.6, implementation_cost: 25000000, implementation_days: 120}
+      - {name: kommissionier_roboter, branch: lager, complexity: medium, requires: [lagerautomation], kind: robotics, effect: 0.25, cost: 80000000, duration_days: 730, success_probability: 0.4, implementation_cost: 40000000, implementation_days: 180}
+      - {name: bestellprognose, branch: lager, complexity: complex, requires: [kommissionier_roboter], kind: storage_automation, effect: 0.15, cost: 60000000, duration_days: 540, success_probability: 0.5, implementation_cost: 20000000, implementation_days: 90}
+    retailer:
+      - {name: self_checkout, branch: kunden, complexity: simple, kind: robotics, effect: 0.20, cost: 30000000, duration_days: 365, success_probability: 0.7, implementation_cost: 15000000, implementation_days: 90}
+      - {name: kundenkarte, branch: kunden, complexity: medium, requires: [self_checkout], kind: awareness, effect: 0.20, cost: 40000000, duration_days: 365, success_probability: 0.6, implementation_cost: 15000000, implementation_days: 90}
+      - {name: onlineshop, branch: kunden, complexity: complex, requires: [kundenkarte], kind: awareness, effect: 0.30, cost: 80000000, duration_days: 730, success_probability: 0.4, implementation_cost: 40000000, implementation_days: 180}
+    restaurant:
+      - {name: kassensystem, branch: gastro, complexity: simple, kind: productivity, effect: 0.10, cost: 20000000, duration_days: 365, success_probability: 0.7, implementation_cost: 10000000, implementation_days: 60}
+      - {name: kuechenautomation, branch: gastro, complexity: medium, requires: [kassensystem], kind: robotics, effect: 0.20, cost: 40000000, duration_days: 540, success_probability: 0.5, implementation_cost: 20000000, implementation_days: 120}
+      - {name: hausbier, branch: gastro, complexity: complex, requires: [kuechenautomation], kind: margin, effect: 0.10, cost: 50000000, duration_days: 540, success_probability: 0.5, implementation_cost: 25000000, implementation_days: 120}
 
 # Phase 10: marketing builds awareness (0..1) of brands and stores; it fades every year.
 marketing:

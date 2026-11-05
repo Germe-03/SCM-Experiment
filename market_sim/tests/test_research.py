@@ -2,11 +2,15 @@
 
 import pytest
 
+from market_sim.config import load_market_config
 from market_sim.run import build_runner
 
 
 def _runner():
-    runner, _ = build_runner(1, 0, days_per_year=10)
+    # The loose Phase 7 projects (Phase 24 trees switched off).
+    config = load_market_config()
+    config.research.trees_enabled = False
+    runner, _ = build_runner(1, 0, days_per_year=10, config=config)
     state = runner.start()
     runner.continue_run(state, 1)
     return runner, state
