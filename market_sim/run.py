@@ -166,7 +166,7 @@ def write_outputs(result: RunResult, out_dir: str | Path) -> list[Path]:
         paths += [daily_path, weekly_path]
     # Phase 2: brand and consumer-class reports exist only in the classes model.
     for name, rows in (("brand_report.csv", result.brand_reports), ("class_report.csv", result.class_reports),
-                       ("rnd_projects.csv", result.rnd_reports)):
+                       ("rnd_projects.csv", result.rnd_reports), ("carrier_report.csv", result.carriers)):
         if rows:
             path = directory / name
             with path.open("w", newline="", encoding="utf-8") as output:

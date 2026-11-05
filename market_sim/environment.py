@@ -417,6 +417,9 @@ class MarketEnvironment:
             runtime.receive_shipment()
             runtime.incoming_shipments.append(0)
             runtime.incoming_brands.append({})
+        # Phase 28: parcels a full carrier held back leave today.
+        if self.geography is not None and self.geography.carriers is not None:
+            self.geography.carriers.release(self)
 
         # 2. Consumer classes buy right after inbound shipments; unmet demand is lost,
         # it never enters a retailer backlog.
@@ -500,6 +503,7 @@ class MarketEnvironment:
                             allocations[downstream_id] = quantity
                     trade_value = self._trade_value(quantity, price)
                     parcel = {}
+                    delay = 0
                     if quantity:
                         parcel = self.brand_book.take_for(
                             self.network.firm(downstream_id), runtime.stock, quantity)
@@ -512,7 +516,12 @@ class MarketEnvironment:
                                 self.runtimes[downstream_id].on_order = max(
                                     0, self.runtimes[downstream_id].on_order - destroyed)
                                 quantity -= destroyed
-                        add_to_stock(self.runtimes[downstream_id].incoming_brands[-1], parcel)
+                            delay = self.geography.last_delay
+                        if delay:
+                            # Phase 28: the carrier is full; the parcel leaves later, nothing is lost.
+                            self.geography.carriers.hold(self.period + delay, downstream_id, dict(parcel), quantity)
+                        else:
+                            add_to_stock(self.runtimes[downstream_id].incoming_brands[-1], parcel)
                         if self.brand_book.categories_on:
                             trade_value = self._trade_value(1, self.brand_book.parcel_value(parcel, price))
                             # Wine and spirits cost more to handle, in line with their value.
@@ -522,7 +531,8 @@ class MarketEnvironment:
                     items = self.trade_items(parcel, trade_value)
                     self.runtimes[downstream_id].pay(supplier_id, trade_value, items)
                     runtime.record_items(runtime.sold_items, downstream_id, items)
-                    self.runtimes[downstream_id].incoming_shipments[-1] += quantity
+                    if not delay:
+                        self.runtimes[downstream_id].incoming_shipments[-1] += quantity
             if self.banking is not None:
                 shipped = sum(allocations.values())
                 runtime.inventory -= shipped

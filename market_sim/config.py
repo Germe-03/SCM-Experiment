@@ -653,6 +653,32 @@ class ResearchStageConfig(ResearchProjectConfig):
     patentable: bool = False
 
 
+class PostConfig(ConfigModel):
+    """Phase 28: the Post, one uniform tariff, never bankrupt, no loans."""
+
+    # Base tariff in CHF per sim-unit and km (before fuel index), as the old service_rate.
+    start_rate: float = Field(default=1.4, ge=0)
+    margin: float = Field(default=0.03, ge=0)
+    # Largest tariff change per year (share); 0 keeps the tariff fixed.
+    max_tariff_step: float = Field(default=0.05, ge=0)
+    # Network and staff per day (times price index and mean wage index), grows with capacity.
+    fixed_cost_per_day: float = Field(default=40_000.0, ge=0)
+    variable_rate: float = Field(default=0.9, ge=0)
+    # Units per day; 0 = unlimited. Overload waits (longer lead time), nothing is lost.
+    capacity_per_day: float = Field(default=2000.0, ge=0)
+    expand_utilization: float = Field(default=0.9, ge=0)
+    expand_step: float = Field(default=0.2, ge=0)
+    expansion_delay_days: int = Field(default=365, ge=0)
+
+
+class CarriersConfig(ConfigModel):
+    """Phase 28-30: the Post (and later couriers) replace the anonymous transport service."""
+
+    enabled: bool = False
+    post: PostConfig = Field(default_factory=PostConfig)
+    switching_cost_share: float = Field(default=0.02, ge=0)
+
+
 class PatentsConfig(ConfigModel):
     """Phase 25: patents on the first research success of patentable stages (no licences)."""
 
@@ -912,6 +938,7 @@ class MarketConfig(ConfigModel):
     long_run: LongRunConfig = Field(default_factory=LongRunConfig)
     categories: CategoriesConfig = Field(default_factory=CategoriesConfig)
     geography: GeographyConfig = Field(default_factory=GeographyConfig)
+    carriers: CarriersConfig = Field(default_factory=CarriersConfig)
     state: StateConfig = Field(default_factory=StateConfig)
     research: ResearchConfig = Field(default_factory=ResearchConfig)
     patents: PatentsConfig = Field(default_factory=PatentsConfig)

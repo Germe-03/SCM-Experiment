@@ -311,3 +311,16 @@ Vorlage: «Offene Punkte» in `docs/bauplan-banken-boerse.md`.
   Umsetzungen). Übernahme: Patent an die Käuferin; Konkurs: Patent verfällt.
   Ereignisse `patent_granted` (Börse +0.05), `patent_expired`; Export `D.patents`.
   Tests: `test_patents.py` (10); 321 Tests grün.
+- **Phase 28, 2026-11-05:** Neues Modul `carriers.py` (`Carrier`, `CarrierMarket`), Block
+  `carriers` in `market.yaml` (`enabled: false` bis zur Kalibrierung). Die Post ersetzt den
+  namenlosen Dienst: `Geography.unit_transport_cost` und die Wahl eigene Flotte/Dienst
+  fragen den Posttarif statt `service_rate`. Einheitstarif für alle Regionen, einmal im Jahr
+  aus Kosten pro Einheit-km plus Marge, höchstens 5 % Änderung. Kosten: Fixkosten Netz und
+  Personal (x Preisindex x mittlerer Lohnindex, wachsen mit der Kapazität) plus variable
+  Kosten pro km. Verlust deckt der Bund (`bundesbeitrag`, nur angezeigt, Ereignis), die
+  Post geht nie pleite und nimmt keine Kredite. Kapazität pro Tag: Überlast hält Pakete
+  zurück, sie gehen Tage später ab (längere Lieferzeit), nichts geht verloren; bei hoher
+  Auslastung baut die Post nach `expansion_delay_days` aus. Kein eigener Zufall: Der
+  Schadenwurf in `ship()` bleibt gleich, darum ist ein Lauf mit Tarif 1.4 fest und
+  unbegrenzter Kapazität genau gleich wie ohne Post (Test). Ausgabe `carrier_report.csv`,
+  `RunResult.carriers`. Tests: `test_carriers.py` (7); 328 Tests grün.

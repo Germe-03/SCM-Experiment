@@ -30,6 +30,13 @@ class Geography:
         # Depreciation still to book per firm as (daily amount, last day).
         self.depreciation: dict[str, list[tuple[float, int]]] = {}
         self.stats = {"transport_cost": 0.0, "damaged_units": 0, "expansions": 0, "new_sites": 0}
+        # Phase 28: the Post (and couriers) instead of the anonymous service; None = old service.
+        self.carriers = None
+        # Delay in days of the last booked shipment (0 = normal lead time).
+        self.last_delay = 0
+        if getattr(config, "carriers", None) is not None and config.carriers.enabled:
+            from market_sim.carriers import CarrierMarket
+            self.carriers = CarrierMarket(config, self, seed)
         for index, firm in enumerate(sorted(firms, key=lambda f: (STAGES.index(f.stage), f.id))):
             if firm.region is None:
                 firm.region = self._default_region(firm.stage, index)
@@ -55,10 +62,14 @@ class Geography:
         return base * self.fuel_index * self.transport_factor.get(firm.id, 1.0)
 
     def unit_transport_cost(self, supplier: Firm, customer: Firm) -> float:
+        if self.carriers is not None and supplier.transport_mode == "service":
+            return self.km(supplier, customer) * (self.carriers.rate(supplier, customer)
+                                                  * self.fuel_index * self.transport_factor.get(supplier.id, 1.0))
         return self.km(supplier, customer) * self.rate(supplier)
 
     def ship(self, env: MarketEnvironment, supplier: Firm, customer: Firm, parcel: dict[str, int]) -> int:
         """Book transport cost; an own fleet may damage goods. Returns destroyed units."""
+        self.last_delay = 0
         units = sum(parcel.values())
         if not units:
             return 0
@@ -67,7 +78,15 @@ class Geography:
         runtime.handling_cost += cost
         self.stats["transport_cost"] += cost
         roll = self.rng.random()
-        if supplier.transport_mode == "service" or roll >= self.cfg.damage_probability:
+        damage_probability = self.cfg.damage_probability
+        if self.carriers is not None:
+            km = self.km(supplier, customer)
+            if supplier.transport_mode == "service":
+                self.last_delay = self.carriers.book(env.period, supplier, customer, units, km, cost, self.fuel_index)
+                damage_probability = self.carriers.damage_probability(supplier, customer)
+            else:
+                self.carriers.record_own(customer, units, km)
+        if roll >= damage_probability or (supplier.transport_mode == "service" and self.carriers is None):
             return 0
         destroyed = max(1, round(units * self.cfg.damage_share))
         taken = 0
@@ -82,6 +101,8 @@ class Geography:
 
     def daily(self, env: MarketEnvironment) -> None:
         """Fleet fixed costs and depreciation of finished investments."""
+        if self.carriers is not None:
+            self.carriers.daily(env)
         for firm_id, runtime in env.runtimes.items():
             if not runtime.active:
                 continue
@@ -121,6 +142,8 @@ class Geography:
                 continue
             self._invest(runner, firm, summaries[firm.id], state, days)
         self.depreciation = {k: [d for d in v if d[1] >= env.period] for k, v in self.depreciation.items()}
+        if self.carriers is not None:
+            self.carriers.year_end(runner, state)
 
     def _choose_transport(self, runner, firm, summaries, state) -> None:
         """Own fleet: fixed cost plus damage risk; service: dearer per km, no risk."""
@@ -135,7 +158,8 @@ class Geography:
         risk = runner.strategies.get(firm.id).risk_tolerance if firm.id in runner.strategies else 0.5
         damage = cfg.damage_probability * cfg.damage_share * unit_value * (1 + (1 - risk) * cfg.risk_aversion)
         own = shipped * (mean_km * cfg.own_rate * self.fuel_index + damage) + cfg.fleet_cost_per_day * 365
-        service = shipped * mean_km * cfg.service_rate * self.fuel_index
+        rate = self.carriers.service_rate(firm) if self.carriers is not None else cfg.service_rate
+        service = shipped * mean_km * rate * self.fuel_index
         choice = "service" if service < own else "own"
         if choice != firm.transport_mode:
             firm.transport_mode = choice
