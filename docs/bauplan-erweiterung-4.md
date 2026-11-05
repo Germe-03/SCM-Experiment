@@ -309,3 +309,16 @@ Vorlage: «Offene Punkte» in `docs/bauplan-banken-boerse.md`.
   Umsetzungen). Übernahme: Patent an die Käuferin; Konkurs: Patent verfällt.
   Ereignisse `patent_granted` (Börse +0.05), `patent_expired`; Export `D.patents`.
   Tests: `test_patents.py` (10); 321 Tests grün.
+- **Phase 27 (Dashboard-Teil), 2026-11-05:** Neue Datei `market_sim/dashboard_rnd.js`
+  (Platzhalter `__RND__`), Export `D.rnd_trees` (leer ohne Bäume). Reiter F&E: Baum pro
+  Branche als SVG (Chips, eingefärbt nach erforscht/umgesetzt bis Ende Zeitraum, Patent
+  mit Inhaber und Ablaufjahr, «gesperrt»), Tabelle «Patente» mit Spaltenfilter, Spalte
+  «Schritt» in der Projekttabelle, Ausgaben aufgeteilt in Forschung, Umsetzung,
+  Patentgebühren, Schadenersatz (Aufteilung aus abgeschlossenen Projekten geschätzt).
+  Firmendetails: kleiner eigener Baum, eigene Patente, Schadenersatz bezahlt/erhalten.
+  Finanzen: Karte mit denselben vier Posten. Staat: Patentverletzungen (vorbereitet für
+  Phase 26: `compensation`, `holder`), Ledger mit Spalte Schadenersatz falls vorhanden.
+  Geldfluss: F&E getrennt in Forschung/Umsetzung, `schadenersatz:<Firma>` mit
+  Partnername. Texte: Fakten zu umgesetzten Stufen, Patenten, Schadenersatz und
+  Patentverletzungen. Tests: `dashboard_phase27_check.cjs`, `test_phase27_dashboard.py`
+  (4); 325 Tests grün. Offen: Messlauf 3 Seeds × 50 Jahre, Sichtprüfung im Browser.
