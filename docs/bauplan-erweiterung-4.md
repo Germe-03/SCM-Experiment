@@ -381,3 +381,12 @@ Vorlage: «Offene Punkte» in `docs/bauplan-banken-boerse.md`.
   Partnername. Texte: Fakten zu umgesetzten Stufen, Patenten, Schadenersatz und
   Patentverletzungen. Tests: `dashboard_phase27_check.cjs`, `test_phase27_dashboard.py`
   (4); 325 Tests grün. Offen: Messlauf 3 Seeds × 50 Jahre, Sichtprüfung im Browser.
+- **Phase 27 Messlauf, 2026-11-05:** 3 Seeds x 50 Jahre auf `main` (Phasen 21-27, 33).
+  Forschung 3,26-3,65 Mia. CHF, Umsetzung 1,32-1,49 Mia. CHF pro Lauf; 150-175
+  Schritte, 53-65 Umsetzungen, vor allem Gastronomie, Detailhandel und Logistik;
+  Hersteller kommen kaum über die erste Stufe hinaus. Gewinn aller Firmen total
+  9,2 / -17,1 / 1,7 Mia. CHF; Konkurse 72 / 80 / 85, Übernahmen 46 / 39 / 42
+  (im Rahmen der 10-Seed-Messung aus Phase 33). Je Lauf nur 2 Patente (Kühlkette,
+  Kommissionier-Roboter), Patentverletzung nur in Seed 2 (2 Jahre, 1-mal entdeckt).
+  Dashboard im Browser geprüft (F&E-Baum, Patente, Finanzen, Staat, Firmendetails).
+  Offen: Hersteller-Bäume werden kaum genutzt (Kosten und Kassenbedingung prüfen).
