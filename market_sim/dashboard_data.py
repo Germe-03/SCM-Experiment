@@ -65,6 +65,15 @@ def _rnd_trees(config: MarketConfig) -> dict[str, list[dict[str, Any]]]:
     }
 
 
+def _population_matrix(class_reports: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Phase 37: persons per year, age group, income level and drinking habit."""
+    return [
+        {"year": r["year"], "income_level": r["income_level"], "age_group": r["age_group"],
+         "drinking_habit": r["drinking_habit"], "persons": r["persons"]}
+        for r in class_reports
+    ]
+
+
 def build_dashboard_data(
     result: RunResult, network: SupplyNetwork, config: MarketConfig, seed: int,
 ) -> dict[str, Any]:
@@ -143,6 +152,7 @@ def build_dashboard_data(
         "ranking": ranking,
         "brands": list(result.brand_reports),
         "classes": list(result.class_reports),
+        "population_matrix": _population_matrix(result.class_reports),
         "rnd": list(result.rnd_reports),
         "patents": list(result.patents),
         "rnd_trees": _rnd_trees(config),

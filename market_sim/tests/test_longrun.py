@@ -74,3 +74,48 @@ def test_long_run_reports_drift_in_kpis():
     result = run_simulation(years=3, seed=0, days_per_year=30)
     assert result.system_kpis[-1].price_index != 1.0
     assert result.system_kpis[-1].population_index > 1.0
+
+
+def _persons(runner):
+    classes = runner.config.consumers.classes
+    total = sum(c.persons for c in classes)
+    return total, sum(c.persons for c in classes if c.age_group == "65+") / total
+
+
+def test_age_cohorts_move_people_and_keep_income_and_habit():
+    runner, _ = _runner()
+    runner.config.long_run.age_cohorts = True
+    by_name = {c.name: c.persons for c in runner.config.consumers.classes}
+    runner.long_run._grow_population(runner)
+    young = by_name["income_1_18-34_light"]
+    new = {c.name: c.persons for c in runner.config.consumers.classes}
+    assert new["income_1_35-64_light"] > by_name["income_1_35-64_light"] - by_name["income_1_35-64_light"] / 30
+    assert new["income_1_65+_light"] != by_name["income_1_65+_light"]
+    assert new["income_1_18-34_light"] == pytest.approx(young * 1.005, abs=2)
+
+
+def test_age_cohorts_calibration_plus_20_percent_in_50_years_and_older():
+    runner, _ = _runner()
+    runner.config.long_run.age_cohorts = True
+    start, senior_share = _persons(runner)
+    for _ in range(50):
+        runner.long_run._grow_population(runner)
+    end, senior_end = _persons(runner)
+    assert 1.15 <= end / start <= 1.25
+    assert senior_end > senior_share
+
+
+def test_age_cohorts_off_keeps_fixed_growth():
+    runner, _ = _runner()
+    runner.config.long_run.age_cohorts = False
+    young = {c.name: c.persons for c in runner.config.consumers.classes if c.age_group == "18-34"}
+    runner.long_run._grow_population(runner)
+    for c in runner.config.consumers.classes:
+        if c.age_group == "18-34":
+            assert c.persons == max(1, round(young[c.name] * 1.001))
+
+
+def test_dashboard_population_matrix_export():
+    from market_sim.dashboard_data import _population_matrix
+    rows = [{"year": 1, "income_level": 2, "age_group": "65+", "drinking_habit": "light", "persons": 5, "x": 1}]
+    assert _population_matrix(rows) == [{"year": 1, "income_level": 2, "age_group": "65+", "drinking_habit": "light", "persons": 5}]

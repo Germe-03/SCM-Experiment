@@ -104,8 +104,11 @@ class LongRun:
         if config.consumers is None:
             return
         before = sum(c.persons * c.units_per_person_per_year for c in config.consumers.classes)
-        for cls in config.consumers.classes:
-            cls.persons = max(1, round(cls.persons * (1 + growth.get(cls.age_group or "", 0.0))))
+        if self.cfg.age_cohorts:
+            self._age_cohorts(config.consumers.classes)
+        else:
+            for cls in config.consumers.classes:
+                cls.persons = max(1, round(cls.persons * (1 + growth.get(cls.age_group or "", 0.0))))
         after = sum(c.persons * c.units_per_person_per_year for c in config.consumers.classes)
         factor = after / before if before else 1.0
         self.population_index *= factor
@@ -115,6 +118,46 @@ class LongRun:
             book.class_volume = {
                 c.name: c.persons * c.units_per_person_per_year / units for c in config.consumers.classes
             }
+
+    def _age_cohorts(self, classes) -> None:
+        if not hasattr(self, "_cohort_float"):
+            self._cohort_float = {}
+        # Outside changes (e.g. poisoning deaths) win over the stored fraction.
+        for cls in classes:
+            if round(self._cohort_float.get(cls.name, -1.0)) != cls.persons:
+                self._cohort_float[cls.name] = float(cls.persons)
+
+        groups = {}
+        age_keys = {"18-34": "y", "35-64": "m", "65+": "o"}
+        for cls in classes:
+            age = age_keys.get(cls.age_group)
+            if age is not None:
+                group = (cls.income_level, cls.name.rsplit("_", 1)[-1])
+                groups.setdefault(group, {})[age] = cls
+
+        for group_classes in groups.values():
+            if not all(age in group_classes for age in ("y", "m", "o")):
+                continue
+
+            young = group_classes["y"]
+            middle = group_classes["m"]
+            senior = group_classes["o"]
+            y = self._cohort_float.setdefault(young.name, float(young.persons))
+            m = self._cohort_float.setdefault(middle.name, float(middle.persons))
+            o = self._cohort_float.setdefault(senior.name, float(senior.persons))
+
+            a = self.cfg.young_to_middle_rate
+            inflow = self.cfg.young_inflow_rate
+            extra = self.cfg.young_extra_growth
+            b = self.cfg.middle_to_senior_rate
+            d = self.cfg.senior_death_rate
+            y_new = y - y * a + y * inflow + y * extra
+            m_new = m + y * a - m * b
+            o_new = o + m * b - o * d
+
+            for cls, persons in ((young, y_new), (middle, m_new), (senior, o_new)):
+                self._cohort_float[cls.name] = persons
+                cls.persons = max(1, round(persons))
 
     def _drift_exchange_rate(self, runner: SimulationRunner, roll: float) -> None:
         """Phase 4: CHF per EUR follows a mean-reverting random walk around its start."""

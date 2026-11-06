@@ -161,8 +161,8 @@ body:has(dialog[open]){overflow:hidden}
  </div>
 <div class="card"><h3>Was es zu kaufen gibt</h3><div id="ms-brands"></div></div>
 <section id="market-people" aria-labelledby="people-title">
- <h2 id="people-title">Bevölkerung</h2><p class="lead">Die 30 Kundenklassen im letzten Jahr des Zeitraums. Klicke auf eine Klasse, um zwei typische Personen kennenzulernen.</p>
- <div class="card" style="margin-bottom:16px"><div class="table-wrap" style="max-height:none"><table id="pp-grid" class="heat"></table></div><p class="hint" style="margin-top:8px">Zahl oben: Personen. Unten: Anteil der Nachfrage, die gekauft wurde, und Lieblingskategorie.</p></div>
+ <h2 id="people-title">Bevölkerung</h2><p class="lead">Die 30 Kundenklassen, Jahr wählbar (Voreinstellung: letztes Jahr des Zeitraums). Klicke auf eine Klasse, um zwei typische Personen kennenzulernen.</p>
+ <div class="card" style="margin-bottom:16px"><p><label for="pp-year">Jahr: </label><select id="pp-year"></select> <span id="pp-total" class="hint"></span></p><div class="table-wrap" style="max-height:none"><table id="pp-grid" class="heat"></table></div><p class="hint" style="margin-top:8px">Zahl oben: Personen. Unten: Anteil der Nachfrage, die gekauft wurde, und Lieblingskategorie.</p></div>
  <div id="pp-detail"></div>
 </section>
 </section>
@@ -767,7 +767,11 @@ function renderMap(){const regs=D.regions||[];const root=$('#map-svg');
 const HABIT={light:'gelegentlich',regular:'regelmässig'};
 S.ppClass=null;
 function renderPeople(){const rows=(D.classes||[]).filter(r=>r.year<=range.to);if(!rows.length){$('#pp-grid').innerHTML=`<tr><td>${empty('Keine Kundenklassen in diesem Lauf.')}</td></tr>`;return}
- const year=Math.max(...rows.map(r=>r.year)),cur=Object.fromEntries(rows.filter(r=>r.year===year).map(r=>[r.consumer_class,r]));
+ const years=[...new Set(rows.map(r=>r.year))].sort((a,b)=>a-b),sel=$('#pp-year');
+ if(S.ppYear==null||!years.includes(S.ppYear))S.ppYear=years[years.length-1];
+ sel.innerHTML=years.map(y=>`<option value="${y}"${y===S.ppYear?' selected':''}>Jahr ${y}</option>`).join('');sel.onchange=()=>{S.ppYear=+sel.value;renderPeople()};
+ const year=S.ppYear;$('#pp-total').textContent='Total: '+nf(rows.filter(r=>r.year===year).reduce((s,r)=>s+(r.persons||0),0))+' Personen';
+ const cur=Object.fromEntries(rows.filter(r=>r.year===year).map(r=>[r.consumer_class,r]));
  const ages=['18-34','35-64','65+'],habits=['light','regular'];
  const cell=(i,a,h)=>{const r=cur[`income_${i}_${a}_${h}`];if(!r)return'<td>—</td>';const fav=Object.entries(r.category_shares||{}).sort((x,y)=>y[1]-x[1])[0];const sel=S.ppClass===r.consumer_class;
   return`<td class="click" data-c="${esc(r.consumer_class)}" tabindex="0" style="cursor:pointer;${sel?'outline:2px solid var(--brand);':''}background:${css('--brand')}${Math.round(40+150*(r.purchase_rate||0)).toString(16).padStart(2,'0')}"><b>${nf((r.persons||0)/1000)}k</b><br><small>${pct(r.purchase_rate)} · ${fav?esc(CAT[fav[0]]||fav[0]):''}</small></td>`};
