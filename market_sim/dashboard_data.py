@@ -160,6 +160,7 @@ def build_dashboard_data(
         "offence_ledger": list(result.offence_ledger),
         "holdings": list(result.holdings),
         "laws": list(result.laws),
+        "commodities": list(result.commodities),
         # Yearly decisions only; the monthly order and price averages stay in decisions.csv.
         "decisions": [d for d in result.decisions if d.get("month") is None],
         "exit_analysis": result.exit_analysis,

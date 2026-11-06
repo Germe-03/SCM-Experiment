@@ -248,6 +248,7 @@ body:has(dialog[open]){overflow:hidden}
   <div class="card"><h3>Grösste Gewinner / Verlierer im Zeitraum</h3><p class="hint">Je fünf noch kotierte Firmen mit Kurs am Anfang und Ende des Zeitraums.</p><div id="sx-movers"></div></div>
   <div class="card wide"><details><summary>Index pro Stufe (Start = 100)</summary><p class="hint">Nach Kurs gewichtet, gleiche Aktienzahl je Firma. Ein- und Austritte werden ohne Kurssprung verkettet.</p><div class="chart"><canvas id="sx-stages"></canvas></div></details></div>
   <div class="card wide"><h3>ETFs</h3><p class="hint">Körbe von Aktien, nur zur Anzeige (noch nicht kaufbar). Start = 100, nach Börsenwert gewichtet; Börsengänge und Austritte machen keinen Sprung. Zeile: Mitglieder mit Gewicht.</p><div class="chips" id="etf-kind" role="group" aria-label="ETF-Gruppe"></div><div class="chart"><canvas id="etf-chart"></canvas></div><div class="table-wrap"><table id="etf-table"></table></div><div id="etf-members"></div></div>
+  <div class="card wide" id="cm-card"><h3>Rohstoffpreise</h3><p class="hint">Marktpreis je Rohstoff der Lieferkette in Prozent des Grundpreises (Jahreswerte). Die Preise bleiben zwischen 70 und 140 Prozent; hohe Nachfrage hebt sie leicht.</p><p class="hint" id="cm-empty"></p><div class="chart"><canvas id="cm-chart"></canvas></div></div>
   <div class="card wide"><h3>Börsen-Ereignisse</h3><ul class="list" id="sx-events" style="max-height:260px;overflow:auto"></ul></div>
  </div>
 </section>
@@ -581,6 +582,7 @@ function renderFirmDetail(){const root=$('#fm-detail');destroy();if(S.tab!=='fir
  <div class="card wide" id="fd-story" hidden></div>
  ${D.stocks?.prices?.[id]?'<div class="card wide"><h3>Börsenkurs</h3>'+etfMembership(id)+'<div id="fd-index-switch">'+stockIndexSwitch('fd',true)+'</div><p class="hint" id="fd-stock-empty"></p><div class="chart"><canvas id="fd-price"></canvas></div></div>':''}
  ${firmRndHtml(id)}
+ ${firmCommodityHtml(id)}
  <div class="card wide" id="fd-exit" hidden></div>
  <div class="card wide"><h3>Entscheidungen</h3><p class="hint">Pro Jahr nur, was sich geändert hat, dazu Straftaten, Investitionen und Projekte.</p><div class="chips" id="fd-dec-filter" style="margin-bottom:10px"></div><ul class="list" id="fd-decisions" style="max-height:420px;overflow:auto"></ul></div></div></div>`;
  wireBankLinks(root);
@@ -714,8 +716,16 @@ function renderStocks(){const s=D.stocks||{days:[],years:[],index:[],prices:{}},
  const movers=rows.filter(r=>r.change!=null),list=(title,rs)=>'<h4>'+title+'</h4><ul class="list">'+(rs.length?rs.map(r=>`<li>${name(r)} <span>${pct(r.change)}</span></li>`).join(''):'<li>Keine Firmen mit passenden Kursen.</li>')+'</ul>';
  $('#sx-movers').innerHTML=list('Gewinner',movers.filter(r=>r.change>0).sort((a,b)=>b.change-a.change).slice(0,5))+list('Verlierer',movers.filter(r=>r.change<0).sort((a,b)=>a.change-b.change).slice(0,5));wireFirmLinks($('#sx-movers'));
  chart('sx-stages',{type:'line',data:{labels:points.map(i=>stockLabel(i,period)),datasets:FM_GROUPS.filter(g=>g!=='bank'&&g!=='courier').map(g=>{const values=stockStageSeries(g);return stockDataset(fmGroupLabel(g),stockNormal(points.map(i=>values[i]),all.map(i=>values[i]).find(v=>v>0)),stageColor()[g])})},options:stockOptions(points,period)});
+ renderCommodities();
  $('#sx-events').innerHTML=eventList((D.events||[]).filter(e=>inRange(e.year)&&['exchange_opened','listed','delisted'].includes(e.event)))
 }
+function firmCommodityHtml(id){const rows=(D.commodities||[]).filter(r=>inRange(r.year)&&r.firms?.[id]);if(!rows.length)return'';
+ const names=Object.keys(rows[0].prices),pc=v=>v==null?'–':nf(v*100,0)+' %';
+ const body=rows.map(r=>{const f=r.firms[id];return `<tr><td class="num">${r.year}</td>`+names.map(n=>`<td class="num" data-value="${f.stock[n]??0}">${nf(f.stock[n]??0,0)}</td><td class="num">${pc(f.avg_price?.[n])}</td><td class="num">${pc(r.prices[n])}</td>`).join('')+'</tr>'}).join('');
+ return '<div class="card wide"><h3>Rohstofflager und Einkaufspreise</h3><p class="hint">Pro Rohstoff: Lagerbestand am Jahresende (Einheiten), durchschnittlicher Einkaufspreis und Marktpreis, jeweils in Prozent des Grundpreises.</p><div class="table-wrap"><table><thead><tr><th class="num">Jahr</th>'+names.map(n=>`<th class="num">${esc(n)}: Lager</th><th class="num">${esc(n)}: Ø Kauf</th><th class="num">${esc(n)}: Markt</th>`).join('')+'</tr></thead><tbody>'+body+'</tbody></table></div></div>'}
+function renderCommodities(){const rows=(D.commodities||[]).filter(r=>inRange(r.year)),names=rows.length?Object.keys(rows[0].prices):[];
+ $('#cm-empty').textContent=rows.length?'':'Keine Rohstoffpreise im gewählten Zeitraum.';
+ chart('cm-chart',{type:'line',data:{labels:rows.map(r=>'Jahr '+r.year),datasets:names.map((n,i)=>({label:n,data:rows.map(r=>r.prices[n]*100),borderColor:pal()[i%pal().length],pointRadius:3,borderWidth:2,tension:.2}))},options:{scales:{y:{suggestedMin:60,suggestedMax:150,ticks:{callback:v=>v+' %'}}}}})}
 function renderFinance(){renderBanks();renderHoldings();renderRndMoney('fi-rnd');lines('fi-labor',[{label:'Offene Stellen',get:x=>x.open_positions},{label:'Abgeworben',get:x=>x.poached_workers},{label:'Lohnniveau',get:x=>x.wage_index_mean,axis:'y2'}]);lines('fi-negative',byGroup('negative_interest_',r=>r.negative_interest_cost||0,'chf'),{fmt:'chf'});lines('fi-debt',byGroup('debt_',r=>Math.max(0,-(r.cash||0)),'chf',true),{fmt:'chf'});lines('fi-interest',byGroup('interest_cost_',r=>r.interest_cost||0,'chf'),{fmt:'chf'});
  const s=sys(),restr=y=>D.events.filter(e=>e.year===y&&e.event==='restructuring').length;
  chart('fi-churn',{type:'bar',data:{labels:s.map(x=>x.year),datasets:[{label:'Eintritte',data:s.map(x=>x.market_entries),backgroundColor:pal()[0]+'bb'},{label:'Konkurse',data:s.map(x=>x.bankruptcies),backgroundColor:css('--bad')+'bb'},{label:'Sanierungen',data:s.map(x=>restr(x.year)),backgroundColor:pal()[3]+'bb'},{type:'line',label:'Strategiewechsel',data:s.map(x=>x.strategy_changes),borderColor:pal()[4],pointRadius:0}]},options:{scales:{x:{grid:{display:false}}}}});

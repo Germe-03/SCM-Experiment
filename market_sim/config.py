@@ -153,6 +153,25 @@ class CommodityConfig(ConfigModel):
     index_volatility: float = Field(default=0.0, ge=0)
     index_mean_reversion: float = Field(default=0.2, ge=0, le=1)
     index_update_days: int = Field(default=30, gt=0)
+    # Phase 38: commodity market. Off = old monthly index; on = yearly market price per
+    # commodity (share of the base price) with a light demand effect inside a price band.
+    market_enabled: bool = False
+    market_annual_volatility: float = Field(default=0.08, ge=0)
+    # Largest yearly price move caused by demand alone (0.04 = about 4 percent).
+    market_demand_strength: float = Field(default=0.04, ge=0, le=0.5)
+    market_band_min: float = Field(default=0.7, gt=0)
+    market_band_max: float = Field(default=1.4, gt=0)
+    market_reference_years: int = Field(default=3, gt=0)
+    # Phase 39: factories keep a limited raw-material stock, buy ahead when the price is
+    # below the recent average, and pay storage costs; some commodities spoil.
+    stockpile_enabled: bool = False
+    stock_days: float = Field(default=30.0, ge=0)
+    stock_storage_cost_per_year: float = Field(default=0.06, ge=0)
+    stock_spoilage_per_year: dict[str, float] = Field(default_factory=dict)
+    stock_unstorable: list[str] = Field(default_factory=list)
+    # A firm with risk_tolerance 0 buys ahead only this far below the average price.
+    stock_discount_threshold: float = Field(default=0.10, ge=0, lt=1)
+    stock_cash_share: float = Field(default=0.10, ge=0, le=1)
 
     @model_validator(mode="after")
     def _costs_not_negative(self) -> Self:

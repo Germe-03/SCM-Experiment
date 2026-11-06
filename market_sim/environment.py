@@ -320,6 +320,15 @@ class MarketEnvironment:
         self.runtimes = {}
         self._commodity_rng = random.Random(f"commodities-{self.seed}")
         self.commodity_log_index = {name: 0.0 for name in self.config.commodities.components}
+        # Phase 38: market price level per commodity (share of base price), demand and history.
+        self.commodity_price = {name: 1.0 for name in self.config.commodities.components}
+        self.commodity_bought = {name: 0.0 for name in self.config.commodities.components}
+        self.commodity_past_bought: list[dict[str, float]] = []
+        self.commodity_history: list[dict] = [self._commodity_row()]
+        # Phase 39: stock per firm and commodity, risk appetite and this year's purchase prices.
+        self.commodity_stock: dict[str, dict[str, float]] = {}
+        self.commodity_courage: dict[str, float] = {}
+        self.commodity_spend: dict[str, dict[str, list[float]]] = {}
         self.material_cost_multiplier = 1.0
         firms = [f for stage in STAGES for f in self.network.firms_in(stage)]
         self.brand_book = BrandBook(self.config, firms)
@@ -398,6 +407,7 @@ class MarketEnvironment:
             self._credit_profit_marks = {fid: rt.profit for fid, rt in self.runtimes.items()}
 
         self._update_commodity_index()
+        self._age_commodity_stock()
         active_ids = {
             firm_id for firm_id, runtime in self.runtimes.items()
             if runtime.active
@@ -570,7 +580,7 @@ class MarketEnvironment:
                     if self._harvest_producer(firm):
                         continue
                     quantity = self.affordable_units(firm.id, quantity, self.unit_production_cost(firm))
-                    self._book_production(firm, self.runtimes[firm.id], quantity * self.unit_production_cost(firm, quantity))
+                    self._procure_and_book(firm, self.runtimes[firm.id], quantity)
                     # P1 fix: a factory production start is its replenishment order.
                     self.runtimes[firm.id].on_order += quantity
                     self.runtimes[firm.id].incoming_shipments[-1] += quantity
@@ -760,6 +770,7 @@ class MarketEnvironment:
         batch = round(min(self._effective_capacity(firm.id) * days, delivered * cfg.wine_forecast_buffer) * yield_factor)
         batch = self.affordable_units(firm.id, batch, self.unit_production_cost(firm))
         self._book_production(firm, runtime, batch * self.unit_production_cost(firm, batch))
+        self.record_commodity_purchase(firm.id, batch)
         bonus = max(-0.1, min(0.1, (yield_factor - 1) * cfg.vintage_quality_slope))
         for brand_id, units in book.production_mix(firm.id, batch).items():
             brand = book.brands[brand_id]
@@ -1012,9 +1023,141 @@ class MarketEnvironment:
             min(cfg.quality_cap, runtime.quality_level - cfg.daily_quality_decay + matured),
         )
 
+    def _commodity_row(self) -> dict:
+        days = self.config.simulation.days_per_year
+        return {"year": self.period // days + 1,
+                "prices": {n: self.commodity_price[n] for n in sorted(self.commodity_price)},
+                "bought": {n: self.commodity_bought[n] for n in sorted(self.commodity_bought)}}
+
+    def record_commodity_purchase(self, firm_id: str, units: float, name: str | None = None) -> None:
+        """Phase 38: a firm buys sim-units of one commodity (name) or of every one (one per produced unit).
+
+        Phase 39: extra stock purchases land here too, so they feed the demand of the market.
+        """
+        if not self.config.commodities.market_enabled or units <= 0:
+            return
+        for item in ([name] if name else sorted(self.commodity_bought)):
+            self.commodity_bought[item] += units
+            spend = self.commodity_spend.setdefault(firm_id, {}).setdefault(item, [0.0, 0.0])
+            spend[0] += units
+            spend[1] += units * self.commodity_price.get(item, 1.0)
+
+    def _commodity_reference(self, name: str) -> float:
+        """Average market price of the last few finished years (0 = none yet)."""
+        rows = self.commodity_history[:-1][-self.config.commodities.market_reference_years:]
+        return sum(row["prices"][name] for row in rows) / len(rows) if rows else 0.0
+
+    def _component_cost(self, firm_id: str, name: str) -> float:
+        base = self.config.commodities.components.get(name, 0.0)
+        return (self.material_cost_multiplier * base * self.commodity_level(name)
+                * self.component_factor.get(firm_id, {}).get(name, 1.0))
+
+    def _firm_commodity_snapshot(self, reset: bool) -> dict:
+        out = {}
+        for firm_id in sorted(set(self.commodity_stock) | set(self.commodity_spend)):
+            spend = self.commodity_spend.get(firm_id, {})
+            out[firm_id] = {
+                "stock": {n: round(v, 1) for n, v in sorted(self.commodity_stock.get(firm_id, {}).items())},
+                "avg_price": {n: (s[1] / s[0] if s[0] > 0 else None) for n, s in sorted(spend.items())},
+                "units": {n: s[0] for n, s in sorted(spend.items())},
+            }
+        if reset:
+            self.commodity_spend = {}
+        return out
+
+    def commodity_rows(self) -> list[dict]:
+        """History for reports; the running year is closed with the current state."""
+        rows = [dict(row) for row in self.commodity_history]
+        if rows:
+            rows[-1]["bought"] = dict(self.commodity_bought)
+            rows[-1]["firms"] = self._firm_commodity_snapshot(False)
+        return rows
+
+    def _age_commodity_stock(self) -> None:
+        """Daily: stock spoils and costs storage money."""
+        cfg = self.config.commodities
+        if not (cfg.market_enabled and cfg.stockpile_enabled):
+            return
+        days = self.config.simulation.days_per_year
+        for firm_id in sorted(self.commodity_stock):
+            runtime = self.runtimes.get(firm_id)
+            if runtime is None or not runtime.active:
+                continue
+            stock = self.commodity_stock[firm_id]
+            cost = 0.0
+            for name in sorted(stock):
+                stock[name] -= stock[name] * cfg.stock_spoilage_per_year.get(name, 0.0) / days
+                cost += stock[name] * self._component_cost(firm_id, name) * cfg.stock_storage_cost_per_year / days
+            runtime.pay("rohstoffe", cost)
+
+    def _procure_and_book(self, firm: Firm, runtime: FirmRuntime, quantity: int) -> None:
+        """Pay the raw materials of a production run; use the stock first and buy ahead when cheap."""
+        cfg = self.config.commodities
+        unit_cost = self.unit_production_cost(firm, quantity)
+        amount = quantity * unit_cost
+        if not (cfg.market_enabled and cfg.stockpile_enabled):
+            self._book_production(firm, runtime, amount)
+            self.record_commodity_purchase(firm.id, quantity)
+            return
+        material = self.material_cost_per_unit(firm.id)
+        scale = unit_cost / material if material > 0 else 1.0
+        stock = self.commodity_stock.setdefault(firm.id, {})
+        for name in sorted(cfg.components):
+            used = min(stock.get(name, 0.0), float(quantity))
+            if used > 0:
+                stock[name] -= used
+                amount -= used * self._component_cost(firm.id, name) * scale
+            self.record_commodity_purchase(firm.id, quantity - used, name)
+        self._book_production(firm, runtime, max(0.0, amount))
+        # Buy ahead of need when the price is below the recent average.
+        courage = max(0.0, min(1.0, self.commodity_courage.get(firm.id, 0.5)))
+        threshold = 1.0 - cfg.stock_discount_threshold * (1.0 - courage)
+        daily = max(1, self._effective_capacity(firm.id))
+        for name in sorted(cfg.components):
+            reference = self._commodity_reference(name)
+            if name in cfg.stock_unstorable or reference <= 0 or self.commodity_level(name) / reference >= threshold:
+                continue
+            target = daily * cfg.stock_days * (0.3 + 0.7 * courage)
+            want = target - stock.get(name, 0.0)
+            price = self._component_cost(firm.id, name) * scale
+            if want < 1 or price <= 0:
+                continue
+            budget = max(0.0, runtime.cash) * cfg.stock_cash_share
+            units = float(self.affordable_units(firm.id, int(want), price))
+            units = min(units, budget / price)
+            if units < 1:
+                continue
+            self._book_production(firm, runtime, units * price)
+            self.record_commodity_purchase(firm.id, units, name)
+            stock[name] = stock.get(name, 0.0) + units
+
+    def _update_commodity_market(self) -> None:
+        """Yearly: demand versus the recent average nudges the price lightly, inside the band."""
+        cfg = self.config.commodities
+        days = self.config.simulation.days_per_year
+        if self.period == 0 or self.period % days:
+            return
+        self.commodity_history[-1]["bought"] = dict(self.commodity_bought)
+        self.commodity_history[-1]["firms"] = self._firm_commodity_snapshot(True)
+        past = self.commodity_past_bought[-cfg.market_reference_years:]
+        for name in sorted(self.commodity_price):
+            push = 0.0
+            reference = sum(row[name] for row in past) / len(past) if past else 0.0
+            if reference > 0:
+                push = cfg.market_demand_strength * max(-1.0, min(1.0, self.commodity_bought[name] / reference - 1.0))
+            shock = self._commodity_rng.gauss(0.0, cfg.market_annual_volatility)
+            level = self.commodity_price[name] * exp(shock + push)
+            self.commodity_price[name] = max(cfg.market_band_min, min(cfg.market_band_max, level))
+        self.commodity_past_bought.append(dict(self.commodity_bought))
+        self.commodity_bought = {name: 0.0 for name in self.commodity_bought}
+        self.commodity_history.append(self._commodity_row())
+
     def _update_commodity_index(self) -> None:
         """Mean-reverting log-price shocks per raw material, every few days."""
         cfg = self.config.commodities
+        if cfg.market_enabled:
+            self._update_commodity_market()
+            return
         if not cfg.components or cfg.index_volatility == 0 or self.period % cfg.index_update_days:
             return
         for name in sorted(self.commodity_log_index):
@@ -1023,10 +1166,15 @@ class MarketEnvironment:
                 (1 - cfg.index_mean_reversion) * self.commodity_log_index[name] + shock
             )
 
+    def commodity_level(self, name: str) -> float:
+        if self.config.commodities.market_enabled:
+            return self.commodity_price.get(name, 1.0)
+        return exp(self.commodity_log_index.get(name, 0.0))
+
     def material_cost_per_unit(self, firm_id: str | None = None) -> float:
         """Current raw-material cost of one produced sim-unit in real CHF."""
         return self.material_cost_multiplier * sum(
-            cost * exp(self.commodity_log_index.get(name, 0.0)) * self.component_factor.get(firm_id, {}).get(name, 1.0)
+            cost * self.commodity_level(name) * self.component_factor.get(firm_id, {}).get(name, 1.0)
             for name, cost in self.config.commodities.components.items()
         )
 
