@@ -266,6 +266,15 @@ commodities:
   market_band_min: 0.7
   market_band_max: 1.4
   market_reference_years: 3
+  # Phase 39: Rohstofflager der Fabriken (Tage Produktion), Lagerkosten pro Jahr (Anteil Warenwert),
+  # Verderb pro Jahr (Hopfen schneller als Malz), nicht lagerbar: Energie.
+  stockpile_enabled: true
+  stock_days: 30
+  stock_storage_cost_per_year: 0.06
+  stock_spoilage_per_year: {malt: 0.05, hops: 0.25, packaging: 0.0}
+  stock_unstorable: [energy]
+  stock_discount_threshold: 0.10
+  stock_cash_share: 0.10
 
 # S7 tunable guesses: calibrate these coefficients against observed firm data.
 workforce:

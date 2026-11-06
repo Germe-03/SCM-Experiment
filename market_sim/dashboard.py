@@ -567,6 +567,7 @@ function renderFirmDetail(){const root=$('#fm-detail');destroy();if(S.tab!=='fir
  <div class="card wide" id="fd-story" hidden></div>
  ${D.stocks?.prices?.[id]?'<div class="card wide"><h3>Börsenkurs</h3>'+etfMembership(id)+'<div id="fd-index-switch">'+stockIndexSwitch('fd',true)+'</div><p class="hint" id="fd-stock-empty"></p><div class="chart"><canvas id="fd-price"></canvas></div></div>':''}
  ${firmRndHtml(id)}
+ ${firmCommodityHtml(id)}
  <div class="card wide" id="fd-exit" hidden></div>
  <div class="card wide"><h3>Entscheidungen</h3><p class="hint">Pro Jahr nur, was sich geändert hat, dazu Straftaten, Investitionen und Projekte.</p><div class="chips" id="fd-dec-filter" style="margin-bottom:10px"></div><ul class="list" id="fd-decisions" style="max-height:420px;overflow:auto"></ul></div></div></div>`;
  wireBankLinks(root);
@@ -703,6 +704,10 @@ function renderStocks(){const s=D.stocks||{days:[],years:[],index:[],prices:{}},
  renderCommodities();
  $('#sx-events').innerHTML=eventList((D.events||[]).filter(e=>inRange(e.year)&&['exchange_opened','listed','delisted'].includes(e.event)))
 }
+function firmCommodityHtml(id){const rows=(D.commodities||[]).filter(r=>inRange(r.year)&&r.firms?.[id]);if(!rows.length)return'';
+ const names=Object.keys(rows[0].prices),pc=v=>v==null?'–':nf(v*100,0)+' %';
+ const body=rows.map(r=>{const f=r.firms[id];return `<tr><td class="num">${r.year}</td>`+names.map(n=>`<td class="num" data-value="${f.stock[n]??0}">${nf(f.stock[n]??0,0)}</td><td class="num">${pc(f.avg_price?.[n])}</td><td class="num">${pc(r.prices[n])}</td>`).join('')+'</tr>'}).join('');
+ return '<div class="card wide"><h3>Rohstofflager und Einkaufspreise</h3><p class="hint">Pro Rohstoff: Lagerbestand am Jahresende (Einheiten), durchschnittlicher Einkaufspreis und Marktpreis, jeweils in Prozent des Grundpreises.</p><div class="table-wrap"><table><thead><tr><th class="num">Jahr</th>'+names.map(n=>`<th class="num">${esc(n)}: Lager</th><th class="num">${esc(n)}: Ø Kauf</th><th class="num">${esc(n)}: Markt</th>`).join('')+'</tr></thead><tbody>'+body+'</tbody></table></div></div>'}
 function renderCommodities(){const rows=(D.commodities||[]).filter(r=>inRange(r.year)),names=rows.length?Object.keys(rows[0].prices):[];
  $('#cm-empty').textContent=rows.length?'':'Keine Rohstoffpreise im gewählten Zeitraum.';
  chart('cm-chart',{type:'line',data:{labels:rows.map(r=>'Jahr '+r.year),datasets:names.map((n,i)=>({label:n,data:rows.map(r=>r.prices[n]*100),borderColor:pal()[i%pal().length],pointRadius:3,borderWidth:2,tension:.2}))},options:{scales:{y:{suggestedMin:60,suggestedMax:150,ticks:{callback:v=>v+' %'}}}}})}

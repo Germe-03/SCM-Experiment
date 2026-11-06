@@ -162,6 +162,16 @@ class CommodityConfig(ConfigModel):
     market_band_min: float = Field(default=0.7, gt=0)
     market_band_max: float = Field(default=1.4, gt=0)
     market_reference_years: int = Field(default=3, gt=0)
+    # Phase 39: factories keep a limited raw-material stock, buy ahead when the price is
+    # below the recent average, and pay storage costs; some commodities spoil.
+    stockpile_enabled: bool = False
+    stock_days: float = Field(default=30.0, ge=0)
+    stock_storage_cost_per_year: float = Field(default=0.06, ge=0)
+    stock_spoilage_per_year: dict[str, float] = Field(default_factory=dict)
+    stock_unstorable: list[str] = Field(default_factory=list)
+    # A firm with risk_tolerance 0 buys ahead only this far below the average price.
+    stock_discount_threshold: float = Field(default=0.10, ge=0, lt=1)
+    stock_cash_share: float = Field(default=0.10, ge=0, le=1)
 
     @model_validator(mode="after")
     def _costs_not_negative(self) -> Self:
