@@ -285,6 +285,8 @@ class StateActor:
         for brand_id, units in t_rt.stock.items():
             b_rt.stock[brand_id] = b_rt.stock.get(brand_id, 0) + units
         b_rt.inventory += t_rt.inventory
+        if hasattr(env, "transfer_commodity_stock"):
+            env.transfer_commodity_stock(target.id, buyer.id)
         t_rt.stock = {}
         t_rt.inventory = 0
         t_rt.adjust_cash(-t_rt.cash, f"uebernommen:{buyer.id}")

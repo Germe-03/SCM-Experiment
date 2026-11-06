@@ -316,6 +316,9 @@ class Mergers:
         n_rt = env.runtimes[new.id]
         total_cash = rt_big.cash + rt_small.cash
         n_rt.adjust_cash(total_cash - n_rt.cash, f"fusion:{big.id}+{small.id}")
+        if hasattr(env, "transfer_commodity_stock"):
+            env.transfer_commodity_stock(big.id, new.id)
+            env.transfer_commodity_stock(small.id, new.id)
         for old_runtime in (rt_big, rt_small):
             old_runtime.adjust_cash(-old_runtime.cash, f"fusion_in:{new.id}")
             for brand_id, units in old_runtime.stock.items():

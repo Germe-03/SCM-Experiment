@@ -1077,6 +1077,15 @@ class MarketEnvironment:
             rows[-1]["firms"] = self._firm_commodity_snapshot(False)
         return rows
 
+    def transfer_commodity_stock(self, source_id: str, target_id: str) -> None:
+        """Merger or takeover: the raw-material stock moves to the new owner."""
+        stock = self.commodity_stock.pop(source_id, None)
+        if not stock:
+            return
+        target = self.commodity_stock.setdefault(target_id, {})
+        for name, units in stock.items():
+            target[name] = target.get(name, 0.0) + units
+
     def _age_commodity_stock(self) -> None:
         """Daily: stock spoils and costs storage money."""
         cfg = self.config.commodities

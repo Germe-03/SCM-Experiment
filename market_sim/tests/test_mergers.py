@@ -227,3 +227,43 @@ def test_run_continues_after_merger(monkeypatch):
     runner.continue_run(state, 1)
 
     assert new_id in state.summaries[-1]
+
+
+def test_holding_subsidiary_does_not_merge(monkeypatch):
+    """Phase 44: firms inside a holding stay out of mergers."""
+    runner, state = _runner()
+    _prepare_pair(runner, state, "wholesaler_01", "wholesaler_02")
+    groups = runner.holding_groups
+    monkeypatch.setattr(groups, "group_of", lambda firm_id: object() if firm_id == "wholesaler_01" else None)
+
+    runner.mergers.year_end(runner, state)
+
+    assert all("wholesaler_01" not in row["parents"] for row in runner.mergers.log)
+    assert runner.env.runtimes["wholesaler_01"].active
+
+
+def test_merger_moves_commodity_stock():
+    """Phase 44: the raw-material stock goes to the merged firm."""
+    runner, state = _runner()
+    _prepare_pair(runner, state, "wholesaler_01", "wholesaler_02")
+    env = runner.env
+    env.commodity_stock["wholesaler_01"] = {"malz": 10.0}
+    env.commodity_stock["wholesaler_02"] = {"malz": 5.0, "hopfen": 2.0}
+
+    runner.mergers.year_end(runner, state)
+
+    new_id = runner.mergers.log[0]["new"]
+    assert env.commodity_stock[new_id] == {"malz": 15.0, "hopfen": 2.0}
+    assert "wholesaler_01" not in env.commodity_stock
+    assert "wholesaler_02" not in env.commodity_stock
+
+
+def test_transfer_commodity_stock_for_takeover():
+    runner, _ = _runner()
+    env = runner.env
+    env.commodity_stock["a"] = {"malz": 4.0}
+    env.commodity_stock["b"] = {"malz": 1.0}
+    env.transfer_commodity_stock("a", "b")
+    env.transfer_commodity_stock("missing", "b")
+    assert env.commodity_stock == {"b": {"malz": 5.0}} or env.commodity_stock["b"] == {"malz": 5.0}
+    assert "a" not in env.commodity_stock
