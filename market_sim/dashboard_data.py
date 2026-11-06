@@ -160,6 +160,7 @@ def build_dashboard_data(
         "offence_ledger": list(result.offence_ledger),
         "holdings": list(result.holdings),
         "holding_groups": list(result.holding_groups),
+        "project_labels": dict(PROJECT_DE),
         "holding_log": list(result.holding_log),
         "mergers": list(result.merger_log),
         "laws": list(result.laws),
