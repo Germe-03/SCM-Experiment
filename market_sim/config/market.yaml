@@ -341,6 +341,14 @@ long_run:
   real_wage_growth: 0.005
   productivity_growth: 0.005
   population_growth: {"18-34": 0.001, "35-64": 0.003, "65+": 0.012}
+  # Phase 37: people move between age groups (income level and drinking habit stay);
+  # on = fixed growth rates above are ignored. Calibrated: about +20 % in 50 years.
+  age_cohorts: true
+  young_to_middle_rate: 0.058824   # 1/17 of 18-34 turn 35
+  middle_to_senior_rate: 0.033333  # 1/30 of 35-64 turn 65
+  senior_death_rate: 0.066667      # 1/15 of 65+ die
+  young_inflow_rate: 0.058824      # new adults per year = this x young ...
+  young_extra_growth: 0.005        # ... plus this extra growth
   trend_years: [3, 8]
   trend_transition_years: 2
   trends:
