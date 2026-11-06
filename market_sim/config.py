@@ -862,6 +862,26 @@ class HoldingsConfig(ConfigModel):
     antitrust_stake: float = Field(default=0.25, ge=0, le=1)
 
 
+class HoldingGroupsConfig(ConfigModel):
+    """Phase 40/41: takeovers create a holding with subsidiaries instead of absorbing the target."""
+
+    enabled: bool = False
+    # Reserve of a subsidiary = reserve_share x mean yearly revenue of the last reserve_years years.
+    reserve_years: int = Field(default=3, ge=1)
+    reserve_share: float = Field(default=0.15, ge=0, le=1)
+    # Share of the swept amount that goes to the state as tax.
+    sweep_tax: float = Field(default=0.03, ge=0, le=1)
+    # Phase 41: below this share of the reserve base the holding tops the subsidiary up.
+    min_reserve_share: float = Field(default=0.10, ge=0, le=1)
+    # Top-up duty only while holding cash >= this share of the subsidiaries' total revenue.
+    cover_cash_share: float = Field(default=0.5, ge=0)
+    # The holding sells a subsidiary after this many loss years (price = factor x mean revenue).
+    sale_loss_years: int = Field(default=3, ge=1)
+    sale_revenue_factor: float = Field(default=0.2, ge=0)
+    # A distressed holding (cash of the whole group below zero) can be bought with its subsidiaries.
+    holding_takeovers: bool = True
+
+
 class LawConfig(ConfigModel):
     name: str
     title_de: str
@@ -1001,6 +1021,7 @@ class MarketConfig(ConfigModel):
     marketing: MarketingConfig = Field(default_factory=MarketingConfig)
     restaurants: RestaurantConfig = Field(default_factory=RestaurantConfig)
     holdings: HoldingsConfig = Field(default_factory=HoldingsConfig)
+    holding_groups: HoldingGroupsConfig = Field(default_factory=HoldingGroupsConfig)
     stock_market: StockMarketConfig = Field(default_factory=StockMarketConfig)
     laws: LawsConfig = Field(default_factory=LawsConfig)
     labor: LaborConfig = Field(default_factory=LaborConfig)

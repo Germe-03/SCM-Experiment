@@ -620,6 +620,18 @@ restaurants:
   loyal_share: 0.6
 
 # Phase 10: minority stakes; dividends flow to the owners, antitrust counts big stakes.
+# Phase 40/41: Übernahme = Holding mit Töchtern statt Eingliedern (enabled: false = altes Eingliedern).
+holding_groups:
+  enabled: true
+  reserve_years: 3
+  reserve_share: 0.15
+  sweep_tax: 0.03
+  min_reserve_share: 0.10
+  cover_cash_share: 0.5
+  sale_loss_years: 3
+  sale_revenue_factor: 0.2
+  holding_takeovers: true
+
 holdings:
   enabled: true
   min_stake: 0.02

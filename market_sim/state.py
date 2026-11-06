@@ -216,7 +216,10 @@ class StateActor:
                 key=lambda f: env.runtimes[f.id].cash,
             )
             done = 0
+            groups = getattr(runner, "holding_groups", None)
             for target in targets:
+                if groups is not None and target.id in groups.sub_of:
+                    continue  # a subsidiary is only sold together with or by its holding
                 if done >= cfg.max_takeovers_per_stage or len(active) - done <= 2:
                     break
                 if stage == "factory" and not target.importer and sum(
@@ -226,6 +229,10 @@ class StateActor:
                 t_rt = env.runtimes[target.id]
                 price = max(0.0, cfg.price_per_capacity_unit * runner.long_run.price_index
                             * env._effective_capacity(target.id) + t_rt.cash)
+                if groups is not None:
+                    # Holding mode: the target stays a firm and keeps its cash and debts; only the capacity is paid.
+                    price = max(0.0, cfg.price_per_capacity_unit * runner.long_run.price_index
+                                * env._effective_capacity(target.id))
                 buyers = sorted(
                     (f for f in active if f.id != target.id and summaries[f.id].profit > 0
                      and f.category == target.category and f.channel == target.channel
@@ -238,14 +245,21 @@ class StateActor:
                     if holdings is not None:
                         # Phase 10: big stakes count like own market share.
                         combined += sum(share.get(t, 0.0) for t in holdings.antitrust_partners(buyer.id) if t != target.id)
+                    if groups is not None and groups.group_of(buyer.id) is not None:
+                        combined += sum(share.get(t, 0.0) for t in groups.group_of(buyer.id).subs
+                                        if t not in (buyer.id, target.id))
                     if combined > cfg.block_share:
                         self.stats["takeovers_blocked"] += 1
                         state.events.append({"year": year, "day": day, "firm": buyer.id, "event": "takeover_blocked",
                                              "details": f"{target.id}, gemeinsamer Marktanteil {combined:.0%}"})
                         continue
-                    if not env.can_spend(buyer.id, price + max(0.0, -t_rt.cash)):
+                    if not env.can_spend(buyer.id, price + (0.0 if groups is not None else max(0.0, -t_rt.cash))):
                         continue
-                    self._merge(runner, state, buyer, target, price, year, day)
+                    if groups is not None:
+                        if not groups.acquire(runner, state, buyer, target, price, year, day):
+                            continue
+                    else:
+                        self._merge(runner, state, buyer, target, price, year, day)
                     share[buyer.id] = combined
                     share[target.id] = 0.0
                     done += 1

@@ -74,6 +74,7 @@ def test_takeover_merges_and_antitrust_blocks_dominant_buyers():
     env.runtimes[target.id].consecutive_loss_years = 5
     env.runtimes[buyer.id].cash = 1e12
     runner.holdings.stakes = {}  # no stakes that would count for antitrust
+    runner.holding_groups = None  # old behaviour: the target is absorbed
     state.summaries.append(_summaries(runner, {}))
     capacity = buyer.capacity + target.capacity
     actor.takeovers(runner, state)
