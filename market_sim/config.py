@@ -882,6 +882,31 @@ class HoldingGroupsConfig(ConfigModel):
     holding_takeovers: bool = True
 
 
+class MergersConfig(ConfigModel):
+    """Phase 43: two firms merge into a new one, without money changing hands."""
+
+    enabled: bool = False
+    max_per_year: int = Field(default=1, ge=0)
+    # Base chance per firm and year that it is open for a merger (raised by the gains, higher if weak).
+    base_probability: float = Field(default=0.015, ge=0, le=1)
+    weak_multiplier: float = Field(default=4.0, ge=1)
+    weak_margin: float = Field(default=0.02)
+    # The smaller firm needs at least this share of the larger firm's yearly revenue.
+    min_size_ratio: float = Field(default=1 / 3, gt=0, le=1)
+    # A firm sees an advantage with lower fixed costs per revenue or a clearly bigger market share.
+    min_share_gain: float = Field(default=0.02, ge=0)
+    # Fixed costs fall by a value between these two after the first year.
+    fixed_saving_min: float = Field(default=0.10, ge=0, lt=1)
+    fixed_saving_max: float = Field(default=0.15, ge=0, lt=1)
+    # Year 1: fixed costs rise by this share (integration) and capacity falls by the efficiency loss.
+    integration_cost_share: float = Field(default=0.10, ge=0)
+    efficiency_loss: float = Field(default=0.05, ge=0, lt=1)
+    # State veto above this combined market share.
+    max_market_share: float = Field(default=0.40, gt=0, le=1)
+    # Double name when the smaller firm has at least this share of the larger one's revenue.
+    double_name_ratio: float = Field(default=0.6, ge=0, le=1)
+
+
 class LawConfig(ConfigModel):
     name: str
     title_de: str
@@ -1022,6 +1047,7 @@ class MarketConfig(ConfigModel):
     restaurants: RestaurantConfig = Field(default_factory=RestaurantConfig)
     holdings: HoldingsConfig = Field(default_factory=HoldingsConfig)
     holding_groups: HoldingGroupsConfig = Field(default_factory=HoldingGroupsConfig)
+    mergers: MergersConfig = Field(default_factory=MergersConfig)
     stock_market: StockMarketConfig = Field(default_factory=StockMarketConfig)
     laws: LawsConfig = Field(default_factory=LawsConfig)
     labor: LaborConfig = Field(default_factory=LaborConfig)

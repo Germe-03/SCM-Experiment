@@ -78,7 +78,7 @@ def exit_analysis(result, history_years=5, driver_count=3):
                                    share=amount / sum(r["revenue"] for r in rows) if rows else 0,
                                    text=f"{len(fines)} Bussen kosteten {chf(amount)}"))
         drivers = sorted(candidates, key=lambda d: -d["value"])[:driver_count]
-        exits = [e for e in result.events if e["firm"] == firm_id and e["event"] in ("bankruptcy", "takeover", "poisoning")]
+        exits = [e for e in result.events if e["firm"] == firm_id and e["event"] in ("bankruptcy", "takeover", "poisoning", "merger")]
         kind = exits[-1]["event"] if exits else "bankruptcy"
         events = []
         for event in result.events:
@@ -94,5 +94,5 @@ def exit_analysis(result, history_years=5, driver_count=3):
         explanation = ", ".join(descriptions) if descriptions else "keine eindeutigen finanziellen Rückgangstreiber in den verfügbaren Jahren"
         output[firm_id] = dict(exit_year=year, exit_type=kind, drivers=drivers,
                                decisions=[d for d in result.decisions if d["firm"] == firm_id and first_year <= d["year"] <= year],
-                               events=events, summary_de=f"{firm.name} schied in Jahr {year} aus ({ {'bankruptcy': 'Konkurs', 'takeover': 'Übernahme', 'poisoning': 'Vergiftung'}[kind]}): {explanation}.")
+                               events=events, summary_de=f"{firm.name} schied in Jahr {year} aus ({ {'bankruptcy': 'Konkurs', 'takeover': 'Übernahme', 'poisoning': 'Vergiftung', 'merger': 'Fusion'}[kind]}): {explanation}.")
     return output

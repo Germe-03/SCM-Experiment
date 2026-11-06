@@ -151,6 +151,7 @@ def build_dashboard_data(
         "holdings": list(result.holdings),
         "holding_groups": list(result.holding_groups),
         "holding_log": list(result.holding_log),
+        "mergers": list(result.merger_log),
         "laws": list(result.laws),
         # Yearly decisions only; the monthly order and price averages stay in decisions.csv.
         "decisions": [d for d in result.decisions if d.get("month") is None],

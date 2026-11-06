@@ -1,4 +1,4 @@
-Object.assign(EVENT,{holding_formed:'Holding gegründet',holding_acquisition:'Tochter gekauft',holding_sweep:'Reserve abgeschöpft',holding_cover:'Holding deckt Verluste',holding_no_cover:'Holding stützt nicht',holding_sold:'Tochter verkauft',holding_takeover:'Holding gekauft',holding_dissolved:'Holding aufgelöst',holding_daughter_lost:'Tochter ausgeschieden',merger:'Fusion',merger_blocked:'Fusion verboten'});
+Object.assign(EVENT,{holding_formed:'Holding gegründet',holding_acquisition:'Tochter gekauft',holding_sweep:'Reserve abgeschöpft',holding_cover:'Holding deckt Verluste',holding_no_cover:'Holding stützt nicht',holding_sold:'Tochter verkauft',holding_takeover:'Holding gekauft',holding_dissolved:'Holding aufgelöst',holding_daughter_lost:'Tochter ausgeschieden',merger:'Fusion (Firma geht auf)',merger_formed:'Fusion',merger_blocked:'Fusion verboten'});
 
 function holdingGroupsList(){return (D.holding_groups||[]).filter(g=>g.founded_year<=range.to&&(!g.dissolved_year||g.dissolved_year>=range.from))}
 function holdingSuccessorName(id){
@@ -41,3 +41,21 @@ function wrapHoldingView(tab,mode,box){
  VIEWS[tab]=()=>{if(typeof old==='function')old();renderHoldingGroups(box,mode)}
 }
 if(typeof VIEWS!=='undefined')[['firms','firms','hg-firms'],['compare','compare','hg-compare'],['stocks','stocks','hg-stocks']].forEach(args=>wrapHoldingView(...args));
+
+// Phase 43: im Vergleich laufen die Linien der alten Firmen in die neue Firma zusammen.
+function addMergerLines(cfg){
+ const key=S.cmpMetric,labels=cfg.data.labels||[],extra=[];
+ const parentsOf=(id,seen=new Set())=>{const m=(D.mergers||[]).find(x=>x.new===id);if(!m||seen.has(id))return [];seen.add(id);return m.parents.flatMap(p=>[{id:p,year:m.year,into:id},...parentsOf(p,seen)])};
+ for(const id of S.cmp){
+  const idx=cfg.data.datasets.findIndex(d=>d.label===fname(id)),ds=cfg.data.datasets[idx];
+  if(!ds)continue;
+  for(const p of parentsOf(id)){
+   const f=firm(p.id);if(!f)continue;
+   const into=(D.mergers||[]).find(x=>x.new===p.into),target=cfg.data.datasets.find(d=>d.label===fname(p.into));
+   const data=labels.map(y=>y<=p.year?(f.yearly.find(r=>r.year===y)?.[key]??null):(y===p.year+1?(target?.data[labels.indexOf(y)]??null):null));
+   extra.push({label:f.name+' (vor Fusion)',data,borderColor:ds.borderColor,borderDash:[5,4],pointRadius:0,borderWidth:1.5,spanGaps:false})
+  }
+ }
+ cfg.data.datasets.push(...extra)
+}
+if(typeof chart==='function'){const baseChart=chart;chart=function(id,cfg){if(id==='cp-metric'&&!S.cmpRelative&&typeof addMergerLines==='function')addMergerLines(cfg);return baseChart(id,cfg)}}

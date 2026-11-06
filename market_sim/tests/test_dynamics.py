@@ -82,6 +82,7 @@ def test_runner_applies_year_end_bankruptcy_and_honors_disabled_switch():
     firms = [firm for stage in network.stages for firm in stage.firms]
     base = load_market_config()
     base.bank.enabled = False
+    base.mergers.enabled = False  # a voluntary merger would also close firms
     enabled = base.model_copy(update={
         "bankruptcy": base.bankruptcy.model_copy(update={
             "enabled": True, "cash_threshold": 10**30, "min_years_before_exit": 1,

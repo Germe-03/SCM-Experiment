@@ -27,3 +27,14 @@ assert.equal(context.EVENT.holding_formed, 'Holding gegründet');
 D.holding_groups = [];
 views.firms();
 assert.match(boxes['#hg-firms'].innerHTML, /keine Holding/);
+// Phase 43: predecessor lines in the comparison run into the merged firm.
+D.firms.n = {name: 'Neu AG', yearly: [{year: 3, profit: 30}, {year: 4, profit: 40}]};
+D.firms.a.yearly = [{year: 1, profit: 10}, {year: 2, profit: 20}];
+D.firms.b.yearly = [{year: 1, profit: 5}, {year: 2, profit: 6}];
+D.mergers = [{year: 2, new: 'n', parents: ['a', 'b']}];
+context.S.cmp = ['n']; context.S.cmpMetric = 'profit';
+const cfg = {data: {labels: [1, 2, 3, 4], datasets: [{label: 'Neu AG', data: [null, null, 30, 40], borderColor: 'red'}]}};
+context.addMergerLines(cfg);
+assert.equal(cfg.data.datasets.length, 3);
+assert.deepEqual(cfg.data.datasets[1].data, [10, 20, 30, null]);
+assert.match(cfg.data.datasets[1].label, /vor Fusion/);

@@ -19,6 +19,7 @@ from market_sim.patents import PatentOffice
 from market_sim.marketing import Marketing
 from market_sim.holding_groups import HoldingGroups
 from market_sim.holdings import Holdings
+from market_sim.mergers import Mergers
 from market_sim.stock_market import StockMarket
 from market_sim.laws import LawBook, assess_laws
 from market_sim.labor import LaborMarket
@@ -79,6 +80,8 @@ class RunResult:
     # Phase 40: holdings with subsidiaries (one snapshot per group at the end) and their log.
     holding_groups: list[dict[str, object]] = field(default_factory=list)
     holding_log: list[dict[str, object]] = field(default_factory=list)
+    # Phase 43: mergers (new firm, parents, share split).
+    merger_log: list[dict[str, object]] = field(default_factory=list)
     laws: list[dict[str, object]] = field(default_factory=list)
     decisions: list[dict] = field(default_factory=list)
     region_reports: list[dict] = field(default_factory=list)
@@ -185,6 +188,7 @@ class SimulationRunner:
         self.marketing = Marketing(self) if config.marketing.enabled else None
         self.holdings = Holdings(self, seed) if config.holdings.enabled else None
         self.holding_groups = HoldingGroups(self, seed) if config.holding_groups.enabled else None
+        self.mergers = Mergers(self, seed) if config.mergers.enabled else None
         self.stock_market = StockMarket(self, seed) if config.stock_market.enabled else None
         self.laws = LawBook(self, seed) if config.laws.enabled else None
         self.labor = LaborMarket(self) if config.labor.enabled else None
@@ -263,6 +267,7 @@ class SimulationRunner:
             holdings=list(self.holdings.history) + self.holdings.snapshot(state.year) if self.holdings is not None else [],
             holding_groups=self.holding_groups.snapshot(self, state, state.year) if self.holding_groups is not None else [],
             holding_log=self.holding_groups.report() if self.holding_groups is not None else [],
+            merger_log=self.mergers.report() if self.mergers is not None else [],
             laws=assess_laws(self.laws.enacted, [k.model_dump() for k in state.system_kpis], self.config.laws)
             if self.laws is not None else [],
             offence_ledger=list(self.state_actor.offence_ledger) if self.state_actor is not None else [],
@@ -694,6 +699,8 @@ class SimulationRunner:
             self.state_actor.takeovers(self, state)
         if self.holding_groups is not None:
             self.holding_groups.year_end(self, state)
+        if self.mergers is not None:
+            self.mergers.year_end(self, state)
         if self.lab is not None:
             self.lab.year_end(self, state)
         if self.patent_office is not None:

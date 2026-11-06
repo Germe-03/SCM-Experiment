@@ -15,11 +15,12 @@ from market_sim.llm import unchecked_numbers
 
 STAGE_DE = {"retailer": "Detailhandel", "wholesaler": "Grosshandel", "distributor": "Verteilung", "factory": "Hersteller"}
 CAT_DE = {"beer": "Bier", "wine": "Wein", "spirits": "Spirituosen"}
-EXIT_DE = {"bankruptcy": "Konkurs", "takeover": "Übernahme", "poisoning": "Vergiftung"}
-KEY_EVENTS = {"takeover", "poisoning", "offence_detected", "rnd_success", "site_finished", "expand_finished",
+EXIT_DE = {"bankruptcy": "Konkurs", "takeover": "Übernahme", "poisoning": "Vergiftung", "merger": "Fusion"}
+KEY_EVENTS = {"takeover", "merger_formed", "merger_blocked", "holding_formed", "holding_takeover",
+              "holding_dissolved", "holding_sold", "poisoning", "offence_detected", "rnd_success", "site_finished", "expand_finished",
               "restructuring", "strategy_change", "bankruptcy", "stake_bought", "breakup", "spin_off",
               "rnd_implemented", "patent_granted", "patent_expired"}
-YEAR_EVENTS = {"recession", "raw_material_shortage", "cost_shock", "wage_push", "trend_change", "poisoning",
+YEAR_EVENTS = {"merger_formed", "merger_blocked", "holding_formed", "holding_takeover", "holding_dissolved", "recession", "raw_material_shortage", "cost_shock", "wage_push", "trend_change", "poisoning",
                "law_enacted", "breakup", "heat_summer", "harvest_failure",
                "bank_failed", "bank_entry", "exchange_opened"}
 
