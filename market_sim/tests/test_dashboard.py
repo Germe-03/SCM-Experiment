@@ -79,7 +79,7 @@ def test_write_dashboard_html(tmp_path):
     assert 'fi-stocks' not in finance
     assert 'id="sx-search"' in stocks and '<datalist' in stocks
     assert 'id="sx-top"' in stocks and 'Top 10' in stocks
-    assert "'bank'];const fmGroup" in content
+    assert "'bank','courier'];const fmGroup" in content
     assert 'function renderBankDetail' in content
     assert 'bd-income' in content and 'bd-customer-list' in content
 
@@ -183,3 +183,10 @@ def test_share_price_in_compare_tab(tmp_path):
     assert "function renderCompareStock" in html and "__STOCK_COMPARE__" not in html
     assert "['stock_price','Aktienkurs','stock']" in html and "stockIndexSwitch('sx',true)" in html
     assert "stockIndexSwitch('fd',true)" in html
+
+
+def test_dashboard_includes_couriers_in_firms_and_compare(tmp_path):
+    html = write_dashboard_html({"meta": {"years": 1}}, tmp_path / "d.html").read_text(encoding="utf-8")
+
+    for token in ("courierActors()", "renderCourierDetail", "'courier'", 'value="courier">Kuriere'):
+        assert token in html

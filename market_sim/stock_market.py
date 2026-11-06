@@ -150,7 +150,10 @@ class EtfBook:
         current: dict[str, set[str]] = {}
         for firm_id in sorted(members):
             for kind, key in self.groups_for(members[firm_id]):
-                if kind not in self.cfg.etf_groups:
+                # "branche" switches on the industry indices; they are the stage ETFs
+                # (factory, distributor, wholesaler, retailer, restaurant), so not duplicated.
+                # Banks and couriers are not listed and therefore have no index.
+                if kind not in self.cfg.etf_groups and not (kind == "stage" and "branche" in self.cfg.etf_groups):
                     continue
                 etf_id = f"{kind}:{key}"
                 if etf_id not in self.definitions:

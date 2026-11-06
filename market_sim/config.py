@@ -832,7 +832,7 @@ class StockMarketConfig(ConfigModel):
     index_base: float = Field(default=1000.0, gt=0)
     # Phase 23: ETFs as display-only baskets (not tradable yet), chain-linked like the index.
     etfs_enabled: bool = True
-    etf_groups: list[Literal["region", "category", "stage"]] = Field(
+    etf_groups: list[Literal["region", "category", "stage", "branche"]] = Field(
         default_factory=lambda: ["region", "category", "stage"])
     etf_weighting: Literal["market_cap", "equal"] = "market_cap"
     etf_base: float = Field(default=100.0, gt=0)

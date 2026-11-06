@@ -2,7 +2,7 @@
 const fs = require('node:fs'), vm = require('node:vm'), assert = require('node:assert/strict');
 const src = fs.readFileSync(process.argv[2], 'utf8');
 const line = name => src.split('\n').find(l => l.startsWith(`const ${name}=`));
-const context = {D: {firms: {}}, bankActors: () => ({}), REGION: {}, Intl};
+const context = {D: {firms: {}}, bankActors: () => ({}), courierActors: () => ({}), REGION: {}, Intl};
 vm.createContext(context);
 for (const name of ['nf', 'mia', 'chf', 'pretty']) vm.runInContext(line(name).replace(/^const /, 'var '), context);
 const run = code => vm.runInContext(code, context);

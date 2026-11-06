@@ -195,3 +195,12 @@ def test_dashboard_export():
     assert len(result["levels"]["region:bern"]) == len(_stock_weekly(stock_rows)["days"])
     assert _etf_weekly(stock_rows, etf_rows[:-1], definitions, "market_cap") is None
     assert _etf_weekly(stock_rows, etf_rows, [], "market_cap") is None
+
+
+def test_branche_group_enables_stage_indices_without_duplicates():
+    members = {"f": firm(), "r": firm(stage="retailer", channel="restaurant")}
+    book = EtfBook(cfg(etf_groups=["branche"]))
+
+    book.update(members, {"f": 10.0, "r": 10.0}, 1, 1, 0)
+
+    assert sorted(book.definitions) == ["stage:factory", "stage:restaurant"]
