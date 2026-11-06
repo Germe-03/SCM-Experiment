@@ -29,15 +29,27 @@ class StockMarket:
         self.etfs = EtfBook(self.cfg) if self.cfg.etfs_enabled else None
 
     def fundamental(self, runner: SimulationRunner, state: RunState, firm_id: str) -> float:
-        rt = runner.env.runtimes[firm_id]
-        profits = [s[firm_id].profit for s in state.summaries[-2:] if firm_id in s]
-        mean_profit = sum(profits) / len(profits) if profits else 0.0
+        groups = getattr(runner, "holding_groups", None)
+        group_inputs = groups.fundamental_inputs(runner, state, firm_id) if groups is not None else None
+        if groups is not None:
+            # After a dissolution the series continues under the remaining firm.
+            owner = groups.owner_of_listing(firm_id)
+            rt = runner.env.runtimes[owner]
+        else:
+            owner, rt = firm_id, runner.env.runtimes[firm_id]
+        if group_inputs is not None:
+            # A holding is valued on its consolidated profit and cash.
+            mean_profit, group_cash = group_inputs
+        else:
+            profits = [s[owner].profit for s in state.summaries[-2:] if owner in s]
+            mean_profit = sum(profits) / len(profits) if profits else 0.0
+            group_cash = max(0.0, rt.cash)
         rate = runner.env.central_bank.policy_rate if runner.config.central_bank.enabled else 0.01
         multiple = max(self.cfg.min_multiple,
                        min(self.cfg.max_multiple,
                            self.cfg.base_multiple * (1 - self.cfg.rate_sensitivity * (rate - 0.01))))
         return max(0.01 * max(1.0, rt.initial_cash),
-                   multiple * mean_profit + max(0.0, rt.cash))
+                   multiple * mean_profit + group_cash)
 
     def market_cap(self) -> float:
         return sum(self.prices[fid] * self.cfg.shares_per_firm for fid in sorted(self.listed))
@@ -57,7 +69,12 @@ class StockMarket:
             if event.get("event") in cfg.event_shocks and firm_id in self.listed:
                 self.sentiment[firm_id] = self.sentiment.get(firm_id, 0.0) + cfg.event_shocks[event["event"]]
 
-        active = sorted(fid for fid, rt in runner.env.runtimes.items() if rt.active)
+        groups = getattr(runner, "holding_groups", None)
+        # A holding keeps the series of its root firm alive; plain subsidiaries are not traded separately.
+        active = sorted(fid for fid, rt in runner.env.runtimes.items()
+                        if (rt.active and (groups is None or not groups.is_sub_only(fid)))
+                        or (groups is not None and (groups.listing_alive(fid)
+                            or (fid in groups.listing_owner and runner.env.runtimes[groups.listing_owner[fid]].active))))
         old_listed = set(self.listed)
         for fid in sorted(self.listed - set(active)):
             self.listed.remove(fid)

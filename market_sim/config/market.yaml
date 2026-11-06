@@ -684,6 +684,34 @@ restaurants:
   loyal_share: 0.6
 
 # Phase 10: minority stakes; dividends flow to the owners, antitrust counts big stakes.
+# Phase 40/41: Übernahme = Holding mit Töchtern statt Eingliedern (enabled: false = altes Eingliedern).
+holding_groups:
+  enabled: true
+  reserve_years: 3
+  reserve_share: 0.15
+  sweep_tax: 0.03
+  min_reserve_share: 0.10
+  cover_cash_share: 0.5
+  sale_loss_years: 3
+  sale_revenue_factor: 0.2
+  holding_takeovers: true
+
+# Phase 43: Fusionen (zwei Firmen werden ohne Geldfluss zu einer neuen; enabled: false = aus).
+mergers:
+  enabled: true
+  max_per_year: 1
+  base_probability: 0.015
+  weak_multiplier: 4.0
+  weak_margin: 0.02
+  min_size_ratio: 0.3333
+  min_share_gain: 0.02
+  fixed_saving_min: 0.10
+  fixed_saving_max: 0.15
+  integration_cost_share: 0.10
+  efficiency_loss: 0.05
+  max_market_share: 0.40
+  double_name_ratio: 0.6
+
 holdings:
   enabled: true
   min_stake: 0.02

@@ -883,6 +883,51 @@ class HoldingsConfig(ConfigModel):
     antitrust_stake: float = Field(default=0.25, ge=0, le=1)
 
 
+class HoldingGroupsConfig(ConfigModel):
+    """Phase 40/41: takeovers create a holding with subsidiaries instead of absorbing the target."""
+
+    enabled: bool = False
+    # Reserve of a subsidiary = reserve_share x mean yearly revenue of the last reserve_years years.
+    reserve_years: int = Field(default=3, ge=1)
+    reserve_share: float = Field(default=0.15, ge=0, le=1)
+    # Share of the swept amount that goes to the state as tax.
+    sweep_tax: float = Field(default=0.03, ge=0, le=1)
+    # Phase 41: below this share of the reserve base the holding tops the subsidiary up.
+    min_reserve_share: float = Field(default=0.10, ge=0, le=1)
+    # Top-up duty only while holding cash >= this share of the subsidiaries' total revenue.
+    cover_cash_share: float = Field(default=0.5, ge=0)
+    # The holding sells a subsidiary after this many loss years (price = factor x mean revenue).
+    sale_loss_years: int = Field(default=3, ge=1)
+    sale_revenue_factor: float = Field(default=0.2, ge=0)
+    # A distressed holding (cash of the whole group below zero) can be bought with its subsidiaries.
+    holding_takeovers: bool = True
+
+
+class MergersConfig(ConfigModel):
+    """Phase 43: two firms merge into a new one, without money changing hands."""
+
+    enabled: bool = False
+    max_per_year: int = Field(default=1, ge=0)
+    # Base chance per firm and year that it is open for a merger (raised by the gains, higher if weak).
+    base_probability: float = Field(default=0.015, ge=0, le=1)
+    weak_multiplier: float = Field(default=4.0, ge=1)
+    weak_margin: float = Field(default=0.02)
+    # The smaller firm needs at least this share of the larger firm's yearly revenue.
+    min_size_ratio: float = Field(default=1 / 3, gt=0, le=1)
+    # A firm sees an advantage with lower fixed costs per revenue or a clearly bigger market share.
+    min_share_gain: float = Field(default=0.02, ge=0)
+    # Fixed costs fall by a value between these two after the first year.
+    fixed_saving_min: float = Field(default=0.10, ge=0, lt=1)
+    fixed_saving_max: float = Field(default=0.15, ge=0, lt=1)
+    # Year 1: fixed costs rise by this share (integration) and capacity falls by the efficiency loss.
+    integration_cost_share: float = Field(default=0.10, ge=0)
+    efficiency_loss: float = Field(default=0.05, ge=0, lt=1)
+    # State veto above this combined market share.
+    max_market_share: float = Field(default=0.40, gt=0, le=1)
+    # Double name when the smaller firm has at least this share of the larger one's revenue.
+    double_name_ratio: float = Field(default=0.6, ge=0, le=1)
+
+
 class LawConfig(ConfigModel):
     name: str
     title_de: str
@@ -1029,6 +1074,8 @@ class MarketConfig(ConfigModel):
     marketing: MarketingConfig = Field(default_factory=MarketingConfig)
     restaurants: RestaurantConfig = Field(default_factory=RestaurantConfig)
     holdings: HoldingsConfig = Field(default_factory=HoldingsConfig)
+    holding_groups: HoldingGroupsConfig = Field(default_factory=HoldingGroupsConfig)
+    mergers: MergersConfig = Field(default_factory=MergersConfig)
     stock_market: StockMarketConfig = Field(default_factory=StockMarketConfig)
     laws: LawsConfig = Field(default_factory=LawsConfig)
     labor: LaborConfig = Field(default_factory=LaborConfig)

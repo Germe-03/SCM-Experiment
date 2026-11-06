@@ -28,6 +28,7 @@ def write_dashboard_html(data: dict, path: str | Path) -> Path:
     html = (_HTML.replace("__DATA__", payload).replace("__CHART_JS__", CHART_JS_URL)
             .replace("__TABLE_FILTERS__", filters).replace("__STOCK_COMPARE__", stocks).replace("__ETFS__", etfs)
             .replace("__RND__", rnd)
+            .replace("__HOLDINGS__", Path(__file__).with_name("dashboard_holdings.js").read_text(encoding="utf-8"))
             .replace("__CARRIERS__", Path(__file__).with_name("dashboard_carriers.js").read_text(encoding="utf-8")))
     target.write_text(html, encoding="utf-8")
     return target
@@ -181,6 +182,7 @@ body:has(dialog[open]){overflow:hidden}
   <div class="chips" id="fm-status" role="group" aria-label="Status"></div>
  </div>
  <div class="table-wrap"><table id="fm-table"></table></div>
+ <div id="hg-firms" style="margin-top:20px"></div>
  <div id="fm-detail" style="margin-top:20px"></div>
 </section>
 
@@ -201,6 +203,7 @@ body:has(dialog[open]){overflow:hidden}
   <div><div class="chips" id="cp-metrics" role="group" aria-label="Kennzahl"></div>
    <label id="cp-relative-label"><input type="checkbox" id="cp-relative"> relativ zum Stufenschnitt</label>
    <div id="cp-charts"></div>
+   <div id="hg-compare" style="margin-top:20px"></div>
   </div>
  </div>
 </section>
@@ -249,6 +252,7 @@ body:has(dialog[open]){overflow:hidden}
   <div class="card wide"><details><summary>Index pro Stufe (Start = 100)</summary><p class="hint">Nach Kurs gewichtet, gleiche Aktienzahl je Firma. Ein- und Austritte werden ohne Kurssprung verkettet.</p><div class="chart"><canvas id="sx-stages"></canvas></div></details></div>
   <div class="card wide"><h3>ETFs</h3><p class="hint">Körbe von Aktien, nur zur Anzeige (noch nicht kaufbar). Start = 100, nach Börsenwert gewichtet; Börsengänge und Austritte machen keinen Sprung. Zeile: Mitglieder mit Gewicht.</p><div class="chips" id="etf-kind" role="group" aria-label="ETF-Gruppe"></div><div class="chart"><canvas id="etf-chart"></canvas></div><div class="table-wrap"><table id="etf-table"></table></div><div id="etf-members"></div></div>
   <div class="card wide" id="cm-card"><h3>Rohstoffpreise</h3><p class="hint">Marktpreis je Rohstoff der Lieferkette in Prozent des Grundpreises (Jahreswerte). Die Preise bleiben zwischen 70 und 140 Prozent; hohe Nachfrage hebt sie leicht.</p><p class="hint" id="cm-empty"></p><div class="chart"><canvas id="cm-chart"></canvas></div></div>
+  <div id="hg-stocks" class="wide"></div>
   <div class="card wide"><h3>Börsen-Ereignisse</h3><ul class="list" id="sx-events" style="max-height:260px;overflow:auto"></ul></div>
  </div>
 </section>
@@ -543,7 +547,7 @@ function firmBankLine(id){const rows=(D.banks||[]).filter(b=>b.year===range.to&&
 const DEC_GROUP={price_band:'Preis',wage_level:'Lohn',overtime_level:'Lohn',r_and_d_budget:'F&E',rnd_started:'F&E',offence:'Straftaten',expand_started:'Investitionen',site_started:'Investitionen',takeover_bought:'Investitionen',transport_mode:'Investitionen',transport_switch:'Investitionen',archetype:'Strategie',strategy_change:'Strategie',risk_tolerance:'Strategie',target_safety_stock_days:'Strategie'};
 const DEC_LABEL={price_band:'Preisband',wage_level:'Lohn',overtime_level:'Überstunden',r_and_d_budget:'F&E-Budget',rnd_started:'F&E-Projekt',offence:'Straftat',expand_started:'Ausbau',site_started:'Neuer Standort',takeover_bought:'Übernahme',transport_mode:'Transport',transport_switch:'Transportwechsel',archetype:'Strategie',strategy_change:'Strategiewechsel',risk_tolerance:'Risikobereitschaft',target_safety_stock_days:'Lagerziel (Tage)'};
 const OFFENCE={lohndumping:'Lohndumping',pfusch:'Pfusch bei Rohstoffen',steuerhinterziehung:'Steuerhinterziehung',patentverletzung:'Patentverletzung'};
-const EXIT_TYPE={bankruptcy:'Konkurs',takeover:'Übernahme',poisoning:'Vergiftung'};
+const EXIT_TYPE={bankruptcy:'Konkurs',takeover:'Übernahme',poisoning:'Vergiftung',merger:'Fusion'};
 S.decFilter=new Set(Object.values(DEC_GROUP));
 function decText(d){const v=d.value;if(d.decision==='price_band')return`${nf(v.min,2)}–${nf(v.max,2)} CHF (Basis ${nf(v.base,2)})`;
  if(d.decision==='offence')return`${OFFENCE[v.offence]||v.offence}: begangen (erwarteter Vorteil ${chf(v.expected_gain)}, geschätzte Entdeckung ${pct(v.believed_detection_probability)})`;
@@ -641,13 +645,13 @@ function renderCompare(){const actors={...D.firms,...bankActors(),...courierActo
 function ledgerHtml(id){const rows=(D.offence_ledger||[]).filter(r=>inRange(r.year)&&(!id||r.firm===id)),money=['gain','fine',...(rows.some(r=>r.compensation!=null)?['compensation']:[]),'damage','net'];
  return `<div class="card"><h3>Hat es sich gelohnt?</h3><div class="kpis">${kpi('lohnend:',nf(rows.filter(r=>r.paid_off).length)+' von '+nf(rows.length))}</div><p class="hint">Schaden ist eine Schätzung aus Reputationsverlust und Vorjahresumsatz.</p>${rows.length?`<div class="table-wrap"><table id="ledger-${id||'state'}"><thead><tr><th>Firma</th><th>Straftat</th><th>Jahr</th><th>Gewinn</th><th>Busse</th>${money.includes('compensation')?'<th>Schadenersatz</th>':''}<th>Schaden</th><th>Netto</th><th>Urteil</th></tr></thead><tbody>${rows.map(r=>`<tr data-paid-off="${r.paid_off}"><td>${actorLabel(r.firm)}</td><td>${esc(OFFENCE[r.offence]||r.offence)}</td><td>${r.year}</td>${money.map(k=>`<td class="num" data-value="${r[k]??0}">${chf(r[k]??0)}</td>`).join('')}<td><span class="badge ${r.paid_off?'ok':'off'}">${r.paid_off?'lohnend':'nicht lohnend'}</span></td></tr>`).join('')}</tbody></table></div>`:empty('Keine Straftaten im Zeitraum.')}</div>`}
 
-function renderStructure(){$('#ms-legend').innerHTML=['factory','distributor','wholesaler','retailer','bank'].map(st=>`<span class="dot" style="background:${stageColor()[st]}"></span>${st==='bank'?'Banken':STAGE[st]}`).join(' · ')+' · Austritte: × Konkurs · ◆ Übernahme · ▲ Vergiftung';const brands=new Map();for(const r of D.brands||[]){if(r.year>range.to)continue;const old=brands.get(r.brand);brands.set(r.brand,{...r,first:old?Math.min(old.first,r.year):r.year})}
+function renderStructure(){$('#ms-legend').innerHTML=['factory','distributor','wholesaler','retailer','bank'].map(st=>`<span class="dot" style="background:${stageColor()[st]}"></span>${st==='bank'?'Banken':STAGE[st]}`).join(' · ')+' · Austritte: × Konkurs · ◆ Übernahme · ▲ Vergiftung · ⇄ Fusion';const brands=new Map();for(const r of D.brands||[]){if(r.year>range.to)continue;const old=brands.get(r.brand);brands.set(r.brand,{...r,first:old?Math.min(old.first,r.year):r.year})}
  $('#ms-brands').innerHTML=Object.entries(CAT).map(([cat,name])=>`<details><summary>${name}</summary><ul class="list">${[...brands.values()].filter(b=>b.category===cat).map(b=>`<li><b>${esc(b.name)}</b> · ${actorLabel(b.owner)} · seit Jahr ${b.first} · ${esc(({cheap:'Discount',standard:'Standard',premium:'Premium'})[b.positioning]||b.positioning)} · ${esc((b.traits||[]).map(t=>({wine:'Wein',spirits:'Spirituosen',lager:'Lager',craft:'Craft',discount:'Discount',import:'Import',alkoholfrei:'Alkoholfrei'})[t]||t).join(', '))}</li>`).join('')||'<li>Keine Marken vorhanden.</li>'}</ul></details>`).join('');
  const groups=[...Object.keys(CAT).map(c=>['Hersteller · '+CAT[c],f=>f.stage==='factory'&&!f.importer&&f.category===c]),['Hersteller · Import',f=>f.stage==='factory'&&f.importer],...['distributor','wholesaler','retailer'].map(st=>[STAGE[st],f=>f.stage===st]),['Banken',f=>f.stage==='bank']];
  const x=y=>290+(y-range.from)*650/Math.max(1,range.to-range.from+1),end=y=>x(y+1);let top=35,svg='';
  for(const y of years.filter(inRange).filter((y,i)=>i%Math.max(1,Math.ceil((range.to-range.from+1)/15))===0))svg+=`<text x="${x(y)}" y="18" font-size="12">${y}</text>`;
  for(const [title,predicate] of groups){svg+=`<text x="10" y="${top}" font-weight="bold">${title}</text>`;top+=25;
-  for(const f of Object.values({...D.firms,...bankActors()}).filter(predicate).filter(f=>f.entry_year<=range.to&&(!f.exit_year||f.exit_year>=range.from))){const start=Math.max(range.from,f.entry_year),last=Math.min(range.to,f.exit_year||D.meta.years),exit=D.events.find(e=>e.firm===f.id&&['bankruptcy','takeover','poisoning'].includes(e.event)),marker={bankruptcy:'×',takeover:'◆',poisoning:'▲'}[exit?.event]||(f.stage==='bank'&&f.exit_year?'?':'');
+  for(const f of Object.values({...D.firms,...bankActors()}).filter(predicate).filter(f=>f.entry_year<=range.to&&(!f.exit_year||f.exit_year>=range.from))){const start=Math.max(range.from,f.entry_year),last=Math.min(range.to,f.exit_year||D.meta.years),exit=D.events.find(e=>e.firm===f.id&&['bankruptcy','takeover','poisoning','merger'].includes(e.event)),marker={bankruptcy:'×',takeover:'◆',poisoning:'▲',merger:'⇄'}[exit?.event]||(f.stage==='bank'&&f.exit_year?'?':'');
    svg+=`<g data-firm="${esc(f.id)}" role="button" aria-label="${esc(f.name)}: Jahr ${f.entry_year} bis ${f.exit_year||D.meta.years}"><title>${esc(f.name)} · ${esc(ARCH[f.archetype]||f.archetype)} · Jahr ${f.entry_year}–${f.exit_year||D.meta.years}${exit?' · '+EVENT[exit.event]:''}</title><text x="10" y="${top+14}" font-size="12">${esc(f.name)}</text><rect x="${x(start)}" y="${top}" width="${Math.max(3,end(last)-x(start)-3)}" height="20" rx="3" fill="${stageColor()[f.stage]}"/>${f.exit_year&&inRange(f.exit_year)?`<text x="${end(last)-12}" y="${top+16}" font-size="18">${marker}</text>`:''}</g>`;top+=28}
   top+=16}
  $('#ms-timeline').innerHTML=`<svg viewBox="0 0 970 ${top}" aria-label="Firmen nach Stufe und Lebensdauer">${svg}</svg>`;wireFirmLinks($('#ms-timeline'))}
@@ -913,6 +917,7 @@ __STOCK_COMPARE__
 __ETFS__
 __RND__
 __CARRIERS__
+__HOLDINGS__
 </script></body></html>'''
 
 

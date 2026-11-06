@@ -159,6 +159,9 @@ def build_dashboard_data(
         "carriers": list(result.carriers),
         "offence_ledger": list(result.offence_ledger),
         "holdings": list(result.holdings),
+        "holding_groups": list(result.holding_groups),
+        "holding_log": list(result.holding_log),
+        "mergers": list(result.merger_log),
         "laws": list(result.laws),
         "commodities": list(result.commodities),
         # Yearly decisions only; the monthly order and price averages stay in decisions.csv.

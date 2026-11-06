@@ -304,6 +304,9 @@ class MarketEnvironment:
         self.fx_rate = self.config.categories.fx_start
         # Phase 6: producers cutting corners on ingredients pay less per unit.
         self.firm_material_factor: dict[str, float] = {}
+        # Phase 43: merged firms run less efficiently in year 1 and later pay lower fixed costs.
+        self.merger_efficiency: dict[str, float] = {}
+        self.merger_fixed_factor: dict[str, float] = {}
         self.price_index = 1.0
         self.component_factor: dict[str, dict[str, float]] = {}
         self.material_savings: dict[str, float] = {}
@@ -984,6 +987,7 @@ class MarketEnvironment:
         for stage, start, end, strength in self.capacity_windows:
             if stage == firm.stage and start <= self.period <= end:
                 factor *= strength
+        factor *= self.merger_efficiency.get(firm_id, 1.0)
         return max(0, round(base * overtime * churn * factor))
 
     def _update_turnover_rate(self, firm_id: str) -> None:
@@ -1183,6 +1187,7 @@ class MarketEnvironment:
         base = max(firm.capacity, round(firm.employees * firm.productivity_per_employee)) + firm.machine_capacity
         factor = self.config.restaurants.fixed_cost_factor if (
             firm.channel == "restaurant" and self.config.restaurants.enabled) else 1.0
+        factor *= self.merger_fixed_factor.get(firm.id, 1.0)
         return factor * (
             cfg.base_per_day.get(firm.stage, 0.0)
             + cfg.per_capacity_unit_per_day.get(firm.stage, 0.0) * base
