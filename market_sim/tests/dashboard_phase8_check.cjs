@@ -26,7 +26,7 @@ const context = {
   $, $$: () => [], D, S, years: [1, 2, 3], range: {from: 1, to: 3},
   STAGES: ['retailer'], STAGE: {retailer: 'Retail'}, CAT: {beer: 'Bier'}, ARCH: {standard: 'Standard'},
   EVENT: {bankruptcy: 'Konkurs'}, store: {get: (_, fallback) => fallback, set: () => {}},
-  bankActors:()=>({}),FM_GROUPS:['retailer'],fmGroup:f=>f.stage,fmGroupLabel:String,
+  bankActors:()=>({}),courierActors:()=>({}),FM_GROUPS:['retailer'],fmGroup:f=>f.stage,fmGroupLabel:String,
   navigateView:change=>change(),sumBy:(a,k)=>a.reduce((n,r)=>n+(r[k]||0),0),
   pal: () => ['red', 'blue', 'green', 'orange', 'purple', 'cyan'], stageColor: () => ({retailer: 'red'}),
   firm: id => firms[id], fname: id => firms[id]?.name || id, actorLabel: id => String(firms[id]?.name || id).replaceAll('<', '&lt;').replaceAll('>', '&gt;'), firmProfit: id => firms[id].yearly[2].profit,

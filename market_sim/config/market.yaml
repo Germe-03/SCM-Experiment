@@ -105,7 +105,7 @@ stock_market:
   index_base: 1000.0
   # Phase 23: ETFs nur zur Anzeige (noch nicht kaufbar), nach Region, Kategorie und Stufe.
   etfs_enabled: true
-  etf_groups: [region, category, stage]
+  etf_groups: [region, category, stage, branche]   # branche = Branchen-Indizes (je Stufe; Banken und Kuriere sind nicht börsenkotiert)
   etf_weighting: market_cap   # oder equal (gleichgewichtet)
   etf_base: 100.0
 
