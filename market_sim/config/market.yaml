@@ -108,6 +108,17 @@ stock_market:
   etf_groups: [region, category, stage, branche]   # branche = Branchen-Indizes (je Stufe; Banken und Kuriere sind nicht börsenkotiert)
   etf_weighting: market_cap   # oder equal (gleichgewichtet)
   etf_base: 100.0
+  # Realistischer Kurs: Neulinge werden erst nach so vielen vollen Jahren im Markt gelistet.
+  listing_min_years: 1
+  # Der verwendete Wert nähert sich dem Fundamentalwert täglich um diesen Anteil an.
+  value_adjust_rate: 0.05
+  # Tageslimite: der Kurs ändert sich pro Tag höchstens um diesen Anteil (auch bei Schocks).
+  max_daily_move: 0.20
+  # ETF nur mit mindestens so vielen Mitgliedern, die je mindestens etf_min_price kosten.
+  etf_min_members: 3
+  etf_min_price: 1.0
+  # Gewichtskappe pro Mitglied; überschüssiges Gewicht geht proportional an die anderen.
+  etf_max_weight: 0.30
 
 bank:
   loan_margin: 0.02

@@ -1,10 +1,8 @@
 // Phase 23: ETFs im Reiter Börse (nur Anzeige, noch nicht kaufbar).
 function etfName(def){if(def.kind==='region')return 'ETF '+(REGION[def.key]||def.key);if(def.kind==='category')return 'ETF '+({beer:'Bier',wine:'Wein',spirits:'Spirituosen'}[def.key]||def.key);return 'ETF '+fmGroupLabel(def.key)}
 function etfWeights(def,i){
- const members=def.members.filter(id=>{const price=D.stocks?.prices?.[id]?.[i];return price!=null&&price>0});
- if(!members.length)return [];
- const total=members.reduce((sum,id)=>sum+D.stocks.prices[id][i],0);
- return members.map(id=>({id,weight:D.etfs.weighting==='market_cap'?D.stocks.prices[id][i]/total:1/members.length})).sort((a,b)=>b.weight-a.weight)
+ const weights=D.etfs?.weights?.[def.id]?.[i]||[];
+ return weights.map(([id,weight])=>({id,weight})).sort((a,b)=>b.weight-a.weight)
 }
 function etfsOf(firmId){return D.etfs?D.etfs.definitions.filter(def=>def.members.includes(firmId)):[]}
 function etfMembership(firmId){const defs=etfsOf(firmId);return defs.length?'<p class="hint">Enthalten in: '+defs.map(def=>esc(etfName(def))).join(', ')+'</p>':''}
@@ -12,7 +10,7 @@ function etfRow(def,points){
  const levels=D.etfs.levels[def.id]||[];
  let first=null,last=null;
  points.forEach(i=>{const value=levels[i];if(value==null)return;if(first===null)first=i;last=i});
- const firms=first===null?0:def.members.filter(id=>(D.stocks.prices[id]?.[last]||0)>0).length,level=first===null?null:levels[last];
+ const firms=first===null?0:(D.etfs.members?.[def.id]?.[last]??0),level=first===null?null:levels[last];
  const change=level!=null&&levels[first]>0?level/levels[first]-1:null,top=first===null?null:etfWeights(def,last)[0];
  return '<tr class="click" tabindex="0" data-etf="'+esc(def.id)+'"><td>'+esc(etfName(def))+'</td><td class="num" data-value="'+firms+'">'+nf(firms,0)+'</td><td class="num" data-value="'+(level==null?'':level)+'">'+(level==null?'–':nf(level,2))+'</td><td class="num" data-value="'+(change==null?'':change*100)+'">'+(change==null?'–':pct(change))+'</td><td>'+(top?actorLabel(top.id)+' ('+pct(top.weight)+')':'–')+'</td></tr>'
 }
@@ -38,6 +36,6 @@ function renderEtfMembers(){
  if(!def){target.innerHTML='';return}
  const points=stockPoints('week'),levels=D.etfs.levels[def.id]||[];
  let last=null;points.forEach(i=>{if(levels[i]!=null)last=i});
- target.innerHTML='<h3>Mitglieder: '+esc(etfName(def))+'</h3>'+(last===null?empty('Im Zeitraum ohne Kurs.'):'<div class="table-wrap"><table id="etf-member-table"><thead><tr><th>Firma</th><th>Gewicht</th><th>Kurs</th></tr></thead><tbody>'+etfWeights(def,last).map(entry=>{const price=D.stocks.prices[entry.id][last];return '<tr><td><a href="#firms" data-firm="'+esc(entry.id)+'">'+actorLabel(entry.id)+'</a></td><td class="num" data-value="'+entry.weight*100+'">'+pct(entry.weight)+'</td><td class="num" data-value="'+price+'">'+nf(price,2)+' CHF</td></tr>'}).join('')+'</tbody></table></div>');
+ target.innerHTML='<h3>Mitglieder: '+esc(etfName(def))+'</h3>'+(last===null?empty('Im Zeitraum ohne Kurs.'):'<div class="table-wrap"><table id="etf-member-table"><thead><tr><th>Firma</th><th>Gewicht</th><th>Kurs</th></tr></thead><tbody>'+etfWeights(def,last).map(entry=>{const price=D.stocks.prices[entry.id]?.[last];return '<tr><td><a href="#firms" data-firm="'+esc(entry.id)+'">'+actorLabel(entry.id)+'</a></td><td class="num" data-value="'+entry.weight*100+'">'+pct(entry.weight)+'</td><td class="num" data-value="'+(price==null?'':price)+'">'+(price==null?'–':nf(price,2)+' CHF')+'</td></tr>'}).join('')+'</tbody></table></div>');
  wireFirmLinks(target)
 }

@@ -14,6 +14,9 @@ def cfg(**kw):
         etf_weighting="market_cap",
         etf_base=100.0,
         shares_per_firm=1_000_000,
+        etf_min_members=1,
+        etf_min_price=0.0,
+        etf_max_weight=1.0,
     )
     base.update(kw)
     return types.SimpleNamespace(**base)
@@ -204,3 +207,150 @@ def test_branche_group_enables_stage_indices_without_duplicates():
     book.update(members, {"f": 10.0, "r": 10.0}, 1, 1, 0)
 
     assert sorted(book.definitions) == ["stage:factory", "stage:restaurant"]
+
+
+def test_etf_needs_min_members():
+    book = EtfBook(cfg(etf_min_members=3, etf_min_price=1.0, etf_max_weight=0.30))
+    members = {"a": firm(), "b": firm()}
+
+    book.update(members, {"a": 10.0, "b": 10.0}, 1, 1, 0)
+    assert "category:beer" not in book.rows[0]
+
+    members["c"] = firm()
+    book.update(members, {"a": 10.0, "b": 10.0, "c": 10.0}, 2, 1, 1)
+    assert book.rows[1]["category:beer"] == pytest.approx(100.0)
+
+
+def test_below_min_price_does_not_count():
+    book = EtfBook(cfg(etf_min_members=3, etf_min_price=1.0, etf_max_weight=0.30))
+    members = {"a": firm(), "b": firm(), "c": firm()}
+
+    book.update(members, {"a": 10.0, "b": 10.0, "c": 0.5}, 1, 1, 0)
+    assert "category:beer" not in book.rows[0]
+
+    book.update(members, {"a": 10.0, "b": 10.0, "c": 1.0}, 2, 1, 1)
+    assert "category:beer" in book.rows[1]
+
+
+def test_weight_cap_30_percent():
+    book = EtfBook(cfg(etf_min_members=3, etf_min_price=1.0, etf_max_weight=0.30))
+    members = {"a": firm(), "b": firm(), "c": firm(), "d": firm()}
+    prices = {"a": 100.0, "b": 1.0, "c": 1.0, "d": 1.0}
+
+    book.update(members, prices, 1, 1, 0)
+    weights = book.weights("category:beer", prices)
+
+    assert weights["a"] == pytest.approx(0.30)
+    assert weights["b"] == pytest.approx(0.70 / 3)
+    assert weights["c"] == pytest.approx(0.70 / 3)
+    assert weights["d"] == pytest.approx(0.70 / 3)
+    assert sum(weights.values()) == pytest.approx(1.0)
+
+
+def test_small_etf_equal_weights_when_cap_infeasible():
+    book = EtfBook(cfg(etf_min_members=3, etf_min_price=1.0, etf_max_weight=0.30))
+    members = {"a": firm(), "b": firm(), "c": firm()}
+    prices = {"a": 10.0, "b": 20.0, "c": 30.0}
+
+    book.update(members, prices, 1, 1, 0)
+    weights = book.weights("category:beer", prices)
+
+    assert weights == pytest.approx({"a": 1 / 3, "b": 1 / 3, "c": 1 / 3})
+    assert sum(weights.values()) == pytest.approx(1.0)
+
+
+def test_gap_then_revival_no_jump():
+    book = EtfBook(cfg(etf_min_members=3, etf_min_price=1.0, etf_max_weight=0.30))
+    members = {"a": firm(), "b": firm(), "c": firm()}
+
+    book.update(members, {"a": 10.0, "b": 10.0, "c": 10.0}, 1, 1, 0)
+    assert book.rows[0]["category:beer"] == 100.0
+
+    book.update({"a": members["a"], "b": members["b"]}, {"a": 10.0, "b": 10.0}, 2, 1, 1)
+    assert "category:beer" not in book.rows[1]
+
+    book.update(members, {"a": 20.0, "b": 20.0, "c": 20.0}, 3, 1, 2)
+    assert book.rows[2]["category:beer"] == pytest.approx(100.0)
+
+    book.update(members, {"a": 30.0, "b": 30.0, "c": 30.0}, 4, 1, 3)
+    assert book.rows[3]["category:beer"] == pytest.approx(150.0)
+
+
+def test_weights_respect_min_price():
+    book = EtfBook(cfg(etf_min_members=3, etf_min_price=1.0, etf_max_weight=0.30))
+    members = {"a": firm(), "b": firm(), "c": firm()}
+    prices = {"a": 10.0, "b": 10.0, "c": 0.5}
+
+    book.update(members, prices, 1, 1, 0)
+
+    assert book.weights("category:beer", prices) == {}
+
+
+def test_dashboard_export_applies_etf_rules():
+    from market_sim.dashboard_data import _etf_weekly, _weekly_selection
+
+    stock_cfg = cfg(
+        etf_min_members=3,
+        etf_min_price=1.0,
+        etf_max_weight=0.30,
+        etf_weighting="market_cap",
+    )
+    stock_rows = []
+    for day in range(15):
+        row = {
+            "global_day": day,
+            "year": 1 if day < 10 else 2,
+            "day": day,
+            "index": 1000.0,
+            "a": 100.0,
+            "b": 1.0,
+            "c": 1.0,
+            "d": 0.5 if day == 6 else 1.0,
+        }
+        stock_rows.append(row)
+
+    etf_rows = [{} for _ in stock_rows]
+    definitions = [
+        {
+            "id": "category:beer",
+            "kind": "category",
+            "key": "beer",
+            "members": ["a", "b", "c", "d"],
+        }
+    ]
+
+    result = _etf_weekly(
+        stock_rows, etf_rows, definitions, "market_cap", stock_cfg
+    )
+    selected = _weekly_selection(stock_rows)
+
+    assert result["config"] == {
+        "min_price": 1.0,
+        "min_members": 3,
+        "max_weight": 0.30,
+    }
+    assert stock_rows[selected[0]]["day"] == 6
+    assert result["members"]["category:beer"][0] == 3
+
+    first_weights = result["weights"]["category:beer"][0]
+    assert len(first_weights) == 3
+    assert sum(weight for _, weight in first_weights) == pytest.approx(
+        1.0, abs=2e-6
+    )
+
+    full_member_index = next(
+        index for index, day_index in enumerate(selected)
+        if result["members"]["category:beer"][index] == 4
+    )
+    full_weights = result["weights"]["category:beer"][full_member_index]
+    assert dict(full_weights)["a"] == pytest.approx(0.30)
+    assert len(full_weights) == 4
+    assert sum(weight for _, weight in full_weights) == pytest.approx(
+        1.0, abs=2e-6
+    )
+
+    result_without_cfg = _etf_weekly(
+        stock_rows, etf_rows, definitions, "market_cap"
+    )
+    assert "members" not in result_without_cfg
+    assert "weights" not in result_without_cfg

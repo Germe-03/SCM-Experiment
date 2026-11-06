@@ -18,7 +18,12 @@ class StockMarket:
         self.rng = random.Random(f"stocks-{seed}")
         self.sentiment: dict[str, float] = {}
         self.value: dict[str, float] = {}
+        self.target: dict[str, float] = {}
         self.prices: dict[str, float] = {}
+        self._last_price: dict[str, float] = {}
+        self._first_active: dict[str, int] = {}
+        self._opened = False
+        self._exempt: set[str] = set()
         self.listed: set[str] = set()
         self._ever: set[str] = set()
         self.daily_rows: list[dict[str, float]] = []
@@ -75,6 +80,14 @@ class StockMarket:
                         if (rt.active and (groups is None or not groups.is_sub_only(fid)))
                         or (groups is not None and (groups.listing_alive(fid)
                             or (fid in groups.listing_owner and runner.env.runtimes[groups.listing_owner[fid]].active))))
+        for fid in active:
+            if fid not in self._first_active:
+                self._first_active[fid] = year
+
+        if year >= cfg.tradable_from_year and not self._opened:
+            self._opened = True
+            self._exempt = set(active)
+
         old_listed = set(self.listed)
         for fid in sorted(self.listed - set(active)):
             self.listed.remove(fid)
@@ -85,12 +98,27 @@ class StockMarket:
         new_listings = []
         if year >= cfg.tradable_from_year:
             for fid in active:
-                if fid not in self.listed and fid not in self._ever:
+                if (fid not in self.listed and fid not in self._ever
+                        and (fid in self._exempt
+                             or year - self._first_active[fid] >= cfg.listing_min_years)):
+                    runtime = runner.env.runtimes[fid]
+                    firm = runner.network.firm(fid)
+                    capacity = firm.capacity
+                    cost = (
+                        runner.config.geography.build_cost_per_capacity_unit.get(firm.stage, 0.0)
+                        * runner.long_run.price_index
+                    )
+                    book = max(0.0, runtime.cash) + capacity * cost
+                    fundamental = self.fundamental(runner, state, fid)
+                    value0 = max(fundamental, book)
+
                     self.listed.add(fid)
                     self._ever.add(fid)
-                    self.value[fid] = self.fundamental(runner, state, fid)
+                    self.value[fid] = value0
+                    self.target[fid] = self.fundamental(runner, state, fid)
                     self.sentiment[fid] = 0.0
-                    self.prices[fid] = self.value[fid] / cfg.shares_per_firm
+                    self.prices[fid] = value0 / cfg.shares_per_firm
+                    self._last_price[fid] = self.prices[fid]
                     self.stats["listings"] += 1
                     new_listings.append(fid)
 
@@ -105,12 +133,24 @@ class StockMarket:
 
         refresh = global_day % cfg.revalue_days == 0
         for fid in sorted(self.listed):
-            if refresh or fid not in self.value:
-                self.value[fid] = self.fundamental(runner, state, fid)
+            if refresh or fid not in self.target:
+                self.target[fid] = self.fundamental(runner, state, fid)
+            target = self.target[fid]
+            current_value = self.value.get(fid, target)
+            self.value[fid] = current_value + cfg.value_adjust_rate * (target - current_value)
+
             draw = self.rng.gauss(0.0, 1.0)
             sentiment = (1 - cfg.reversion) * self.sentiment.get(fid, 0.0) + cfg.volatility * draw
             self.sentiment[fid] = max(-3.0, min(3.0, sentiment))
-            self.prices[fid] = self.value[fid] * math.exp(self.sentiment[fid]) / cfg.shares_per_firm
+            raw = self.value[fid] * math.exp(self.sentiment[fid]) / cfg.shares_per_firm
+            if fid in self._last_price:
+                last = self._last_price[fid]
+                price = min(max(raw, last * (1 - cfg.max_daily_move)),
+                            last * (1 + cfg.max_daily_move))
+            else:
+                price = raw
+            self.prices[fid] = price
+            self._last_price[fid] = price
 
         cap = self.market_cap()
         if self.listed and cap > 0:
@@ -146,6 +186,7 @@ class EtfBook:
         self.levels: dict[str, float] = {}
         self.rows: list[dict] = []
         self._last: dict[str, dict[str, float]] = {}
+        self._last_weights: dict[str, dict[str, float]] = {}
 
     @staticmethod
     def groups_for(firm: object) -> list[tuple[str, str]]:
@@ -161,6 +202,44 @@ class EtfBook:
             groups.append(("category", category))
         groups.append(("stage", "restaurant" if stage == "retailer" and channel == "restaurant" else stage))
         return groups
+
+    def _capped_weights(self, ids: list[str], prices: dict[str, float]) -> dict[str, float]:
+        if not ids:
+            return {}
+
+        bases = {
+            fid: prices[fid] if self.cfg.etf_weighting == "market_cap" else 1.0
+            for fid in ids
+        }
+        cap = max(self.cfg.etf_max_weight, 1.0 / len(ids))
+        if cap <= 1.0 / len(ids):
+            return {fid: 1.0 / len(ids) for fid in ids}
+
+        weights: dict[str, float] = {}
+        remaining_ids = list(ids)
+        remaining_weight = 1.0
+
+        while remaining_ids:
+            total_basis = sum(bases[fid] for fid in remaining_ids)
+            capped = [
+                fid for fid in remaining_ids
+                if remaining_weight * bases[fid] / total_basis > cap
+            ]
+            if not capped:
+                assigned = 0.0
+                for fid in remaining_ids[:-1]:
+                    weight = remaining_weight * bases[fid] / total_basis
+                    weights[fid] = weight
+                    assigned += weight
+                weights[remaining_ids[-1]] = remaining_weight - assigned
+                break
+
+            for fid in capped:
+                weights[fid] = cap
+                remaining_ids.remove(fid)
+                remaining_weight -= cap
+
+        return {fid: weights[fid] for fid in ids}
 
     def update(self, members: dict[str, object], prices: dict[str, float],
                global_day: int, year: int, day: int) -> None:
@@ -189,44 +268,50 @@ class EtfBook:
         row = {"global_day": global_day, "year": year, "day": day}
         for etf_id in sorted(self.definitions):
             member_ids = current.get(etf_id, set())
-            priced_members = {fid for fid in member_ids if prices.get(fid, 0.0) > 0}
-            if not priced_members:
+            eligible = sorted(
+                fid for fid in member_ids
+                if prices.get(fid, 0.0) > 0 and prices.get(fid, 0.0) >= self.cfg.etf_min_price
+            )
+            if len(eligible) < self.cfg.etf_min_members:
                 self._last[etf_id] = {}
+                self._last_weights.pop(etf_id, None)
                 continue
 
             if etf_id not in self.levels:
                 self.levels[etf_id] = self.cfg.etf_base
             else:
-                common = sorted(priced_members.intersection(self._last.get(etf_id, {})))
+                common = sorted(set(eligible) & set(self._last.get(etf_id, {})))
                 if common:
-                    if self.cfg.etf_weighting == "market_cap":
-                        factor = sum(prices[fid] for fid in common) / sum(
-                            self._last[etf_id][fid] for fid in common
-                        )
-                    else:
-                        factor = sum(
-                            prices[fid] / self._last[etf_id][fid] for fid in common
-                        ) / len(common)
+                    previous_weights = self._last_weights[etf_id]
+                    total_weight = sum(previous_weights[fid] for fid in common)
+                    weights = {
+                        fid: previous_weights[fid] / total_weight for fid in common
+                    }
+                    factor = sum(
+                        weights[fid] * prices[fid] / self._last[etf_id][fid]
+                        for fid in common
+                    )
                     self.levels[etf_id] *= factor
 
-            self._last[etf_id] = {fid: prices[fid] for fid in priced_members}
+            self._last[etf_id] = {fid: prices[fid] for fid in eligible}
+            self._last_weights[etf_id] = self._capped_weights(eligible, prices)
             row[etf_id] = round(self.levels[etf_id], 4)
 
         self.rows.append(row)
 
-    def weights(self, etf_id: str, prices: dict[str, float]) -> dict[str, float]:
+    def eligible_members(self, etf_id: str, prices: dict[str, float]) -> list[str]:
         definition = self.definitions.get(etf_id)
         if definition is None:
+            return []
+
+        return sorted(
+            fid for fid in definition["members"]
+            if prices.get(fid, 0.0) > 0 and prices.get(fid, 0.0) >= self.cfg.etf_min_price
+        )
+
+    def weights(self, etf_id: str, prices: dict[str, float]) -> dict[str, float]:
+        eligible = self.eligible_members(etf_id, prices)
+        if len(eligible) < self.cfg.etf_min_members:
             return {}
 
-        listed_members = [
-            fid for fid in definition["members"] if prices.get(fid, 0.0) > 0
-        ]
-        if not listed_members:
-            return {}
-
-        if self.cfg.etf_weighting == "market_cap":
-            total = sum(prices[fid] for fid in listed_members)
-            return {fid: prices[fid] / total for fid in listed_members}
-        weight = 1.0 / len(listed_members)
-        return {fid: weight for fid in listed_members}
+        return self._capped_weights(eligible, prices)

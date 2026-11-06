@@ -857,6 +857,17 @@ class StockMarketConfig(ConfigModel):
         default_factory=lambda: ["region", "category", "stage"])
     etf_weighting: Literal["market_cap", "equal"] = "market_cap"
     etf_base: float = Field(default=100.0, gt=0)
+    # Realistische Börse: Neulinge werden erst nach so vielen vollen Jahren im Markt gelistet.
+    listing_min_years: int = Field(default=1, ge=0)
+    # Der verwendete Wert nähert sich dem Fundamentalwert täglich um diesen Anteil an.
+    value_adjust_rate: float = Field(default=0.05, gt=0, le=1)
+    # Tageslimite: der Kurs ändert sich pro Tag höchstens um diesen Anteil.
+    max_daily_move: float = Field(default=0.20, gt=0, lt=1)
+    # ETF: nur mit so vielen Mitgliedern, die mindestens etf_min_price kosten.
+    etf_min_members: int = Field(default=3, ge=1)
+    etf_min_price: float = Field(default=1.0, ge=0)
+    # Gewichtskappe pro Mitglied (überschüssiges Gewicht wird auf die anderen verteilt).
+    etf_max_weight: float = Field(default=0.30, gt=0, le=1)
 
 
 class HoldingsConfig(ConfigModel):

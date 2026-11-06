@@ -9,6 +9,7 @@ from market_sim.config import MarketConfig
 from market_sim.kpi import PROJECT_DE
 from market_sim.models import STAGES, SupplyNetwork
 from market_sim.runner import RunResult
+from market_sim.stock_market import EtfBook
 
 
 def _weekly(values: list[float]) -> list[float]:
@@ -25,17 +26,40 @@ def _weekly_selection(rows: list[dict[str, Any]]) -> list[int]:
 
 
 def _etf_weekly(stock_rows: list[dict[str, Any]], etf_rows: list[dict[str, Any]],
-                definitions: list[dict[str, Any]], weighting: str) -> dict[str, Any] | None:
+                definitions: list[dict[str, Any]], weighting: str,
+                stock_cfg=None) -> dict[str, Any] | None:
     """Phase 23: ETF levels on the same weekly points as the share prices."""
     if not definitions or len(etf_rows) != len(stock_rows):
         return None
     selected = _weekly_selection(stock_rows)
-    return {
+    result = {
         "weighting": weighting,
         "definitions": definitions,
         "levels": {d["id"]: [round(etf_rows[i][d["id"]], 4) if etf_rows[i].get(d["id"]) is not None else None
                              for i in selected] for d in definitions},
     }
+    if stock_cfg is not None:
+        book = EtfBook(stock_cfg)
+        book.definitions = {d["id"]: d for d in definitions}
+        result["config"] = {
+            "min_price": stock_cfg.etf_min_price,
+            "min_members": stock_cfg.etf_min_members,
+            "max_weight": stock_cfg.etf_max_weight,
+        }
+        result["members"] = {
+            d["id"]: [len(book.eligible_members(d["id"], stock_rows[i])) for i in selected]
+            for d in definitions
+        }
+        result["weights"] = {
+            d["id"]: [
+                [[fid, round(weight, 6)] for fid, weight in
+                 sorted(book.weights(d["id"], stock_rows[i]).items(),
+                        key=lambda item: item[1], reverse=True)]
+                for i in selected
+            ]
+            for d in definitions
+        }
+    return result
 
 
 def _stock_weekly(rows: list[dict[str, Any]]) -> dict[str, Any]:
@@ -147,7 +171,7 @@ def build_dashboard_data(
         "bank_events": bank_events,
         "stocks": _stock_weekly(result.stock_daily),
         "etfs": _etf_weekly(result.stock_daily, result.etf_daily, result.etf_definitions,
-                            config.stock_market.etf_weighting),
+                            config.stock_market.etf_weighting, config.stock_market),
         "events": list(result.events),
         "ranking": ranking,
         "brands": list(result.brand_reports),

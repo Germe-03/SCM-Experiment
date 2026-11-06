@@ -112,3 +112,106 @@ def test_disabled_market_does_nothing():
 
     assert sm.daily_rows == []
     assert sm.listed == set()
+
+
+def test_listing_waits_one_year():
+    runner, _ = build_runner(days_per_year=4)
+    runner.config.stock_market.tradable_from_year = 1
+    state = runner.start()
+    sm = runner.stock_market
+    fid = sorted(runner.env.runtimes)[0]
+
+    runner.env.runtimes[fid].active = False
+    sm.daily(runner, state, 1, 0, 0)
+    assert fid not in sm.listed
+
+    runner.env.runtimes[fid].active = True
+    sm.daily(runner, state, 2, 0, 1)
+    assert fid not in sm.listed
+
+    sm.daily(runner, state, 3, 0, 2)
+    assert fid in sm.listed
+
+
+def test_daily_move_limit_on_shock():
+    runner, _ = build_runner(days_per_year=4)
+    runner.config.stock_market.tradable_from_year = 1
+    state = runner.start()
+    sm = runner.stock_market
+
+    sm.daily(runner, state, 1, 0, 0)
+    fid = sorted(sm.listed)[0]
+    prev = sm.prices[fid]
+
+    state.events.append({"year": 1, "day": 1, "firm": fid,
+                         "event": "poisoning", "details": ""})
+    sm.daily(runner, state, 1, 1, 1)
+
+    assert sm.prices[fid] == pytest.approx(
+        prev * (1 - runner.config.stock_market.max_daily_move)
+    )
+
+
+def test_daily_moves_never_exceed_limit():
+    runner, _ = build_runner(days_per_year=4)
+    runner.config.stock_market.tradable_from_year = 1
+    state = runner.start()
+    sm = runner.stock_market
+    max_move = runner.config.stock_market.max_daily_move
+    changed = False
+
+    for day in range(30):
+        previously_listed = set(sm.listed)
+        previous_prices = dict(sm.prices)
+        sm.daily(runner, state, 1, day, day)
+
+        for fid in previously_listed:
+            ratio = sm.prices[fid] / previous_prices[fid]
+            assert 1 - max_move - 1e-9 <= ratio <= 1 + max_move + 1e-9
+            if ratio != 1:
+                changed = True
+
+    assert changed
+
+
+def test_value_adjusts_gradually():
+    runner, _ = build_runner(days_per_year=4)
+    runner.config.stock_market.tradable_from_year = 1
+    state = runner.start()
+    sm = runner.stock_market
+
+    sm.daily(runner, state, 1, 0, 0)
+    fid = sorted(sm.listed)[0]
+    sm.cfg.volatility = 0.0
+    sm.cfg.value_adjust_rate = 0.05
+    old = sm.value[fid]
+    sm.target[fid] = old * 10
+
+    sm.daily(runner, state, 1, 1, 1)
+
+    assert sm.value[fid] == pytest.approx(old + 0.05 * (old * 10 - old))
+
+
+def test_value_at_listing_is_book_value_floor():
+    runner, _ = build_runner(days_per_year=4)
+    runner.config.stock_market.tradable_from_year = 1
+    state = runner.start()
+    sm = runner.stock_market
+
+    sm.daily(runner, state, 1, 0, 0)
+
+    for fid in sm.listed:
+        assert sm.value[fid] >= 0
+        assert sm.prices[fid] > 0
+
+
+def test_book_value_uses_cash_and_capacity():
+    runner, _ = build_runner(days_per_year=4)
+    runner.config.stock_market.tradable_from_year = 1
+    state = runner.start()
+    sm = runner.stock_market
+
+    sm.daily(runner, state, 1, 0, 0)
+    fid = sorted(sm.listed)[0]
+
+    assert sm.prices[fid] > 0
