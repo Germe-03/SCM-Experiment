@@ -147,3 +147,48 @@ def test_orphans_join_the_new_bank_and_interest_still_works():
     system.cfg.entry_probability = 1.0
     system.enter_bank(rts, 1.0, 1, 2, [])
     assert all(system.accounts[fid] == {"B4": 1.0} for fid in system.accounts if rts[fid].active)
+
+
+def _entry_system():
+    runner, _ = build_runner(days_per_year=2)
+    runner.start()
+    system = runner.env.banking
+    system.cfg.entry_enabled = True
+    system.cfg.entry_probability = 1.0
+    system.cfg.entry_min_roe = -1.0
+    return system, runner.env.runtimes
+
+
+def _add_banks(system, count):
+    for i in range(count):
+        bid = f"X{i}"
+        system.banks[bid] = type(system.banks["B1"])(bid, bid, 0.02, 1.0)
+
+
+def test_phase36_max_five_active_banks():
+    system, rts = _entry_system()
+    _add_banks(system, 2)
+    system.enter_bank(rts, 1.0, 1, 2, [])
+    assert sum(b.active for b in system.banks.values()) == 5 and system.cfg.max_banks == 5
+    assert len(system.banks) == 5
+    system.enter_bank(rts, 1.0, 50, 2, [])
+    assert len(system.banks) == 5
+
+
+def test_phase36_ten_years_between_foundings():
+    system, rts = _entry_system()
+    system.enter_bank(rts, 1.0, 1, 2, [])
+    assert len(system.banks) == 4
+    system.enter_bank(rts, 1.0, 5, 2, [])
+    assert len(system.banks) == 4
+    system.enter_bank(rts, 1.0, 11, 2, [])
+    assert len(system.banks) == 5
+
+
+def test_phase36_waiting_waived_below_three_active():
+    system, rts = _entry_system()
+    system.enter_bank(rts, 1.0, 1, 2, [])
+    system.banks["B1"].active = False
+    system.banks["B2"].active = False
+    system.enter_bank(rts, 1.0, 2, 2, [])
+    assert len(system.banks) == 5

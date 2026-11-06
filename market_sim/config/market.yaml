@@ -78,7 +78,10 @@ banking:
   max_failure_rounds: 3
   # Neue Banken: höchstens eine pro Jahr, insgesamt höchstens max_banks.
   entry_enabled: true
-  max_banks: 6
+  max_banks: 5
+  # Zwischen zwei Gründungen mindestens so viele Jahre; entfällt bei weniger aktiven Banken als waiting_waived_below.
+  min_years_between_foundings: 10
+  waiting_waived_below: 3
   entry_probability: 0.3
   entry_min_roe: 0.08
   entry_rejections: 5

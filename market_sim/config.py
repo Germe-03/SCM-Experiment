@@ -370,7 +370,9 @@ class BankingConfig(ConfigModel):
     reserve_exemption: float = Field(default=0.0, ge=0, le=1)
     max_failure_rounds: int = Field(default=3, ge=1)
     entry_enabled: bool = False
-    max_banks: int = Field(default=6, ge=1)
+    max_banks: int = Field(default=5, ge=1)
+    min_years_between_foundings: int = Field(default=10, ge=0)
+    waiting_waived_below: int = Field(default=3, ge=0)
     entry_probability: float = Field(default=0.3, ge=0, le=1)
     entry_min_roe: float = 0.08
     entry_rejections: int = Field(default=5, ge=0)
