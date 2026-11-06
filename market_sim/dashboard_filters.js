@@ -19,7 +19,7 @@ function filteredTableMetrics(table,rows){
  if(table.id.startsWith('ledger-')){const value=table.closest('.card')?.querySelector('.kpi b');if(value)value.textContent=nf(rows.filter(r=>r.dataset.paidOff==='true').length)+' von '+nf(rows.length)}
  if(table.id==='rd-table'){
   const cards=$$('#rd-kpis .kpi');
-  if(cards[1]){cards[1].querySelector('b').textContent=nf(rows.length);cards[1].querySelector('small').textContent=rows.length?pct(rows.filter(r=>r.dataset.success==='true').length/rows.length)+' erfolgreich':''}
+  if(cards[1]){cards[1].querySelector('b').textContent=nf(rows.length);cards[1].querySelector('small').textContent=''}
   if(cards[3])cards[3].querySelector('b').textContent=nf(rows.filter(r=>r.dataset.newBrand==='true').length);
  }
 }
