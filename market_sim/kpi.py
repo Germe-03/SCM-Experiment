@@ -196,6 +196,21 @@ PROJECT_DE = {"leichtere_flaschen": "Leichtere Flaschen", "waermerueckgewinnung"
               "neue_marke": "Neue Marke", "alkoholfreies_bier": "Alkoholfreies Bier", "prognose_software": "Prognose-Software", "smart_factory": "Smart Factory", "hefezucht": "Eigene Hefezucht", "mehrwegsystem": "Mehrwegsystem", "klimaneutrale_brauerei": "Klimaneutrale Brauerei", "alkoholfreies_produkt": "Alkoholfreies Produkt", "neue_geschmacksrichtung": "Neue Geschmacksrichtung", "kuerzere_reifezeit": "Kürzere Reifezeit", "kuehlkette": "Kühlkette", "kommissionier_roboter": "Kommissionier-Roboter", "bestellprognose": "Bestellprognose", "self_checkout": "Self-Checkout", "kundenkarte": "Kundenkarte", "onlineshop": "Onlineshop mit Lieferdienst", "kassensystem": "Kassen- und Reservationssystem", "kuechenautomation": "Küchenautomation", "hausbier": "Hausbier und Signature-Drinks"}
 
 
+# Phase 34: Namen der neuen Knoten; Folgestufen heissen «<name>_2» / «<name>_3» (Stufe II / III).
+PROJECT_DE.update({
+    "qualitaetssicherung": "Qualitätssicherung", "solaranlage": "Solaranlage",
+    "abwasseraufbereitung": "Abwasseraufbereitung", "abfuellanlage": "Moderne Abfüllanlage",
+    "flotte_optimierung": "Flottenoptimierung", "sendungsverfolgung": "Sendungsverfolgung",
+    "dynamische_bestellung": "Dynamische Bestellung", "energieeffizientes_lager": "Energieeffizientes Lager",
+    "digitale_regalplanung": "Digitale Regalplanung", "lokale_werbekampagne": "Lokale Werbekampagne",
+    "gaestebindung": "Gästebindung", "digitale_speisekarte": "Digitale Speisekarte",
+})
+_BASE_DE = dict(PROJECT_DE)
+for _name, _label in _BASE_DE.items():
+    PROJECT_DE.setdefault(f"{_name}_2", f"{_label} II")
+    PROJECT_DE.setdefault(f"{_name}_3", f"{_label} III")
+
+
 def chf(value: float) -> str:
     """Swiss money format for event texts, e.g. 1'234'567 CHF."""
     return f"{value:,.0f} CHF".replace(",", "'")
