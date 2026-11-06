@@ -81,6 +81,8 @@ class RunResult:
     firm_locations: list[dict] = field(default_factory=list)
     personas: list[dict] = field(default_factory=list)
     exit_analysis: dict = field(default_factory=dict)
+    # Phase 38: yearly commodity market prices (share of base price) and purchased units.
+    commodities: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -236,6 +238,7 @@ class SimulationRunner:
     def result(self, state: RunState) -> RunResult:
         result = RunResult(
             decisions=list(self.decision_log.entries),
+            commodities=[dict(row) for row in self.env.commodity_history],
             region_reports=list(self.region_reporter.rows),
             firm_locations=list(self.region_reporter.locations),
             personas=generate_personas(self.config, self.seed, state.class_reports, state.brand_reports) if self.config.traceability.enabled else [],

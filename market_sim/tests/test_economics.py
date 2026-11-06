@@ -42,6 +42,8 @@ def test_factory_pays_raw_materials_per_produced_unit() -> None:
 
 def test_commodity_index_moves_and_is_seeded() -> None:
     config = load_market_config()
+    config = config.model_copy(update={"commodities": config.commodities.model_copy(
+        update={"market_enabled": False})})
     first, second = _env(config), _env(config)
     for env in (first, second):
         for _ in range(65):

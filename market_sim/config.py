@@ -153,6 +153,15 @@ class CommodityConfig(ConfigModel):
     index_volatility: float = Field(default=0.0, ge=0)
     index_mean_reversion: float = Field(default=0.2, ge=0, le=1)
     index_update_days: int = Field(default=30, gt=0)
+    # Phase 38: commodity market. Off = old monthly index; on = yearly market price per
+    # commodity (share of the base price) with a light demand effect inside a price band.
+    market_enabled: bool = False
+    market_annual_volatility: float = Field(default=0.08, ge=0)
+    # Largest yearly price move caused by demand alone (0.04 = about 4 percent).
+    market_demand_strength: float = Field(default=0.04, ge=0, le=0.5)
+    market_band_min: float = Field(default=0.7, gt=0)
+    market_band_max: float = Field(default=1.4, gt=0)
+    market_reference_years: int = Field(default=3, gt=0)
 
     @model_validator(mode="after")
     def _costs_not_negative(self) -> Self:
