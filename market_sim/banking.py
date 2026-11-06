@@ -62,6 +62,7 @@ class BankingSystem:
         self.banks = {b.id: CommercialBank(b.id, b.name, b.margin, equity)
                       for b in sorted(config.banks, key=lambda b: b.id)}
         self.failures: list[dict] = []
+        self.last_founding_year: int | None = None
         # Firms whose credit was called after a failure: their old debt stays with the failed bank.
         self.called: set[str] = set()
         # Insertion order preserves the primary (credit) bank, regardless of shares.
@@ -303,6 +304,10 @@ class BankingSystem:
         active = [bank for bank in self.banks.values() if bank.active]
         if len(active) >= max_banks:
             return
+        # Phase 36: Wartezeit zwischen Gründungen, entfällt bei wenigen aktiven Banken.
+        if (len(active) >= self.cfg.waiting_waived_below and self.last_founding_year is not None
+                and year - self.last_founding_year < self.cfg.min_years_between_foundings):
+            return
         rejections = sum(bank.credit_rejections for bank in active)
         profitable = [bank for bank in active if bank.equity > 0]
         roe = sum(bank.year_profit / max(1, bank.equity) for bank in profitable) / len(profitable) if profitable else 0
@@ -316,6 +321,7 @@ class BankingSystem:
         margin = round(entry_margin * (0.75 + 0.5 * margin_roll), 4)
         equity = self.start_equity * price_index
         self.banks[bank_id] = CommercialBank(bank_id, name, margin, equity, founded_year=year)
+        self.last_founding_year = year
         events.append({"year": year, "day": day, "firm": bank_id, "event": "bank_entry",
                        "details": f"{name} gegründet, Eigenkapital {chf(equity)}, "
                                   f"Marge {margin:.2%}"})
