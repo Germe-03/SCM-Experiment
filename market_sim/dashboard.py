@@ -28,6 +28,7 @@ def write_dashboard_html(data: dict, path: str | Path) -> Path:
     html = (_HTML.replace("__DATA__", payload).replace("__CHART_JS__", CHART_JS_URL)
             .replace("__TABLE_FILTERS__", filters).replace("__STOCK_COMPARE__", stocks).replace("__ETFS__", etfs)
             .replace("__RND__", rnd)
+            .replace("__HOLDINGS__", Path(__file__).with_name("dashboard_holdings.js").read_text(encoding="utf-8"))
             .replace("__CARRIERS__", Path(__file__).with_name("dashboard_carriers.js").read_text(encoding="utf-8")))
     target.write_text(html, encoding="utf-8")
     return target
@@ -181,6 +182,7 @@ body:has(dialog[open]){overflow:hidden}
   <div class="chips" id="fm-status" role="group" aria-label="Status"></div>
  </div>
  <div class="table-wrap"><table id="fm-table"></table></div>
+ <div id="hg-firms" style="margin-top:20px"></div>
  <div id="fm-detail" style="margin-top:20px"></div>
 </section>
 
@@ -201,6 +203,7 @@ body:has(dialog[open]){overflow:hidden}
   <div><div class="chips" id="cp-metrics" role="group" aria-label="Kennzahl"></div>
    <label id="cp-relative-label"><input type="checkbox" id="cp-relative"> relativ zum Stufenschnitt</label>
    <div id="cp-charts"></div>
+   <div id="hg-compare" style="margin-top:20px"></div>
   </div>
  </div>
 </section>
@@ -248,6 +251,7 @@ body:has(dialog[open]){overflow:hidden}
   <div class="card"><h3>Grösste Gewinner / Verlierer im Zeitraum</h3><p class="hint">Je fünf noch kotierte Firmen mit Kurs am Anfang und Ende des Zeitraums.</p><div id="sx-movers"></div></div>
   <div class="card wide"><details><summary>Index pro Stufe (Start = 100)</summary><p class="hint">Nach Kurs gewichtet, gleiche Aktienzahl je Firma. Ein- und Austritte werden ohne Kurssprung verkettet.</p><div class="chart"><canvas id="sx-stages"></canvas></div></details></div>
   <div class="card wide"><h3>ETFs</h3><p class="hint">Körbe von Aktien, nur zur Anzeige (noch nicht kaufbar). Start = 100, nach Börsenwert gewichtet; Börsengänge und Austritte machen keinen Sprung. Zeile: Mitglieder mit Gewicht.</p><div class="chips" id="etf-kind" role="group" aria-label="ETF-Gruppe"></div><div class="chart"><canvas id="etf-chart"></canvas></div><div class="table-wrap"><table id="etf-table"></table></div><div id="etf-members"></div></div>
+  <div id="hg-stocks" class="wide"></div>
   <div class="card wide"><h3>Börsen-Ereignisse</h3><ul class="list" id="sx-events" style="max-height:260px;overflow:auto"></ul></div>
  </div>
 </section>
@@ -884,6 +888,7 @@ __STOCK_COMPARE__
 __ETFS__
 __RND__
 __CARRIERS__
+__HOLDINGS__
 </script></body></html>'''
 
 
