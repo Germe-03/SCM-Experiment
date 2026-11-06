@@ -91,7 +91,7 @@ def test_age_cohorts_move_people_and_keep_income_and_habit():
     new = {c.name: c.persons for c in runner.config.consumers.classes}
     assert new["income_1_35-64_light"] > by_name["income_1_35-64_light"] - by_name["income_1_35-64_light"] / 30
     assert new["income_1_65+_light"] != by_name["income_1_65+_light"]
-    assert new["income_1_18-34_light"] == pytest.approx(young * 1.005, abs=2)
+    assert new["income_1_18-34_light"] == pytest.approx(young * (1 + runner.config.long_run.young_extra_growth), abs=2)
 
 
 def test_age_cohorts_calibration_plus_20_percent_in_50_years_and_older():
@@ -102,7 +102,7 @@ def test_age_cohorts_calibration_plus_20_percent_in_50_years_and_older():
         runner.long_run._grow_population(runner)
     end, senior_end = _persons(runner)
     assert 1.15 <= end / start <= 1.25
-    assert senior_end > senior_share
+    assert senior_end >= senior_share + 0.05
 
 
 def test_age_cohorts_off_keeps_fixed_growth():

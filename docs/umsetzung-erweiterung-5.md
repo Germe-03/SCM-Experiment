@@ -20,7 +20,7 @@ Zweig `erweiterung-5`, zusammengesetzt aus phase-34, -35, -36, -37, -38-39, -40-
 | Fusionen (verboten) | 2 (4) / 4 (3) / 6 (5) | – |
 | Banken max. aktiv | 5 / 5 / 4 | 6 / 6 / 6 |
 | Bevölkerung nach 50 J. | +18.6 % | +26.8 % |
-| Anteil 65+ Ende | 22.5 % | 31.1 % |
+| Anteil 65+ Ende | 22.5 % (nach Anpassung 30.1 %) | 31.1 % |
 | F&E-Kosten pro Firma | 56.5 / 55.0 / 42.8 Mio. | 45.7 / 27.4 / 41.8 Mio. |
 | Gewinn total | 52.4 / 67.6 / 10.6 Mia. | 33.1 / -36.3 / 26.1 Mia. |
 

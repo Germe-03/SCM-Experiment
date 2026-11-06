@@ -365,9 +365,9 @@ long_run:
   age_cohorts: true
   young_to_middle_rate: 0.058824   # 1/17 of 18-34 turn 35
   middle_to_senior_rate: 0.033333  # 1/30 of 35-64 turn 65
-  senior_death_rate: 0.066667      # 1/15 of 65+ die
+  senior_death_rate: 0.045455      # 1/22 of 65+ die (Bevoelkerung altert, 65+ ca. 30 % nach 50 J.)
   young_inflow_rate: 0.058824      # new adults per year = this x young ...
-  young_extra_growth: 0.005        # ... plus this extra growth
+  young_extra_growth: 0.0023       # ... plus this extra growth
   trend_years: [3, 8]
   trend_transition_years: 2
   trends:

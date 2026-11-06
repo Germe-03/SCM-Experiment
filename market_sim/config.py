@@ -1009,9 +1009,9 @@ class LongRunConfig(ConfigModel):
     age_cohorts: bool = False
     young_to_middle_rate: float = Field(default=1 / 17, ge=0, le=1)
     middle_to_senior_rate: float = Field(default=1 / 30, ge=0, le=1)
-    senior_death_rate: float = Field(default=1 / 15, ge=0, le=1)
+    senior_death_rate: float = Field(default=1 / 22, ge=0, le=1)
     young_inflow_rate: float = Field(default=1 / 17, ge=0, le=1)
-    young_extra_growth: float = Field(default=0.005, ge=-0.5, le=0.5)
+    young_extra_growth: float = Field(default=0.0023, ge=-0.5, le=0.5)
     trend_years: tuple[int, int] = (3, 8)
     trend_transition_years: int = Field(default=2, ge=1)
     trends: list[TrendConfig] = Field(default_factory=list)
