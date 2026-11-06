@@ -309,3 +309,34 @@ def test_deterministic():
 
     assert reports[0] == reports[1]
     assert progress[0] == progress[1]
+
+
+def test_phase34_tree_size_levels_and_no_failure():
+    from market_sim.kpi import PROJECT_DE
+
+    runner, _ = _runner()
+    stages = runner.lab.stages
+    assert 25 <= len(stages["factory"]) <= 32
+    for tree in ("distributor", "wholesaler", "retailer", "restaurant"):
+        assert 8 <= len(stages[tree]) <= 10
+    for tree, items in stages.items():
+        for name, stage in items.items():
+            assert stage.success_probability == 1.0
+            assert all(req in items for req in stage.requires)
+            assert name in PROJECT_DE
+            if name.endswith(("_2", "_3")):
+                base = items[stage.requires[0]]
+                assert base.name == name[:-2] or base.name.endswith("_2")
+                assert stage.cost > base.cost
+                assert stage.implementation_cost >= base.implementation_cost
+
+
+def test_phase34_level_needs_previous_level():
+    runner, _ = _runner()
+    lab = runner.lab
+    firm = runner.network.firm("factory_01")
+    lab.progress[firm.id] = {"prozessautomation": "implemented"}
+    names = {stage.name for stage in lab.options(firm)}
+    assert "prozessautomation_2" in names and "prozessautomation_3" not in names
+    lab.progress[firm.id]["prozessautomation_2"] = "implemented"
+    assert "prozessautomation_3" in {stage.name for stage in lab.options(firm)}
