@@ -43,13 +43,13 @@ function rndTreeSvg(tree,firmId=null){
  stages.forEach(stage=>depth(stage.name));
  const columns={};stages.forEach(stage=>{const d=depths[stage.name];if(!columns[d])columns[d]=[];columns[d].push(stage.name)});
  const positions={};let maxDepth=0,maxRows=1;
- Object.keys(columns).forEach(key=>{const d=Number(key);maxDepth=Math.max(maxDepth,d);maxRows=Math.max(maxRows,columns[key].length);columns[key].forEach((name,i)=>{positions[name]={x:20+d*290,y:20+i*92}})});
- const width=40+maxDepth*290+250,height=24+maxRows*92,progress=rndProgress(tree,firmId),suffix=String(tree)+'-'+String(firmId||'sector'),marker='rnd-arrow-'+suffix.replace(/[^a-zA-Z0-9_-]/g,'_');
+ Object.keys(columns).forEach(key=>{const d=Number(key);maxDepth=Math.max(maxDepth,d);maxRows=Math.max(maxRows,columns[key].length);columns[key].forEach((name,i)=>{positions[name]={x:20+i*270,y:20+d*120}})});
+ const width=40+(maxRows-1)*270+250,height=40+maxDepth*120+76,progress=rndProgress(tree,firmId),suffix=String(tree)+'-'+String(firmId||'sector'),marker='rnd-arrow-'+suffix.replace(/[^a-zA-Z0-9_-]/g,'_');
  let svg='<svg width="100%" viewBox="0 0 '+width+' '+height+'" role="img" aria-label="'+esc(rndTreeNames()[tree]||tree)+'">';
  svg+='<defs><marker id="'+esc(marker)+'" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="var(--muted)"/></marker></defs>';
  stages.forEach(stage=>(stage.requires||[]).filter(name=>byName[name]).forEach(name=>{
-  const from=positions[name],to=positions[stage.name],x1=from.x+250,y1=from.y+38,x2=to.x,y2=to.y+38,mid=(x1+x2)/2,edge=esc(name).replace(/&gt;/g,'>')+'>'+esc(stage.name).replace(/&gt;/g,'>');
-  svg+='<path data-edge="'+edge+'" d="M'+x1+' '+y1+' C'+mid+' '+y1+' '+mid+' '+y2+' '+x2+' '+y2+'" fill="none" stroke="var(--muted)" marker-end="url(#'+esc(marker)+')"/>'
+  const from=positions[name],to=positions[stage.name],x1=from.x+125,y1=from.y+76,x2=to.x+125,y2=to.y-2,mid=(y1+y2)/2,edge=esc(name).replace(/&gt;/g,'>')+'>'+esc(stage.name).replace(/&gt;/g,'>');
+  svg+='<path data-edge="'+edge+'" d="M'+x1+' '+y1+' C'+x1+' '+mid+' '+x2+' '+mid+' '+x2+' '+y2+'" fill="none" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#'+esc(marker)+')"/>'
  }));
  stages.forEach(stage=>{
   const name=stage.name,pos=positions[name],info=progress[name],state=firmId?(info.firms[firmId]||'open'):(info.implemented?'implemented':info.researched?'researched':'open');

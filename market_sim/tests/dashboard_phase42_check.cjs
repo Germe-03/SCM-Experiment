@@ -21,7 +21,7 @@ vm.runInContext(source, context);
 for (const tab of ['firms', 'compare', 'stocks']) views[tab]();
 assert.match(boxes['#hg-firms'].innerHTML, /Alpha AG Holding/);
 assert.match(boxes['#hg-firms'].innerHTML, /Beta AG/);
-assert.match(boxes['#hg-compare'].innerHTML, /data-hg-cmp/);
+assert.equal(boxes['#hg-compare'].innerHTML, ''); // Phase 45: im Vergleich entfernt
 assert.match(boxes['#hg-stocks'].innerHTML, /data-hg-stock/);
 assert.equal(context.EVENT.holding_formed, 'Holding gegründet');
 D.holding_groups = [];

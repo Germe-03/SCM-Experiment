@@ -26,3 +26,124 @@ function renderCompareStock(root,ids,actorName,colorOf){
  root.querySelector('#cp-stock-norm').onchange=e=>{store.set('cmp-stock-norm',e.target.checked);renderCompare()};
  wireStockIndexSwitch(root,'cmp',renderCompare)
 }
+// Grosses Auswahl-Diagramm (Index, Aktien, ETFs) und ETF-Gesamtdiagramm im Reiter Börse.
+function exColor(j){const base=pal();return j<base.length?base[j]:'hsl('+Math.round((j*137.5)%360)+',65%,50%)'}
+function exEnsureCard(id,before,html){
+ let card=document.getElementById(id);
+ if(!card){const ref=before&&before.closest?before.closest('.card'):null;if(!ref||!ref.parentNode)return null;card=document.createElement('div');card.id=id;card.className='card wide';ref.parentNode.insertBefore(card,ref);card.innerHTML=html}
+ return card}
+function exGroups(){
+ const s=D.stocks||{prices:{}},all=stockPoints('week');
+ const stocks=Object.keys(s.prices).filter(id=>all.some(i=>s.prices[id][i]>0)).map(id=>({key:'s:'+id,id,label:stockLineName(id)})).sort((a,b)=>a.label.localeCompare(b.label));
+ const etfs=D.etfs?D.etfs.definitions.map(def=>({key:'e:'+def.id,id:def.id,label:etfName(def)})).sort((a,b)=>a.label.localeCompare(b.label)):[];
+ return [{id:'i',title:'Index',items:[{key:'i:index',id:'index',label:'Börsenindex'}]},{id:'s',title:'Aktien',items:stocks},{id:'e',title:'ETFs',items:etfs}]}
+function exAll(){
+ const g=exGroups(),idx=g[0].items[0];
+ return {idx,stocks:g[1].items,etfs:g[2].items}}
+function exResPoints(res){
+ const w=stockPoints('week');
+ if(res==='week')return w;
+ if(res==='month')return stockPoints('month');
+ return w.filter((i,j)=>j===w.length-1||D.stocks.years[i]!==D.stocks.years[w[j+1]])}
+function exTopStocks(stocks,n){
+ const w=stockPoints('week'),last=w[w.length-1],val=x=>{const p=D.stocks.prices[x.id]||[];for(let k=w.length-1;k>=0;k--){if(p[w[k]]>0)return {v:p[w[k]],at:w[k]===last}}return {v:0,at:false}};
+ const r=stocks.map(x=>({x,...val(x)})).filter(o=>o.v>0);
+ const live=r.filter(o=>o.at);
+ return (live.length>=n?live:r).sort((a,b)=>b.v-a.v).slice(0,n).map(o=>o.x.key)}
+// Rohwerte eines Eintrags auf den Punkten; Rohstoffe/Strom nur auf Jahrespunkten.
+function exRaw(item,points){
+ const pos=v=>v>0?v:null;
+ if(item.key==='i:index')return points.map(i=>pos(D.stocks.index[i]));
+ if(item.type==='s')return points.map(i=>pos(D.stocks.prices[item.id]?.[i]));
+ if(item.type==='e')return points.map(i=>pos(D.etfs?.levels?.[item.id]?.[i]));
+ return points.map(i=>{const r=(D.commodities||[]).find(x=>x.year===D.stocks.years[i]);if(!r)return null;const v=item.type==='c'?r.prices?.[item.id]:r.electricity?.index;return v>0?v*100:null})}
+function exStats(raw){
+ const v=raw.filter(x=>x!=null);if(!v.length)return null;
+ const first=v[0],last=v[v.length-1];
+ return {first,last,change:first>0?last/first-1:null,high:Math.max(...v),low:Math.min(...v)}}
+function exItems(){
+ const A=exAll(),items=[];
+ A.stocks.forEach(x=>{const f=D.firms?.[x.id]||{};items.push({...x,type:'s',group:'Aktien',region:f.region||'',category:f.category||'',stage:f.stage||''})});
+ A.etfs.forEach(x=>items.push({...x,type:'e',group:'ETFs'}));
+ const rows=D.commodities||[],names=rows.length?Object.keys(rows[0].prices||{}):[];
+ names.filter(n=>n!=='energy').forEach(n=>items.push({key:'c:'+n,id:n,type:'c',group:'Rohstoffe',label:typeof cmLabel==='function'?cmLabel(n):n,yearly:true,unit:'% des Basispreises'}));
+ if(rows.some(r=>r.electricity))items.push({key:'x:electricity',id:'electricity',type:'x',group:'Strom',label:'Strompreisindex',yearly:true,unit:'% des Basispreises'});
+ return items}
+function renderStockExplorer(){
+ const card=exEnsureCard('sx-explorer',document.getElementById('sx-compare'),'<h3>Alles im Vergleich</h3><p class="hint">Genau einen Eintrag wählen (Aktie, ETF, Rohstoff oder Strompreis), optional mit dem Börsenindex als zweiter Linie. Bei Start = 100 beginnt die Linie mit ihrem ersten Wert im Zeitraum.</p><div class="ex-grid" style="display:grid;grid-template-columns:300px minmax(0,1fr);gap:14px;align-items:start"><div class="ex-side"><div class="filters" style="flex-wrap:wrap"><input id="ex-search" type="search" placeholder="Name suchen …" aria-label="Name suchen" autocomplete="off" style="width:100%"><div class="chips" id="ex-types"></div><select id="ex-f-region" aria-label="Region"></select><select id="ex-f-cat" aria-label="Kategorie"></select><select id="ex-f-stage" aria-label="Stufe"></select><select id="ex-sort" aria-label="Sortierung"><option value="name">Sortierung: Name</option><option value="change">Sortierung: Veränderung</option></select></div><div id="ex-list" style="max-height:460px;overflow-y:auto;border:1px solid var(--border,#ccc);border-radius:6px"></div></div><div class="ex-main"><div class="filters"><label>Auflösung <select id="ex-res"><option value="year">Jahr</option><option value="month">Monat</option><option value="week">Woche</option></select></label><label class="switch-line"><input type="checkbox" id="ex-norm"> Start = 100</label><label class="switch-line"><input type="checkbox" id="ex-index"> Börsenindex einblenden</label></div><p class="hint" id="ex-hint" role="status"></p><div class="chart" style="height:460px"><canvas id="ex-chart"></canvas></div><div id="ex-stats" class="hint"></div></div></div><style>@media (max-width:800px){#sx-explorer .ex-grid{grid-template-columns:1fr!important}}#sx-explorer .ex-row{display:flex;justify-content:space-between;gap:8px;width:100%;padding:5px 8px;border:0;background:none;text-align:left;cursor:pointer;color:inherit;font:inherit}#sx-explorer .ex-row:hover{background:rgba(128,128,128,.12)}#sx-explorer .ex-row.active{background:rgba(60,120,220,.22);font-weight:600}#sx-explorer .ex-gh{padding:4px 8px;font-weight:700;font-size:12px;background:rgba(128,128,128,.15);position:sticky;top:0}</style>');
+ if(!card)return;
+ const old=document.getElementById('sx-compare')?.closest('.card');if(old)old.style.display='none';
+ const A=exAll(),items=exItems(),byKey=new Map(items.map(x=>[x.key,x]));
+ const top=exTopStocks(A.stocks,1);
+ let active=store.get('sx-ex-active',null);
+ if(!byKey.has(active))active=top[0]||(items[0]&&items[0].key)||null;
+ let res=store.get('sx-ex-res','month');if(!['year','month','week'].includes(res))res='month';
+ const norm=!!store.get('sx-ex-norm',true),withIndex=!!store.get('sx-ex-index',true);
+ let fl=store.get('sx-ex-filter',null);if(!fl||typeof fl!=='object')fl={};
+ fl={q:'',type:'all',region:'',category:'',stage:'',sort:'name',...fl};
+ const saveFl=()=>store.set('sx-ex-filter',fl);
+ const TYPES=[['all','Alle'],['s','Aktien'],['e','ETFs'],['c','Rohstoffe'],['x','Strom']];
+ const uniq=k=>[...new Set(items.filter(x=>x.type==='s'&&x[k]).map(x=>x[k]))];
+ const fillSel=(id,label,vals,cur,nameOf)=>{const el=card.querySelector(id);el.innerHTML='<option value="">'+label+': alle</option>'+vals.map(v=>'<option value="'+esc(v)+'"'+(v===cur?' selected':'')+'>'+esc(nameOf(v))+'</option>').join('')};
+ fillSel('#ex-f-region','Region',uniq('region').sort(),fl.region,v=>(typeof REGION!=='undefined'&&REGION[v])||v);
+ fillSel('#ex-f-cat','Kategorie',uniq('category').sort(),fl.category,v=>({beer:'Bier',wine:'Wein',spirits:'Spirituosen'})[v]||v);
+ fillSel('#ex-f-stage','Stufe',uniq('stage').filter(v=>v!=='bank'&&v!=='courier'),fl.stage,v=>(typeof STAGE!=='undefined'&&STAGE[v])||v);
+ card.querySelector('#ex-search').value=fl.q;card.querySelector('#ex-sort').value=fl.sort;
+ card.querySelector('#ex-res').value=res;card.querySelector('#ex-norm').checked=norm;card.querySelector('#ex-index').checked=withIndex;
+ const wPts=stockPoints('week'),yPts=exResPoints('year');
+ const changes=new Map(items.map(x=>{const s=exStats(exRaw(x,x.yearly?yPts:wPts));return [x.key,s?s.change:null]}));
+ const drawList=()=>{
+  const q=fl.q.trim().toLowerCase(),stockOnly=!!(fl.region||fl.category||fl.stage);
+  let rows=items.filter(x=>(fl.type==='all'||x.type===fl.type)&&(!q||x.label.toLowerCase().includes(q)));
+  if(stockOnly)rows=rows.filter(x=>x.type==='s'&&(!fl.region||x.region===fl.region)&&(!fl.category||x.category===fl.category)&&(!fl.stage||x.stage===fl.stage));
+  const cmp=fl.sort==='change'?(a,b)=>(changes.get(b.key)??-Infinity)-(changes.get(a.key)??-Infinity):(a,b)=>a.label.localeCompare(b.label);
+  let html='';
+  ['Aktien','ETFs','Rohstoffe','Strom'].forEach(g=>{const r=rows.filter(x=>x.group===g).sort(cmp);if(!r.length)return;
+   html+='<div class="ex-gh">'+g+' ('+r.length+')</div>'+r.map(x=>{const c=changes.get(x.key),col=c==null?'':(c>=0?'#1a9850':'#d73027');
+    return '<button class="ex-row'+(x.key===active?' active':'')+'" data-key="'+esc(x.key)+'"><span>'+esc(x.label)+'</span><span style="color:'+col+';white-space:nowrap">'+(c==null?'–':(c>=0?'+':'')+nf(c*100,1)+' %')+'</span></button>'}).join('')});
+  card.querySelector('#ex-list').innerHTML=html||'<p class="hint" style="padding:8px">Keine Treffer.</p>'};
+ const drawTypes=()=>{card.querySelector('#ex-types').innerHTML=TYPES.map(([k,l])=>'<button class="chip" data-type="'+k+'" aria-pressed="'+(fl.type===k)+'">'+l+'</button>').join('');
+  const showSt=fl.type==='all'||fl.type==='s';['#ex-f-region','#ex-f-cat','#ex-f-stage'].forEach(s=>card.querySelector(s).style.display=showSt?'':'none')};
+ const drawChart=()=>{
+  const item=byKey.get(active),hint=card.querySelector('#ex-hint'),statsEl=card.querySelector('#ex-stats');
+  if(!item){hint.textContent='Nichts ausgewählt.';statsEl.innerHTML='';chart('ex-chart',{type:'line',data:{labels:[],datasets:[]},options:{}});return}
+  const eff=item.yearly?'year':res,points=exResPoints(eff);
+  const raw=exRaw(item,points),ds=stockDataset(item.label,norm?stockNormal(raw):raw,pal()[0],2.5);
+  if(item.yearly)ds.pointRadius=3;
+  const datasets=[ds];
+  if(withIndex){const ir=exRaw({key:'i:index'},points),di=stockDataset('Börsenindex',norm?stockNormal(ir):ir,pal()[7],2);di.borderColor='rgba(128,128,128,.75)';if(!norm)di.yAxisID='y2';datasets.push(di)}
+  hint.textContent=item.yearly?'Für '+item.label+' gibt es nur Jahreswerte, darum wird die Jahres-Achse verwendet.':(raw.some(v=>v!=null)?'Lücken: vor dem Börsengang oder nach dem Austritt gibt es keinen Kurs.':'Keine Kurse im gewählten Zeitraum.');
+  const opts=stockOptions(points,eff==='week'?'week':'month');
+  opts.scales.y.title={display:true,text:norm?'Start = 100':(item.unit?item.label+' ('+item.unit+')':'Kurs in CHF / ETF-Stand')};
+  opts.plugins.tooltip.mode='index';opts.plugins.tooltip.intersect=false;opts.interaction={mode:'index',intersect:false};
+  if(eff==='year')opts.plugins.tooltip.callbacks.title=its=>its.length?'Jahr '+D.stocks.years[points[its[0].dataIndex]]:'';
+  if(!norm&&withIndex)opts.scales.y2={position:'right',grid:{display:false},title:{display:true,text:'Indexstand'},...fmtAxis()};
+  opts.plugins.legend={display:true,labels:{boxWidth:10,font:{size:11}}};
+  chart('ex-chart',{type:'line',data:{labels:points.map(i=>eff==='year'?'Jahr '+D.stocks.years[i]:stockLabel(i,eff)),datasets},options:opts});
+  const s=exStats(raw),u=item.type==='s'?' CHF':item.type==='e'?'':' %';
+  statsEl.innerHTML=s?'<b>'+esc(item.label)+'</b>: Letzter Wert '+nf(s.last,2)+u+' · Veränderung '+(s.change==null?'–':(s.change>=0?'+':'')+nf(s.change*100,1)+' %')+' · Hoch '+nf(s.high,2)+u+' · Tief '+nf(s.low,2)+u:'<b>'+esc(item.label)+'</b>: keine Werte im gewählten Zeitraum.'};
+ store.set('sx-ex-active',active);
+ card.querySelector('#ex-types').onclick=e=>{const b=e.target.closest('button[data-type]');if(!b)return;fl.type=b.dataset.type;saveFl();drawTypes();drawList()};
+ card.querySelector('#ex-search').oninput=e=>{fl.q=e.target.value;saveFl();drawList()};
+ card.querySelector('#ex-f-region').onchange=e=>{fl.region=e.target.value;saveFl();drawList()};
+ card.querySelector('#ex-f-cat').onchange=e=>{fl.category=e.target.value;saveFl();drawList()};
+ card.querySelector('#ex-f-stage').onchange=e=>{fl.stage=e.target.value;saveFl();drawList()};
+ card.querySelector('#ex-sort').onchange=e=>{fl.sort=e.target.value;saveFl();drawList()};
+ card.querySelector('#ex-list').onclick=e=>{const b=e.target.closest('button[data-key]');if(!b)return;active=b.dataset.key;store.set('sx-ex-active',active);drawList();drawChart()};
+ card.querySelector('#ex-res').onchange=e=>{store.set('sx-ex-res',e.target.value);renderStockExplorer()};
+ card.querySelector('#ex-norm').onchange=e=>{store.set('sx-ex-norm',e.target.checked);renderStockExplorer()};
+ card.querySelector('#ex-index').onchange=e=>{store.set('sx-ex-index',e.target.checked);renderStockExplorer()};
+ drawTypes();drawList();drawChart()}
+function renderEtfAllChart(){
+ const card=exEnsureCard('etf-all',document.getElementById('etf-chart'),'<h3>Alle ETFs (Start = 100)</h3><p class="hint">ETFs einzeln ein- oder ausblenden.</p><div class="chips" id="eta-chips"></div><div class="chart" style="height:380px"><canvas id="etf-all-chart"></canvas></div>');
+ if(!card)return;
+ const defs=(D.etfs?D.etfs.definitions:[]).slice().sort((a,b)=>etfName(a).localeCompare(etfName(b)));
+ if(!defs.length){card.style.display='none';return}
+ card.style.display='';
+ let hidden=store.get('etf-all-hidden',[]);if(!Array.isArray(hidden))hidden=[];
+ const points=stockPoints('week');
+ card.querySelector('#eta-chips').innerHTML='<button class="chip" data-eta="all">alle</button><button class="chip" data-eta="none">keine</button>'+defs.map((def,j)=>'<button class="chip" data-eta="'+esc(def.id)+'" aria-pressed="'+(hidden.includes(def.id)?'false':'true')+'" style="border-left:6px solid '+esc(exColor(j))+'">'+esc(etfName(def))+'</button>').join('');
+ card.querySelector('#eta-chips').onclick=e=>{const b=e.target.closest('button[data-eta]');if(!b)return;const k=b.dataset.eta;if(k==='all')hidden=[];else if(k==='none')hidden=defs.map(d=>d.id);else hidden=hidden.includes(k)?hidden.filter(x=>x!==k):hidden.concat(k);store.set('etf-all-hidden',hidden);renderEtfAllChart()};
+ const datasets=defs.map((def,j)=>({def,j})).filter(o=>!hidden.includes(o.def.id)).map(o=>stockDataset(etfName(o.def),stockNormal(points.map(i=>{const v=D.etfs.levels[o.def.id]?.[i];return v>0?v:null})),exColor(o.j)));
+ const opts=stockOptions(points,'week');opts.plugins.legend={display:true,labels:{boxWidth:10,font:{size:10}}};
+ chart('etf-all-chart',{type:'line',data:{labels:points.map(i=>stockLabel(i,'week')),datasets},options:opts})}

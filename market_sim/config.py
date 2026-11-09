@@ -150,6 +150,11 @@ class CommodityConfig(ConfigModel):
 
     # Base cost per component, e.g. malt, hops, packaging, energy.
     components: dict[str, float] = Field(default_factory=dict)
+    # Amount of each raw material per produced unit, by product category (beer, wine, spirits).
+    # Empty = every firm uses every component once (old behaviour). Raw materials listed
+    # in several categories (wheat, glass) share one market price.
+    components_by_category: dict[str, dict[str, float]] = Field(default_factory=dict)
+    fallback_category: str = "beer"
     index_volatility: float = Field(default=0.0, ge=0)
     index_mean_reversion: float = Field(default=0.2, ge=0, le=1)
     index_update_days: int = Field(default=30, gt=0)
@@ -177,7 +182,44 @@ class CommodityConfig(ConfigModel):
     def _costs_not_negative(self) -> Self:
         if any(value < 0 for value in self.components.values()):
             raise ValueError("commodity costs must not be negative")
+        for category, amounts in self.components_by_category.items():
+            if set(amounts) - set(self.components) or any(v < 0 for v in amounts.values()):
+                raise ValueError(f"components_by_category[{category}] needs known, non-negative components")
         return self
+
+    def all_names(self) -> list[str]:
+        """Every raw material that has a market price."""
+        if not self.components_by_category:
+            return list(self.components)
+        return sorted({n for amounts in self.components_by_category.values() for n in amounts})
+
+    def amounts(self, category: str | None) -> dict[str, float]:
+        """Raw materials (and amounts per unit) a firm of this category buys."""
+        if not self.components_by_category:
+            return {name: 1.0 for name in self.components}
+        found = self.components_by_category.get(category or "")
+        if found is None:
+            found = self.components_by_category.get(self.fallback_category)
+        if found is None:
+            found = next(iter(self.components_by_category.values()))
+        return dict(found)
+
+    def category_unit_cost(self, category: str | None = None) -> float:
+        """Base material cost of one unit at price level 1 (without electricity)."""
+        return sum(self.components[n] * a for n, a in self.amounts(category).items())
+
+
+class ElectricityConfig(ConfigModel):
+    """Electricity as its own cost: a mean-reverting price index inside a band."""
+
+    enabled: bool = False
+    # Base electricity cost per produced sim-unit (real CHF) at index 1.0.
+    cost_per_unit: float = Field(default=1800.0, ge=0)
+    update_days: int = Field(default=30, gt=0)
+    volatility: float = Field(default=0.10, ge=0)
+    mean_reversion: float = Field(default=0.15, ge=0, le=1)
+    band_min: float = Field(default=0.6, gt=0)
+    band_max: float = Field(default=2.0, gt=0)
 
 
 class WorkforceConfig(ConfigModel):
@@ -1056,6 +1098,7 @@ class MarketConfig(ConfigModel):
     costs: CostConfig
     fixed_costs: FixedCostConfig = Field(default_factory=FixedCostConfig)
     commodities: CommodityConfig = Field(default_factory=CommodityConfig)
+    electricity: ElectricityConfig = Field(default_factory=ElectricityConfig)
     workforce: WorkforceConfig
     rnd: RndConfig
     reputation: ReputationConfig

@@ -30,8 +30,10 @@ def test_factory_pays_raw_materials_per_produced_unit() -> None:
     # Wine is only pressed at harvest; this test covers the daily production path.
     flat.categories.enabled = False
     env = _env(flat)
-    unit_cost = sum(config.commodities.components.values())
-    assert env.material_cost_per_unit() == pytest.approx(unit_cost)
+    material = config.commodities.category_unit_cost("beer")
+    assert env.material_cost_per_unit() == pytest.approx(material)
+    # Electricity is its own cost on top of the raw materials.
+    unit_cost = material + config.electricity.cost_per_unit
     env.step(0, _orders(env, 20))
     # The two breweries can produce 20 units a day; the small Phase-4 producers cannot.
     for factory_id in ("factory_01", "factory_02"):
@@ -51,7 +53,7 @@ def test_commodity_index_moves_and_is_seeded() -> None:
     assert first.commodity_log_index == second.commodity_log_index
     assert any(value != 0 for value in first.commodity_log_index.values())
     assert first.material_cost_per_unit() != pytest.approx(
-        sum(config.commodities.components.values())
+        config.commodities.category_unit_cost("beer")
     )
 
 

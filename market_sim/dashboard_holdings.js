@@ -7,40 +7,83 @@ function holdingSuccessorName(id){
  const group=(D.holding_groups||[]).find(g=>String(g.holding)===String(id));
  return group?.name||fname(id)
 }
-function holdingTable(groups,mode){
+(function(){if(typeof document==='undefined')return;const st=document.createElement('style');st.textContent='.hg-flash{outline:3px solid var(--accent,#2b6cb0);transition:outline .4s}.hg-card{border:1px solid var(--line,#ddd);border-radius:8px;padding:10px 12px;margin:0 0 10px}.hg-card h4{margin:0 0 4px}.hg-card .hint{margin:2px 0 6px}.hg-old{margin:6px 0}.hg-old summary{cursor:pointer}.hg-gen{display:grid;grid-template-columns:repeat(auto-fill,minmax(440px,1fr));gap:12px}.hg-card .table-wrap{overflow:visible;border:0}.hg-card table{width:100%;table-layout:fixed;font-size:13px}.hg-card th,.hg-card td{padding:6px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.hg-card th:first-child,.hg-card td:first-child{width:38%}';document.head.appendChild(st)})();
+function hgFirmLink(id,label){
+ if(typeof firm==='function'&&firm(id))return '<a href="#" class="click" data-firm="'+esc(id)+'">'+esc(label||fname(id))+'</a>';
+ return '<a href="#" class="click" data-hg-goto="'+esc(id)+'">'+esc(label||holdingSuccessorName(id))+'</a>'
+}
+function hgGroupOf(id){return (D.holding_groups||[]).find(g=>String(g.holding)===String(id)||String(g.listing_id)===String(id))}
+function hgSubGroup(id){return (D.holding_groups||[]).find(g=>(g.subs||[]).some(s=>String(s.firm)===String(id)))}
+function hgGoto(holdingId,prefix){
+ const g=hgGroupOf(holdingId);if(!g)return;
+ const el=document.getElementById('hg-g-'+(prefix||'firms')+'-'+g.holding);if(!el)return;
+ const det=el.closest('details');if(det)det.open=true;
+ el.scrollIntoView({block:'center',behavior:'smooth'});el.classList.add('hg-flash');setTimeout(()=>el.classList.remove('hg-flash'),2000)
+}
+function hgWire(box,prefix){
+ wireFirmLinks(box);
+ box.querySelectorAll('[data-hg-goto]').forEach(a=>{a.onclick=e=>{e.preventDefault();e.stopPropagation();hgGoto(a.dataset.hgGoto,prefix)}})
+}
+function hgCard(g,prefix,mode){
+ const subs=g.subs||[],active=g.status==='active';
+ const status=active?'aktiv seit Jahr '+esc(g.founded_year):'aufgelöst in Jahr '+esc(g.dissolved_year)+(g.successor?', Nachfolger: '+hgFirmLink(g.successor):'');
+ const total=subs.filter(s=>s.active).reduce((a,s)=>({r:a.r+(s.revenue??0),p:a.p+(s.profit??0)}),{r:0,p:0});
+ let h='<section class="hg-card holding-block" id="hg-g-'+prefix+'-'+esc(g.holding)+'"><h4>'+(typeof firm==='function'&&firm(g.holding)?hgFirmLink(g.holding,g.name):esc(g.name))+'</h4>';
+ h+='<p class="hint">'+status+' · Kasse der Holding '+chf(g.cash??0)+(active?' · Töchter zusammen: Umsatz '+chf(total.r)+', Gewinn '+chf(total.p):'')+'</p>';
+ if(mode==='stocks'){
+  h+='<p class="hint">Kürzel '+esc(fname(g.listing_id))+' (Kurs wird als Holding fortgeführt)</p>';
+  if(hasStockPrices(g.listing_id))h+='<button class="btn" data-hg-stock="'+esc(g.listing_id)+'">Kurs vergleichen</button> '
+ }
+ if(subs.length){
+  h+='<div class="table-wrap"><table><thead><tr><th>Tochter</th><th class="num">Umsatz</th><th class="num">Gewinn</th><th class="num">Kasse</th></tr></thead><tbody>'+subs.map(s=>'<tr class="click" data-firm="'+esc(s.firm)+'"><td>'+esc(s.name)+(s.active?'':' <span class="hint">(ausgeschieden)</span>')+'</td><td class="num">'+chf(s.revenue??0)+'</td><td class="num">'+chf(s.profit??0)+'</td><td class="num" title="Reserve '+esc(chf(s.reserve??0))+', Mindestreserve '+esc(chf(s.reserve_floor??0))+'">'+chf(s.cash??0)+'</td></tr>').join('')+'</tbody></table></div>'
+ }else h+='<p class="hint">Keine Töchter.</p>';
+ return h+'</section>'
+}
+function holdingTable(groups,mode,prefix){
  if(!groups.length)return empty('In diesem Lauf ist keine Holding entstanden.');
- return groups.map(g=>{
-  const status=g.status==='active'?'aktiv seit Jahr '+esc(g.founded_year):'aufgelöst in Jahr '+esc(g.dissolved_year)+(g.successor?', Nachfolger: '+esc(holdingSuccessorName(g.successor)):'');
-  const subs=g.subs||[],logs=(D.holding_log||[]).filter(log=>String(log.holding)===String(g.holding)&&inRange(log.year)).slice(-6);
-  let html='<section class="holding-block"><h4>'+esc(g.name)+'</h4><p>'+status+'</p><p>Kasse der Holding: '+chf(g.cash??0)+'</p>';
-  if(mode==='stocks'){
-   html+='<p>Börsenkürzel: '+esc(fname(g.listing_id))+' (Kurs wird als Holding fortgeführt)</p>';
-   if(hasStockPrices(g.listing_id))html+='<button class="btn" data-hg-stock="'+esc(g.listing_id)+'">Kurs vergleichen</button>'
-  }
-  if(mode==='compare')html+='<button class="btn" data-hg-cmp="'+esc(g.holding)+'">Holding und Töchter vergleichen</button>';
-  html+='<div class="table-wrap"><table><thead><tr><th>Tochter</th><th>Status</th><th>Umsatz</th><th>Gewinn</th><th>Kasse</th><th>Reserve</th></tr></thead><tbody>'+subs.map(s=>'<tr class="click" data-firm="'+esc(s.firm)+'"><td>'+esc(s.name)+'</td><td>'+(s.active?'aktiv':'ausgeschieden')+'</td><td class="num">'+chf(s.revenue??0)+'</td><td class="num">'+chf(s.profit??0)+'</td><td class="num">'+chf(s.cash??0)+'</td><td class="num" title="Mindestreserve: '+esc(chf(s.reserve_floor??0))+'">'+chf(s.reserve??0)+'</td></tr>').join('')+'</tbody></table></div><ul class="list">'+logs.map(log=>'<li>Jahr '+esc(log.year)+': '+esc(log.details||'')+'</li>').join('')+'</ul></section>';
-  return html
- }).join('')
+ prefix=prefix||mode;
+ const act=groups.filter(g=>g.status==='active'),old=groups.filter(g=>g.status!=='active');
+ let h='';
+ if(act.length)h+='<div class="hg-gen">'+act.map(g=>hgCard(g,prefix,mode)).join('')+'</div>';
+ else h+='<p class="hint">Keine aktive Holding im gewählten Zeitraum.</p>';
+ if(old.length)h+='<details class="hg-old"><summary>Aufgelöste Holdings ('+old.length+')</summary>'+old.map(g=>hgCard(g,prefix,mode)).join('')+'</details>';
+ return h
 }
 function renderHoldingGroups(boxId,mode){
  const box=$('#'+boxId);
  if(!box)return;
- box.innerHTML='<div class="card wide"><h3>Holdings und Töchter</h3>'+holdingTable(holdingGroupsList(),mode)+'</div>';
- wireFirmLinks(box);
- box.querySelectorAll('button[data-hg-stock]').forEach(button=>{button.onclick=()=>addStock(button.dataset.hgStock)});
- box.querySelectorAll('button[data-hg-cmp]').forEach(button=>{button.onclick=()=>{
-  const group=(D.holding_groups||[]).find(g=>String(g.holding)===String(button.dataset.hgCmp));
-  if(!group)return;
-  S.cmp=[...new Set([group.listing_id,...(group.subs||[]).map(s=>s.firm)])].filter(id=>typeof firm==='function'&&firm(id)).slice(0,6);
-  store.set('cmp',S.cmp);
-  renderCompare()
- }})
+ if(mode==='compare'){box.innerHTML='';return}
+ box.innerHTML='<div class="card wide"><h3>Holdings und Töchter</h3><p class="hint">Klicke auf einen Namen, um die Firma zu öffnen.</p>'+holdingTable(holdingGroupsList(),mode,mode)+'</div>';
+ hgWire(box,mode);
+ box.querySelectorAll('button[data-hg-stock]').forEach(button=>{button.onclick=()=>{addStock(button.dataset.hgStock)}})
 }
 function wrapHoldingView(tab,mode,box){
  const old=VIEWS[tab];
  VIEWS[tab]=()=>{if(typeof old==='function')old();renderHoldingGroups(box,mode)}
 }
 if(typeof VIEWS!=='undefined')[['firms','firms','hg-firms'],['compare','compare','hg-compare'],['stocks','stocks','hg-stocks']].forEach(args=>wrapHoldingView(...args));
+
+// Firmendetail: Hinweis auf Mutter bzw. Töchter mit Links.
+function hgDetailNote(id){
+ const mother=hgSubGroup(id),own=(D.holding_groups||[]).find(g=>String(g.holding)===String(id)||String(g.listing_id)===String(id));
+ const parts=[];
+ if(mother)parts.push('Gehört zu Holding '+(typeof firm==='function'&&firm(mother.holding)?hgFirmLink(mother.holding,mother.name):'<a href="#" class="click" data-hg-goto="'+esc(mother.holding)+'">'+esc(mother.name)+'</a>')+(mother.status==='active'?'':' (aufgelöst)')+'.');
+ if(own){const subs=own.subs||[];parts.push('Töchter: '+(subs.length?subs.map(s=>hgFirmLink(s.firm,s.name)).join(', '):'keine')+'.')}
+ return parts.join(' ')
+}
+if(typeof renderFirmDetail==='function'){
+ const baseDetail=renderFirmDetail;
+ renderFirmDetail=function(){
+  baseDetail.apply(this,arguments);
+  const root=$('#fm-detail'),id=S.fmFirm;
+  if(!root||S.tab!=='firms'||!id||String(id).includes(':')||!firm(id))return;
+  const note=hgDetailNote(id);if(!note)return;
+  const head=root.querySelector('.detail-head'),el=document.createElement('p');
+  el.className='hint hg-note';el.innerHTML=note;
+  if(head)head.insertAdjacentElement('afterend',el);else root.prepend(el);
+  hgWire(el,'firms')
+ }
+}
 
 // Phase 43: im Vergleich laufen die Linien der alten Firmen in die neue Firma zusammen.
 function addMergerLines(cfg){

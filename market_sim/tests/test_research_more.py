@@ -15,7 +15,10 @@ def test_component_projects(name, component, effect):
     firm = runner.network.firm("factory_01")
     before = env.unit_production_cost(firm)
     runner.lab._apply(runner, firm, runner.lab.projects[name])
-    expected = runner.config.commodities.components[component] * effect
+    cfg = runner.config
+    amounts = cfg.commodities.amounts(firm.category)
+    base = cfg.electricity.cost_per_unit if component == "energy" else cfg.commodities.components[component] * amounts[component]
+    expected = base * effect
     assert before - env.unit_production_cost(firm) == pytest.approx(expected)
     assert env.component_factor[firm.id][component] == pytest.approx(1 - effect)
     assert env.component_factor.get("factory_02", {}) == {}

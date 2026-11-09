@@ -162,7 +162,7 @@ def test_stockpile_off_keeps_phase38() -> None:
 
     assert env.commodity_stock == {}
     assert env.runtimes["factory_01"].purchase_cost == pytest.approx(
-        20 * env.material_cost_per_unit()
+        20 * (env.material_cost_per_unit() + env.electricity_cost_per_unit())
     )
 
 

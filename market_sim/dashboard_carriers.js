@@ -68,11 +68,21 @@ function renderTransport(){
 
  const regions=D.regions||[],counts=couriersByRegion(lastYear);
  const map=$('#tr-map');
- map.innerHTML=regions.map(region=>{
-  const count=counts[region.name]||0,name=REGION[region.name]||region.name;
-  const x=20+(Number(region.x)-470)/300*360,y=240-(Number(region.y)-60)/250*220,radius=8+6*count;
-  const label=count===0?'keine Kuriere':count===1?'1 Kurier':count+' Kuriere';
-  return `<g><circle cx="${x}" cy="${y}" r="${radius}" fill="${count>0?pal()[1]:'#bbb'}"><title>${esc(name)}</title></circle><text x="${x}" y="${y+radius+13}" text-anchor="middle" font-size="10">${esc(name)}: ${label}</text></g>`
+ const SIDE={jura_freiburg:'top',nordwestschweiz:'top',zuerich:'top',bern:'bottom',zentralschweiz:'bottom',genfersee:'bottom',tessin:'bottom',ostschweiz:'left'};
+ const SHORT={jura_freiburg:'Jura/FR/NE',genfersee:'Genfersee',nordwestschweiz:'Nordwest',zentralschweiz:'Zentral'};
+ const mx=v=>20+(Number(v)-470)/300*360,my=v=>240-(Number(v)-60)/250*220;
+ const outline=typeof CH_OUTLINE!=='undefined'?`<polygon points="${CH_OUTLINE.map(p=>mx(p[0]).toFixed(1)+','+my(p[1]).toFixed(1)).join(' ')}" fill="none" stroke="currentColor" stroke-opacity=".25" stroke-width="1"/>`:'';
+ if(map.setAttribute)map.setAttribute('style','color:var(--ink)');
+ map.innerHTML=outline+regions.map(region=>{
+  const count=counts[region.name]||0,name=SHORT[region.name]||REGION[region.name]||region.name;
+  const x=mx(region.x),y=my(region.y),radius=5+3*Math.min(count,4);
+  const side=SIDE[region.name]||'bottom',text=`${name} · ${count}`;
+  let tx=x,ty=y+radius+10,anchor='middle';
+  if(side==='top')ty=y-radius-4;
+  if(side==='left'){tx=x-radius-4;ty=y+3;anchor='end'}
+  else if(x<70)anchor='start',tx=Math.max(x-radius,4);
+  else if(x>330)anchor='end',tx=Math.min(x+radius,396);
+  return `<g><circle cx="${x}" cy="${y}" r="${radius}" fill="${count>0?pal()[1]:'#bbb'}"><title>${esc(REGION[region.name]||region.name)}: ${count} Kuriere</title></circle><text x="${tx}" y="${ty}" text-anchor="${anchor}" font-size="8" fill="var(--ink,currentColor)">${esc(text)}</text></g>`
  }).join('');
 
  const byCarrier=new Map();

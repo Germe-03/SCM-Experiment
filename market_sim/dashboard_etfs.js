@@ -15,6 +15,7 @@ function etfRow(def,points){
  return '<tr class="click" tabindex="0" data-etf="'+esc(def.id)+'"><td>'+esc(etfName(def))+'</td><td class="num" data-value="'+firms+'">'+nf(firms,0)+'</td><td class="num" data-value="'+(level==null?'':level)+'">'+(level==null?'–':nf(level,2))+'</td><td class="num" data-value="'+(change==null?'':change*100)+'">'+(change==null?'–':pct(change))+'</td><td>'+(top?actorLabel(top.id)+' ('+pct(top.weight)+')':'–')+'</td></tr>'
 }
 function renderEtfs(){
+ try{renderStockExplorer();renderEtfAllChart()}catch(err){console.error(err)}
  const chips=[['region','Regionen'],['category','Kategorien'],['stage','Branchen (Stufen)']];
  let kind=S.etfKind||store.get('etf-kind','region');
  if(!chips.some(chip=>chip[0]===kind))kind='region';

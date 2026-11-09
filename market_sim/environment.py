@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from math import exp, floor
+from math import exp, floor, log as log_of
 import random
 
 from market_sim.config import MarketConfig, load_market_config
@@ -322,10 +322,11 @@ class MarketEnvironment:
         self.domestic_daily_demand = float(self.config.demand.daily_demand_units)
         self.runtimes = {}
         self._commodity_rng = random.Random(f"commodities-{self.seed}")
-        self.commodity_log_index = {name: 0.0 for name in self.config.commodities.components}
+        names = self.config.commodities.all_names()
+        self.commodity_log_index = {name: 0.0 for name in names}
         # Phase 38: market price level per commodity (share of base price), demand and history.
-        self.commodity_price = {name: 1.0 for name in self.config.commodities.components}
-        self.commodity_bought = {name: 0.0 for name in self.config.commodities.components}
+        self.commodity_price = {name: 1.0 for name in names}
+        self.commodity_bought = {name: 0.0 for name in names}
         self.commodity_past_bought: list[dict[str, float]] = []
         self.commodity_history: list[dict] = [self._commodity_row()]
         # Phase 39: stock per firm and commodity, risk appetite and this year's purchase prices.
@@ -333,6 +334,12 @@ class MarketEnvironment:
         self.commodity_courage: dict[str, float] = {}
         self.commodity_spend: dict[str, dict[str, list[float]]] = {}
         self.material_cost_multiplier = 1.0
+        # Electricity: own price index (own random stream), samples of the year, yearly rows.
+        self._electricity_rng = random.Random(f"electricity-{self.seed}")
+        self.electricity_log_index = 0.0
+        self.electricity_samples: list[float] = [1.0]
+        self.electricity_spend: dict[str, float] = {}
+        self.electricity_history: list[dict] = [{"year": 1, "index": 1.0, "cost": {}}]
         firms = [f for stage in STAGES for f in self.network.firms_in(stage)]
         self.brand_book = BrandBook(self.config, firms)
         self.geography = Geography(self.config, firms, self.seed) if self.config.geography.enabled else None
@@ -410,6 +417,7 @@ class MarketEnvironment:
             self._credit_profit_marks = {fid: rt.profit for fid, rt in self.runtimes.items()}
 
         self._update_commodity_index()
+        self._update_electricity()
         self._age_commodity_stock()
         active_ids = {
             firm_id for firm_id, runtime in self.runtimes.items()
@@ -731,7 +739,8 @@ class MarketEnvironment:
 
     def unit_production_cost(self, firm: Firm, quantity: int = 0) -> float:
         """Raw materials per unit; imports pay the foreign price, exchange rate and tariff."""
-        cost = self.material_cost_per_unit(firm.id) * self.process_cost_factor.get(firm.id, 1.0)
+        cost = ((self.material_cost_per_unit(firm.id) + self.electricity_cost_per_unit(firm.id))
+                * self.process_cost_factor.get(firm.id, 1.0))
         book = self.brand_book
         if book is not None and book.categories_on:
             cost *= book.category_value(firm.category)
@@ -773,6 +782,7 @@ class MarketEnvironment:
         batch = round(min(self._effective_capacity(firm.id) * days, delivered * cfg.wine_forecast_buffer) * yield_factor)
         batch = self.affordable_units(firm.id, batch, self.unit_production_cost(firm))
         self._book_production(firm, runtime, batch * self.unit_production_cost(firm, batch))
+        self._record_electricity(firm, batch, self.unit_production_cost(firm))
         self.record_commodity_purchase(firm.id, batch)
         bonus = max(-0.1, min(0.1, (yield_factor - 1) * cfg.vintage_quality_slope))
         for brand_id, units in book.production_mix(firm.id, batch).items():
@@ -1040,21 +1050,44 @@ class MarketEnvironment:
         """
         if not self.config.commodities.market_enabled or units <= 0:
             return
-        for item in ([name] if name else sorted(self.commodity_bought)):
-            self.commodity_bought[item] += units
+        if name:
+            items = {name: 1.0}
+        else:
+            # One unit produced buys only the raw materials of the own category.
+            items = self.config.commodities.amounts(self._firm_category(firm_id))
+        for item, amount in sorted(items.items()):
+            if item not in self.commodity_bought:
+                continue
+            bought = units * amount
+            self.commodity_bought[item] += bought
             spend = self.commodity_spend.setdefault(firm_id, {}).setdefault(item, [0.0, 0.0])
-            spend[0] += units
-            spend[1] += units * self.commodity_price.get(item, 1.0)
+            spend[0] += bought
+            spend[1] += bought * self.commodity_price.get(item, 1.0)
+
+    def _firm_category(self, firm_id: str | None) -> str | None:
+        """Product category of a firm (None = unknown, falls back to the default category)."""
+        if firm_id is None:
+            return None
+        try:
+            return self.network.firm(firm_id).category
+        except (KeyError, ValueError):
+            return None
 
     def _commodity_reference(self, name: str) -> float:
         """Average market price of the last few finished years (0 = none yet)."""
         rows = self.commodity_history[:-1][-self.config.commodities.market_reference_years:]
         return sum(row["prices"][name] for row in rows) / len(rows) if rows else 0.0
 
-    def _component_cost(self, firm_id: str, name: str) -> float:
+    def _component_price(self, firm_id: str, name: str) -> float:
+        """Price of one unit of a raw material for this firm."""
         base = self.config.commodities.components.get(name, 0.0)
         return (self.material_cost_multiplier * base * self.commodity_level(name)
                 * self.component_factor.get(firm_id, {}).get(name, 1.0))
+
+    def _component_cost(self, firm_id: str, name: str) -> float:
+        """Cost of this raw material in one produced unit."""
+        amounts = self.config.commodities.amounts(self._firm_category(firm_id))
+        return self._component_price(firm_id, name) * amounts.get(name, 0.0)
 
     def _firm_commodity_snapshot(self, reset: bool) -> dict:
         out = {}
@@ -1075,6 +1108,14 @@ class MarketEnvironment:
         if rows:
             rows[-1]["bought"] = dict(self.commodity_bought)
             rows[-1]["firms"] = self._firm_commodity_snapshot(False)
+        if self.config.electricity.enabled:
+            # Electricity rows ride along with the yearly commodity rows (same years).
+            elec = {row["year"]: row for row in self.electricity_history[:-1]}
+            last = self.electricity_history[-1]["year"]
+            elec[last] = self._electricity_row(last)
+            for row in rows:
+                if row["year"] in elec:
+                    row["electricity"] = elec[row["year"]]
         return rows
 
     def transfer_commodity_stock(self, source_id: str, target_id: str) -> None:
@@ -1100,7 +1141,7 @@ class MarketEnvironment:
             cost = 0.0
             for name in sorted(stock):
                 stock[name] -= stock[name] * cfg.stock_spoilage_per_year.get(name, 0.0) / days
-                cost += stock[name] * self._component_cost(firm_id, name) * cfg.stock_storage_cost_per_year / days
+                cost += stock[name] * self._component_price(firm_id, name) * cfg.stock_storage_cost_per_year / days
             runtime.pay("rohstoffe", cost)
 
     def _procure_and_book(self, firm: Firm, runtime: FirmRuntime, quantity: int) -> None:
@@ -1108,31 +1149,34 @@ class MarketEnvironment:
         cfg = self.config.commodities
         unit_cost = self.unit_production_cost(firm, quantity)
         amount = quantity * unit_cost
+        self._record_electricity(firm, quantity, unit_cost)
         if not (cfg.market_enabled and cfg.stockpile_enabled):
             self._book_production(firm, runtime, amount)
             self.record_commodity_purchase(firm.id, quantity)
             return
-        material = self.material_cost_per_unit(firm.id)
+        material = self.material_cost_per_unit(firm.id) + self.electricity_cost_per_unit(firm.id)
         scale = unit_cost / material if material > 0 else 1.0
         stock = self.commodity_stock.setdefault(firm.id, {})
-        for name in sorted(cfg.components):
-            used = min(stock.get(name, 0.0), float(quantity))
+        amounts = cfg.amounts(firm.category)
+        for name in sorted(amounts):
+            need = quantity * amounts[name]
+            used = min(stock.get(name, 0.0), need)
             if used > 0:
                 stock[name] -= used
-                amount -= used * self._component_cost(firm.id, name) * scale
-            self.record_commodity_purchase(firm.id, quantity - used, name)
+                amount -= used * self._component_price(firm.id, name) * scale
+            self.record_commodity_purchase(firm.id, need - used, name)
         self._book_production(firm, runtime, max(0.0, amount))
         # Buy ahead of need when the price is below the recent average.
         courage = max(0.0, min(1.0, self.commodity_courage.get(firm.id, 0.5)))
         threshold = 1.0 - cfg.stock_discount_threshold * (1.0 - courage)
         daily = max(1, self._effective_capacity(firm.id))
-        for name in sorted(cfg.components):
+        for name in sorted(amounts):
             reference = self._commodity_reference(name)
             if name in cfg.stock_unstorable or reference <= 0 or self.commodity_level(name) / reference >= threshold:
                 continue
-            target = daily * cfg.stock_days * (0.3 + 0.7 * courage)
+            target = daily * amounts[name] * cfg.stock_days * (0.3 + 0.7 * courage)
             want = target - stock.get(name, 0.0)
-            price = self._component_cost(firm.id, name) * scale
+            price = self._component_price(firm.id, name) * scale
             if want < 1 or price <= 0:
                 continue
             budget = max(0.0, runtime.cash) * cfg.stock_cash_share
@@ -1186,10 +1230,58 @@ class MarketEnvironment:
 
     def material_cost_per_unit(self, firm_id: str | None = None) -> float:
         """Current raw-material cost of one produced sim-unit in real CHF."""
+        cfg = self.config.commodities
         return self.material_cost_multiplier * sum(
-            cost * self.commodity_level(name) * self.component_factor.get(firm_id, {}).get(name, 1.0)
-            for name, cost in self.config.commodities.components.items()
+            cfg.components.get(name, 0.0) * amount * self.commodity_level(name)
+            * self.component_factor.get(firm_id, {}).get(name, 1.0)
+            for name, amount in cfg.amounts(self._firm_category(firm_id)).items()
+            if not (name == "energy" and self.config.electricity.enabled)
         )
+
+    def electricity_level(self) -> float:
+        return exp(self.electricity_log_index) if self.config.electricity.enabled else 1.0
+
+    def electricity_cost_per_unit(self, firm_id: str | None = None) -> float:
+        """Electricity cost of one produced sim-unit in real CHF (0 when electricity is off)."""
+        cfg = self.config.electricity
+        if not cfg.enabled:
+            return 0.0
+        factor = self.component_factor.get(firm_id, {}).get("energy", 1.0)
+        return cfg.cost_per_unit * self.electricity_level() * factor
+
+    def _record_electricity(self, firm: Firm, quantity: float, unit_cost: float) -> None:
+        """Remember the electricity part of a production run (share of the real unit cost)."""
+        if not self.config.electricity.enabled or quantity <= 0:
+            return
+        elec = self.electricity_cost_per_unit(firm.id)
+        total = self.material_cost_per_unit(firm.id) + elec
+        if total <= 0:
+            return
+        share = quantity * unit_cost * elec / total
+        self.electricity_spend[firm.id] = self.electricity_spend.get(firm.id, 0.0) + share
+
+    def _update_electricity(self) -> None:
+        """Monthly mean-reverting shock to the electricity index; yearly rows for reports."""
+        cfg = self.config.electricity
+        if not cfg.enabled or self.period == 0:
+            return
+        days = self.config.simulation.days_per_year
+        if self.period % cfg.update_days == 0:
+            shock = self._electricity_rng.gauss(0.0, cfg.volatility)
+            log = (1 - cfg.mean_reversion) * self.electricity_log_index + shock
+            self.electricity_log_index = max(log_of(cfg.band_min), min(log_of(cfg.band_max), log))
+            self.electricity_samples.append(exp(self.electricity_log_index))
+        if self.period % days == 0:
+            year = self.electricity_history[-1]["year"]
+            self.electricity_history[-1] = self._electricity_row(year)
+            self.electricity_spend = {}
+            self.electricity_samples = [exp(self.electricity_log_index)]
+            self.electricity_history.append({"year": year + 1, "index": self.electricity_level(), "cost": {}})
+
+    def _electricity_row(self, year: int) -> dict:
+        samples = self.electricity_samples or [1.0]
+        return {"year": year, "index": sum(samples) / len(samples),
+                "cost": {fid: round(v, 2) for fid, v in sorted(self.electricity_spend.items())}}
 
     def _daily_fixed_cost(self, firm) -> float:
         cfg = self.config.fixed_costs

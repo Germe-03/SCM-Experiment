@@ -325,8 +325,16 @@ def test_phase34_tree_size_levels_and_no_failure():
             assert all(req in items for req in stage.requires)
             assert name in PROJECT_DE
             if name.endswith(("_2", "_3")):
-                base = items[stage.requires[0]]
-                assert base.name == name[:-2] or base.name.endswith("_2")
+                # Phase 45: Äste sind Ketten; die Vorstufe liegt irgendwo darüber.
+                ancestors, todo = set(), list(stage.requires)
+                while todo:
+                    req = todo.pop()
+                    if req not in ancestors:
+                        ancestors.add(req)
+                        todo.extend(items[req].requires)
+                prev = name[:-2] if name.endswith("_2") else name[:-1] + "2"
+                assert prev in ancestors
+                base = items[prev]
                 assert stage.cost > base.cost
                 assert stage.implementation_cost >= base.implementation_cost
 
@@ -335,7 +343,14 @@ def test_phase34_level_needs_previous_level():
     runner, _ = _runner()
     lab = runner.lab
     firm = runner.network.firm("factory_01")
-    lab.progress[firm.id] = {"prozessautomation": "implemented"}
+    stages = lab.stages["factory"]
+    done, todo = set(), list(stages["prozessautomation_2"].requires)
+    while todo:
+        req = todo.pop()
+        if req not in done:
+            done.add(req)
+            todo.extend(stages[req].requires)
+    lab.progress[firm.id] = {name: "implemented" for name in done}
     names = {stage.name for stage in lab.options(firm)}
     assert "prozessautomation_2" in names and "prozessautomation_3" not in names
     lab.progress[firm.id]["prozessautomation_2"] = "implemented"

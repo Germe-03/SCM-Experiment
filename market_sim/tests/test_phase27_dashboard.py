@@ -41,7 +41,7 @@ def test_rnd_trees_export(dashboard_data):
     smart_factory = next(entry for entry in data["rnd_trees"]["factory"] if entry["name"] == "smart_factory")
     assert smart_factory["label"] == "Smart Factory"
     assert smart_factory["patentable"] is True
-    assert smart_factory["requires"] == ["robotik", "prognose_software"]
+    assert smart_factory["requires"] == ["prognose_software"]
     json.dumps(data)
 
 

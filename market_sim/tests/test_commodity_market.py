@@ -78,7 +78,9 @@ def test_demand_effect_is_light() -> None:
 
     # Add extra buying during year four so the demand signal remains clear
     # even when production capacity limits the daily orders.
-    env_a.record_commodity_purchase("x", 1_000_000)
+    # Each raw material is bought explicitly, since every category buys only its own.
+    for name in env_a.commodity_price:
+        env_a.record_commodity_purchase("x", 1_000_000, name)
     env_a.step(0, _orders(env_a, 30))
     env_b.step(0, _orders(env_b, 0))
 
@@ -106,7 +108,7 @@ def test_market_disabled_keeps_old_behaviour() -> None:
 
     assert len(env.commodity_history) == 1
     assert env.material_cost_per_unit() == pytest.approx(
-        sum(config.commodities.components.values())
+        config.commodities.category_unit_cost("beer")
     )
 
 
@@ -120,7 +122,7 @@ def test_firms_pay_market_price() -> None:
     env.commodity_price["malt"] = 1.4
 
     expected = sum(
-        cost * env.commodity_price[name]
-        for name, cost in config.commodities.components.items()
+        config.commodities.components[name] * amount * env.commodity_price[name]
+        for name, amount in config.commodities.amounts("beer").items()
     )
     assert env.material_cost_per_unit() == pytest.approx(expected)

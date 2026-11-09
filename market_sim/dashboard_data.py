@@ -189,6 +189,7 @@ def build_dashboard_data(
         "mergers": list(result.merger_log),
         "laws": list(result.laws),
         "commodities": list(result.commodities),
+        "commodity_by_category": dict(config.commodities.components_by_category),
         # Yearly decisions only; the monthly order and price averages stay in decisions.csv.
         "decisions": [d for d in result.decisions if d.get("month") is None],
         "exit_analysis": result.exit_analysis,
