@@ -411,8 +411,41 @@ class CommercialBankConfig(ConfigModel):
     margin: float = Field(default=0.02, ge=0)
 
 
+class LoanConfig(ConfigModel):
+    """Phase 55: investment loans with fixed rate and yearly instalments."""
+
+    enabled: bool = False
+    # Term in years by purpose (expand, site, truck, takeover, rnd, stake); default between 5 and 10.
+    years: dict[str, int] = Field(default_factory=lambda: {
+        "expand": 8, "site": 10, "truck": 5, "takeover": 7, "rnd": 5, "stake": 7})
+    default_years: int = Field(default=7, ge=1)
+    # Rate = policy rate + bank margin + risk premium (base + equity ratio + loss years + debt load).
+    risk_premium_base: float = Field(default=0.005, ge=0)
+    risk_premium_equity: float = Field(default=0.03, ge=0)
+    risk_premium_loss: float = Field(default=0.01, ge=0)
+    risk_premium_debt: float = Field(default=0.03, ge=0)
+    max_rate: float = Field(default=0.12, ge=0)
+    # A firm keeps a cash reserve of this many months of costs (costs = cost_share x last revenue).
+    reserve_months: float = Field(default=3.0, ge=0)
+    cost_share: float = Field(default=0.9, ge=0)
+    # Total debt (overdraft + loans) may not exceed this share of last year's revenue.
+    max_debt_to_revenue: float = Field(default=0.8, ge=0)
+    # Firms never take a loan dearer than this.
+    max_acceptable_rate: float = Field(default=0.10, ge=0)
+    # Chance to prefer credit although cash would do: base + risk_tolerance x factor.
+    preference_base: float = Field(default=0.05, ge=0, le=1)
+    preference_risk: float = Field(default=0.35, ge=0, le=1)
+    # A bank lends at most this share of deposits + equity (on top of the equity/capital-ratio limit).
+    max_loans_to_funding: float = Field(default=0.9, gt=0)
+    # High policy rates dampen investment: skip chance = damping x (rate - neutral), capped.
+    rate_neutral: float = 0.02
+    rate_damping: float = Field(default=10.0, ge=0)
+    max_skip: float = Field(default=0.8, ge=0, le=1)
+
+
 class BankingConfig(ConfigModel):
     enabled: bool = False
+    loans: LoanConfig = Field(default_factory=LoanConfig)
     banks: list[CommercialBankConfig] = Field(default_factory=lambda: [
         CommercialBankConfig(id="B1", name="Helvetia Bank", margin=0.015),
         CommercialBankConfig(id="B2", name="Alpenbank", margin=0.02),
@@ -465,6 +498,11 @@ class BankConfig(ConfigModel):
     leverage_premium: float = Field(default=0.04, ge=0)
     max_rate: float = Field(default=0.15, ge=0)
     deposit_rate: float = Field(default=0.005, ge=0)
+    # Phase 55: below the threshold a small positive rate (policy rate - spread, at least this floor);
+    # above it a negative rate on the excess: max(floor, policy rate x factor) (+ any negative policy rate).
+    deposit_rate_floor: float = Field(default=0.0005, ge=0)
+    negative_rate_floor: float = Field(default=0.005, ge=0)
+    negative_policy_factor: float = Field(default=0.75, ge=0)
     negative_interest_enabled: bool = True
     deposit_threshold_revenue_fraction: float = Field(default=0.5, ge=0)
     deposit_threshold_min: float = Field(default=50_000_000, ge=0)
@@ -766,6 +804,19 @@ class PostConfig(ConfigModel):
     expand_utilization: float = Field(default=0.9, ge=0)
     expand_step: float = Field(default=0.2, ge=0)
     expansion_delay_days: int = Field(default=365, ge=0)
+    # Phase 54: costs in the tariff move with the price index (variable part too).
+    variable_follows_inflation: bool = True
+    # Phase 54: profits go into a reserve, losses are paid from it first; the Bund pays only when it is empty.
+    reserve_enabled: bool = True
+    # Reserve target in years of fixed network cost; the tariff nudges the reserve toward it.
+    reserve_target_years: float = Field(default=0.25, ge=0)
+    reserve_adjust: float = Field(default=0.25, ge=0, le=1)
+    # Phase 54: expected volume = min(smoothed volume, last year's volume) so a falling volume is covered.
+    expect_min_of_last: bool = True
+    # Phase 54: firms' transport-efficiency projects lower the bill below tariff x fuel-km; the tariff
+    # target is divided by the (smoothed) share of the list price the Post really collects.
+    revenue_realization: bool = True
+    realization_smoothing: float = Field(default=0.5, gt=0, le=1)
 
 
 class CourierConfig(ConfigModel):
@@ -791,7 +842,14 @@ class CourierConfig(ConfigModel):
     credit_limit: float = Field(default=2_500_000.0, ge=0)
     interest_spread: float = Field(default=0.03, ge=0)
     expand_probability: float = Field(default=0.3, ge=0, le=1)
-    abandon_after_years: int = Field(default=2, ge=1)
+    # Phase 54: a courier leaves a region only after this many loss years in a row.
+    abandon_after_years: int = Field(default=3, ge=1)
+    # Phase 54: fixed costs are spread over the smoothed real volume (weight of the new year).
+    volume_smoothing: float = Field(default=0.5, gt=0, le=1)
+    # Floor for the volume used in cost sharing, as share of the region's volume.
+    min_volume_share: float = Field(default=0.05, gt=0, le=1)
+    # Price never above this share of the Post tariff (a dearer courier would win nothing).
+    max_price_vs_post: float = Field(default=0.98, gt=0)
     takeover_probability: float = Field(default=0.2, ge=0, le=1)
     # Competition authority: no takeover above this courier share of a region.
     max_region_share: float = Field(default=0.6, ge=0, le=1)
@@ -875,6 +933,8 @@ class CarriersConfig(ConfigModel):
     # CHF a shipper expects to lose per unit and day of late delivery (learned delay).
     delay_cost_per_unit_day: float = Field(default=5.0, ge=0)
     switching_cost_share: float = Field(default=0.02, ge=0)
+    # Phase 54: a firm binds itself to the Post or a courier for this many years.
+    contract_years: int = Field(default=2, ge=1)
 
 
 class PatentsConfig(ConfigModel):

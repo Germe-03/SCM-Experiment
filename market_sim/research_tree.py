@@ -264,8 +264,8 @@ class ResearchTreeLab(ResearchLab):
                 stage = pending[0]
                 label = PROJECT_DE.get(stage.name, stage.name)
                 cost = stage.implementation_cost * price
-                if runtime.cash >= self.cfg.cash_cover * cost and (
-                    cost <= 0 or env.can_spend(firm.id, cost)
+                if cost <= 0 and runtime.cash >= self.cfg.cash_cover * cost or (
+                    cost > 0 and env.arrange_funding(firm.id, cost, "rnd", self.cfg.cash_cover, state)
                 ):
                     self.running[firm.id] = (
                         stage.name,
@@ -308,9 +308,9 @@ class ResearchTreeLab(ResearchLab):
                     break
 
             cost = self.research_cost(tree, stage, state.year) * price
-            if runtime.cash < self.cfg.cash_cover * cost:
+            if cost > 0 and not env.arrange_funding(firm.id, cost, "rnd", self.cfg.cash_cover, state):
                 continue
-            if cost > 0 and not env.can_spend(firm.id, cost):
+            if cost <= 0 and runtime.cash < self.cfg.cash_cover * cost:
                 continue
 
             self.running[firm.id] = (

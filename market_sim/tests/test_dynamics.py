@@ -91,7 +91,8 @@ def test_runner_applies_year_end_bankruptcy_and_honors_disabled_switch():
     })
     runner = SimulationRunner(network, enabled, policies_for_network(firms), seed=0)
     runner.run(1)
-    assert not any(runtime.active for runtime in runner.env.runtimes.values())
+    # Truck dealers (Phase 56) start anew after a closure, so only the beverage chain must be empty.
+    assert not any(runner.env.runtimes[f.id].active for f in runner._firms())
 
     network = load_firms()
     firms = [firm for stage in network.stages for firm in stage.firms]

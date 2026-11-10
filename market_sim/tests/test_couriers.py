@@ -132,6 +132,7 @@ def _choice_result(risk_tolerance, learned_delay, damage):
         if runner.env.runtimes[retailer.id].active:
             retailer.region = "zuerich"
 
+    market.contracts.clear()  # Phase 54: earlier contracts must not block this choice
     if learned_delay is not None:
         market.experience[(firm.id, courier.id)] = [1.0, learned_delay]
 
@@ -182,3 +183,19 @@ def test_courier_runs_are_deterministic():
 
     assert result_a.carriers == result_b.carriers
     assert result_a.events == result_b.events
+
+
+def test_contract_blocks_carrier_change_until_it_expires():
+    runner, state, market = _market(entry_probability=0.0)
+    firm = runner.network.firm("wholesaler_01")
+    firm.transport_mode = "service"
+    key = (firm.id, firm.region)
+    market.assignment.clear()
+    market.contracts.clear()
+    market.assignment[key] = market.post.id
+    market.contracts[key] = state.year + 2
+    assert market.service_locked(firm.id, state.year)
+    assert market.service_locked(firm.id, state.year + 1)
+    assert not market.service_locked(firm.id, state.year + 2)
+    del market.assignment[key]
+    assert not market.service_locked(firm.id, state.year)

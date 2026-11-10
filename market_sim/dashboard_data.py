@@ -7,7 +7,7 @@ from typing import Any
 
 from market_sim.config import MarketConfig
 from market_sim.kpi import PROJECT_DE
-from market_sim.models import STAGES, SupplyNetwork
+from market_sim.models import EXTRA_STAGES, STAGES, SupplyNetwork
 from market_sim.runner import RunResult
 from market_sim.stock_market import EtfBook
 
@@ -104,14 +104,14 @@ def build_dashboard_data(
     """Build a fully JSON-serializable, actor-oriented dashboard payload."""
 
     firms = [
-        firm for stage in STAGES
+        firm for stage in [*STAGES, *EXTRA_STAGES]
         for firm in sorted(network.firms_in(stage), key=lambda item: item.id)
     ]
     identities = [
         {"id": f.id, "name": f.name, "stage": f.stage, "archetype": f.archetype,
          "category": f.category, "importer": f.importer, "region": f.region, "channel": f.channel,
          "entry_year": min((int(e["year"]) for e in result.events
-                            if e["firm"] == f.id and e["event"] in ("market_entry", "spin_off")), default=1),
+                            if e["firm"] == f.id and e["event"] in ("market_entry", "spin_off", "truck_dealer_entry")), default=1),
          "exit_year": result.exits.get(f.id)}
         for f in firms
     ]
@@ -152,7 +152,7 @@ def build_dashboard_data(
     for event in result.events:
         for bank_id, name in bank_names.items():
             direct = event["event"] in {"bank_failed", "bank_entry", "bank_payout"} and event["firm"] == bank_id
-            indirect = event["event"] in {"credit_rejected", "account_opened", "bank_switched"} and name in event.get("details", "")
+            indirect = event["event"] in {"credit_rejected", "account_opened", "bank_switched", "loan_granted"} and name in event.get("details", "")
             if direct or indirect:
                 bank_events.append({**event, "bank_id": bank_id})
     return {

@@ -39,6 +39,10 @@ class CourierMarket(CarrierMarket):
         self.learned: dict[tuple[str, str], float] = {}
         self.region_carrier_km: dict[tuple[str, str], float] = {}
         self.region_carrier_rev: dict[tuple[str, str], float] = {}
+        # Phase 54: smoothed real volume (unit-km) of a courier per region, base of the cost sharing.
+        self.volume: dict[tuple[str, str], float] = {}
+        # Phase 54: (firm, region) -> first year without contract; the carrier cannot be changed before.
+        self.contracts: dict[tuple[str, str], int] = {}
         self._counter = 0
         self.mean_share = (
             1 / len(geography.population) if geography.population else 0.0
@@ -127,7 +131,21 @@ class CourierMarket(CarrierMarket):
                 prices.append(self.courier_info[cid]["price"][region])
         return sum(prices) / len(prices) if prices else self.post.tariff
 
-    def region_cost(self, region: str, runner, unit_km: float) -> float:
+    def service_locked(self, firm_id: str, year: int) -> bool:
+        """True while the firm is bound by a transport contract (own fleet not yet possible)."""
+        return any(
+            key[0] == firm_id and end > year and key in self.assignment
+            for key, end in self.contracts.items()
+        )
+
+    def variable_rate(self, price_index: float) -> float:
+        rate = self.ccfg.variable_rate
+        return rate * price_index if self.config.carriers.post.variable_follows_inflation else rate
+
+    def region_cost(
+        self, region: str, runner, unit_km: float, volume: float | None = None
+    ) -> float:
+        """Cost per unit-km; fixed costs are spread over volume (default: expected share)."""
         population_share = self.geography.population[region]
         fuel = self.geography.fuel_index
         price_index = runner.long_run.price_index
@@ -136,12 +154,13 @@ class CourierMarket(CarrierMarket):
             if population_share > 0
             else 0.0
         )
+        shared = self.ccfg.expected_share * unit_km if volume is None else volume
         return (
-            self.ccfg.variable_rate * density * fuel
+            self.variable_rate(price_index) * density * fuel
             + self.ccfg.fixed_cost_per_day_per_region
             * self.days_per_year
             * price_index
-            / max(1.0, self.ccfg.expected_share * unit_km)
+            / max(1.0, shared)
         )
 
     def margin(self, region: str, runner, unit_km: float) -> float:
@@ -233,7 +252,7 @@ class CourierMarket(CarrierMarket):
             if not courier.active:
                 continue
             info = self.courier_info[cid]
-            variable = self.ccfg.variable_rate * courier.fuel_km
+            variable = self.variable_rate(price_index) * courier.fuel_km
             fixed = (
                 self.ccfg.fixed_cost_per_day_per_region
                 * courier.days
@@ -258,7 +277,7 @@ class CourierMarket(CarrierMarket):
                 region_key = (cid, region)
                 region_profit = (
                     courier_region_rev.get(region_key, 0.0)
-                    - self.ccfg.variable_rate
+                    - self.variable_rate(price_index)
                     * courier_region_km.get(region_key, 0.0)
                     * self.geography.fuel_index
                     - fixed_per_region
@@ -267,6 +286,13 @@ class CourierMarket(CarrierMarket):
                     info["loss_years"].get(region, 0) + 1
                     if region_profit < 0
                     else 0
+                )
+                old_volume = self.volume.get(
+                    region_key,
+                    self.ccfg.expected_share * region_km.get(region, 0.0),
+                )
+                self.volume[region_key] = old_volume + self.ccfg.volume_smoothing * (
+                    courier_region_km.get(region_key, 0.0) - old_volume
                 )
 
             utilization = (
@@ -388,6 +414,8 @@ class CourierMarket(CarrierMarket):
                 buyer_info["loss_years"][region] = target_info["loss_years"].get(
                     region, 0
                 )
+                if (target.id, region) in self.volume:
+                    self.volume[(buyer.id, region)] = self.volume.pop((target.id, region))
             self._set_capacity(buyer)
             target.active = False
             self.assignment = {
@@ -416,6 +444,7 @@ class CourierMarket(CarrierMarket):
                     courier.regions.remove(region)
                     info["price"].pop(region, None)
                     info["loss_years"].pop(region, None)
+                    self.volume.pop((cid, region), None)
                     self.assignment = {
                         key: value
                         for key, value in self.assignment.items()
@@ -464,6 +493,9 @@ class CourierMarket(CarrierMarket):
                             courier.regions.sort()
                             info["price"][region] = 0.0
                             info["loss_years"][region] = 0
+                            self.volume[(cid, region)] = (
+                                self.ccfg.expected_share * region_km.get(region, 0.0)
+                            )
                             self._set_capacity(courier)
                             self._event(
                                 state,
@@ -509,6 +541,9 @@ class CourierMarket(CarrierMarket):
                 self.ccfg.start_cash * price_index,
                 state.year,
             )
+            self.volume[(courier.id, region)] = (
+                self.ccfg.expected_share * region_km.get(region, 0.0)
+            )
             self._event(
                 state,
                 courier.id,
@@ -522,14 +557,20 @@ class CourierMarket(CarrierMarket):
                 continue
             info = self.courier_info[cid]
             for region in sorted(courier.regions):
-                cost = self.region_cost(
-                    region, runner, region_km.get(region, 0.0)
+                total_km = region_km.get(region, 0.0)
+                volume = max(
+                    self.volume.get((cid, region), 0.0),
+                    self.ccfg.min_volume_share * total_km,
                 )
+                cost = self.region_cost(region, runner, total_km, volume)
                 undercut = lerp(self.ccfg.undercut, info["risk"])
-                info["price"][region] = max(
-                    cost * (1 + self.ccfg.min_markup)
-                    / self.geography.fuel_index,
-                    self.post.tariff * (1 - undercut),
+                info["price"][region] = min(
+                    max(
+                        cost * (1 + self.ccfg.min_markup)
+                        / self.geography.fuel_index,
+                        self.post.tariff * (1 - undercut),
+                    ),
+                    self.post.tariff * self.ccfg.max_price_vs_post,
                 )
             self._set_capacity(courier)
 
@@ -542,6 +583,10 @@ class CourierMarket(CarrierMarket):
             firm = active_firms.get(key[0])
             if firm is None or firm.transport_mode != "service":
                 del self.assignment[key]
+                self.contracts.pop(key, None)
+        for key in list(self.contracts):
+            if key not in self.assignment:
+                del self.contracts[key]
 
         switching_cost_share = self.config.carriers.switching_cost_share
         for firm in sorted(active_firms.values(), key=lambda item: item.id):
@@ -576,6 +621,13 @@ class CourierMarket(CarrierMarket):
                 )
                 options.sort(key=lambda carrier: carrier.id)
                 current = self.assignment.get((firm.id, region), self.post.id)
+                bound = self.contracts.get((firm.id, region), 0)
+                if (
+                    (firm.id, region) in self.assignment
+                    and state.year < bound
+                    and any(option.id == current for option in options)
+                ):
+                    continue
 
                 def total_cost(carrier: Carrier) -> float:
                     if carrier is self.post:
@@ -619,6 +671,9 @@ class CourierMarket(CarrierMarket):
                         f"jetzt mit {chosen.name}",
                     )
                 self.assignment[(firm.id, region)] = chosen.id
+                self.contracts[(firm.id, region)] = (
+                    state.year + self.config.carriers.contract_years
+                )
 
         self.region_carrier_km = {}
         self.region_carrier_rev = {}

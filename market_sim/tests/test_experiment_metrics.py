@@ -35,7 +35,7 @@ def test_bankruptcies_are_counted_and_logged(tmp_path) -> None:
     config.bank.enabled = False
     config = config.model_copy(update={"bankruptcy": config.bankruptcy.model_copy(update={
         "cash_threshold": 1e15, "min_firms_per_stage": 0, "max_exits_per_stage_per_year": 0,
-    })})
+    }), "trucks": config.trucks.model_copy(update={"enabled": False})})  # no truck dealers (Phase 56)
     result = run_simulation(years=2, days_per_year=5, seed=0, config=config)
     exits = [e for e in result.events if e["event"] == "bankruptcy"]
     firms = sum(len(stage.firms) for stage in load_firms().stages)

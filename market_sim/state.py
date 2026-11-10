@@ -7,7 +7,7 @@ import random
 from typing import TYPE_CHECKING
 
 from market_sim.kpi import OFFENCE_DE, chf
-from market_sim.models import STAGES
+from market_sim.models import EXTRA_STAGES, STAGES
 
 if TYPE_CHECKING:
     from market_sim.runner import RunState, SimulationRunner
@@ -112,6 +112,13 @@ class StateActor:
         day = runner.config.simulation.days_per_year
         summaries = state.summaries[-1]
         verdicts: dict[str, list[float]] = {}
+        for dealer in runner._dealers():
+            # Phase 56: truck dealers pay profit tax like everybody else (no offences, no random draws).
+            d_rt = env.runtimes[dealer.id]
+            if d_rt.active and dealer.id in summaries:
+                tax = max(0.0, summaries[dealer.id].profit) * cfg.profit_tax
+                d_rt.adjust_cash(-tax, "staat:Gewinnsteuer")
+                self.stats["taxes"] += tax
         for firm in runner._firms():
             runtime = env.runtimes[firm.id]
             rolls = [self.rng.random() for _ in cfg.offences] + [self.rng.random()]
@@ -202,7 +209,7 @@ class StateActor:
         year = state.year
         day = runner.config.simulation.days_per_year
         summaries = state.summaries[-1]
-        for stage in STAGES:
+        for stage in [*STAGES, *EXTRA_STAGES]:
             active = [f for f in runner.network.firms_in(stage) if env.runtimes[f.id].active and f.id in summaries]
             # Producers compete within their category (beer, wine, spirits), not across all drinks.
             group = (lambda f: f.category) if stage == "factory" else (lambda f: "all")
@@ -236,7 +243,8 @@ class StateActor:
                 buyers = sorted(
                     (f for f in active if f.id != target.id and summaries[f.id].profit > 0
                      and f.category == target.category and f.channel == target.channel
-                     and env.runtimes[f.id].cash >= cfg.cash_cover * price),
+                     and (env.runtimes[f.id].cash >= cfg.cash_cover * price
+                          or env.arrange_funding(f.id, price, "takeover", cfg.cash_cover, commit=False))),
                     key=lambda f: (-env.runtimes[f.id].cash, f.id),
                 )
                 for buyer in buyers:
@@ -248,12 +256,17 @@ class StateActor:
                     if groups is not None and groups.group_of(buyer.id) is not None:
                         combined += sum(share.get(t, 0.0) for t in groups.group_of(buyer.id).subs
                                         if t not in (buyer.id, target.id))
-                    if combined > cfg.block_share:
+                    if combined > cfg.block_share and stage not in EXTRA_STAGES:
                         self.stats["takeovers_blocked"] += 1
                         state.events.append({"year": year, "day": day, "firm": buyer.id, "event": "takeover_blocked",
                                              "details": f"{target.id}, gemeinsamer Marktanteil {combined:.0%}"})
                         continue
-                    if not env.can_spend(buyer.id, price + (0.0 if groups is not None else max(0.0, -t_rt.cash))):
+                    need = price + (0.0 if groups is not None else max(0.0, -t_rt.cash))
+                    if env.loans_enabled and groups is None:
+                        # Phase 55: pay from cash or take an investment loan.
+                        if not env.arrange_funding(buyer.id, need, "takeover", 1.0, state):
+                            continue
+                    elif not env.can_spend(buyer.id, need):
                         continue
                     if groups is not None:
                         if not groups.acquire(runner, state, buyer, target, price, year, day):
@@ -264,12 +277,15 @@ class StateActor:
                     share[target.id] = 0.0
                     done += 1
                     break
-            self._break_up(runner, state, stage, active, share, year, day)
+            if stage not in EXTRA_STAGES:
+                self._break_up(runner, state, stage, active, share, year, day)
 
     def _merge(self, runner, state, buyer, target, price, year, day) -> None:
         env = runner.env
         b_rt, t_rt = env.runtimes[buyer.id], env.runtimes[target.id]
         b_rt.adjust_cash(-price + min(0.0, t_rt.cash), f"uebernahme:{target.id}")  # the buyer also takes over the debt
+        if env.banking is not None:
+            env.banking.transfer_loans(target.id, buyer.id)  # Phase 55: investment loans go along
         buyer.capacity += target.capacity
         buyer.machine_capacity += target.machine_capacity
         buyer.employees += target.employees
@@ -290,6 +306,8 @@ class StateActor:
         t_rt.stock = {}
         t_rt.inventory = 0
         t_rt.adjust_cash(-t_rt.cash, f"uebernommen:{buyer.id}")
+        if target.stage == "truck_dealer" and getattr(geo, "trucks", None) is not None:
+            geo.trucks.merge_dealers(target.id, buyer.id)  # Phase 56: stock goes to the buyer
         # Phase 24: the buyer receives the research progress (implementation still to pay).
         if hasattr(runner.lab, "transfer"):
             runner.lab.transfer(target.id, buyer.id)

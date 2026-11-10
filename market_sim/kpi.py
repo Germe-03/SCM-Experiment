@@ -60,6 +60,14 @@ class BankAnnualReport(BaseModel):
     margin: float = 0.0
     credit_rejections: int = 0
     fee_income: float = 0.0
+    # Phase 55: investment loans (outstanding, new this year), write-offs, interest and deposit rates.
+    term_loans: float = 0.0
+    new_loans: float = 0.0
+    new_loan_count: int = 0
+    loan_interest: float = 0.0
+    loan_write_offs: float = 0.0
+    deposit_interest_paid: float = 0.0
+    negative_interest_income: float = 0.0
     # capital_ratio = equity / balance_total (Bilanzsumme); risk_weighted_ratio = equity / loans.
     balance_total: float = 0.0
     risk_weighted_ratio: float = 0.0
@@ -176,11 +184,17 @@ class SystemKPIs(BaseModel):
     active_firms_wholesaler: int = 0
     active_firms_distributor: int = 0
     active_firms_factory: int = 0
+    # Phase 56: truck dealers, a stage outside the beverage chain.
+    active_firms_truck_dealer: int = 0
+    negative_interest_truck_dealer: float = 0.0
+    interest_cost_truck_dealer: float = 0.0
+    debt_truck_dealer: float = 0.0
     retailer_price_spread: float = 0.0
 
 
 # German wording for the event log (events.csv and dashboard).
-STAGE_DE = {"retailer": "Detailhandel", "wholesaler": "Grosshandel", "distributor": "Verteilung", "factory": "Hersteller"}
+STAGE_DE = {"retailer": "Detailhandel", "wholesaler": "Grosshandel", "distributor": "Verteilung", "factory": "Hersteller",
+            "truck_dealer": "Lastwagenhandel"}
 ARCHETYPE_DE = {"low_cost": "Discount", "standard": "Standard", "premium": "Premium",
                 "reliable": "Zuverlässig", "growth": "Wachstum"}
 TREND_DE = {"craft_welle": "Craft-Welle", "alkoholfrei": "Alkoholfrei", "sparwelle": "Sparwelle",

@@ -10,6 +10,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 
 STAGES = ["retailer", "wholesaler", "distributor", "factory"]
+# Phase 56: stages outside the beverage supply chain (no orders, deliveries or supplier choice).
+EXTRA_STAGES = ["truck_dealer"]
+ALL_STAGES = STAGES + EXTRA_STAGES
 
 
 class NetworkModel(BaseModel):
@@ -77,8 +80,8 @@ class Firm(NetworkModel):
     @field_validator("stage")
     @classmethod
     def _stage_must_be_known(cls, value: str) -> str:
-        if value not in STAGES:
-            raise ValueError(f"stage must be one of {STAGES} (got {value!r})")
+        if value not in ALL_STAGES:
+            raise ValueError(f"stage must be one of {ALL_STAGES} (got {value!r})")
         return value
 
     @field_validator(
@@ -117,7 +120,7 @@ class SupplyNetwork(NetworkModel):
         stage_names = [stage.name for stage in self.stages]
         if len(stage_names) != len(set(stage_names)):
             raise ValueError("stage names must be unique")
-        unknown_stages = set(stage_names) - set(STAGES)
+        unknown_stages = set(stage_names) - set(ALL_STAGES)
         if unknown_stages:
             raise ValueError(f"unknown network stages: {sorted(unknown_stages)}")
         missing_stages = set(STAGES) - set(stage_names)
@@ -132,7 +135,7 @@ class SupplyNetwork(NetworkModel):
 
         for stage in self.stages:
             for firm in stage.firms:
-                if firm.stage not in STAGES:
+                if firm.stage not in ALL_STAGES:
                     raise ValueError(
                         f"firm {firm.id!r} has unknown stage {firm.stage!r}"
                     )
@@ -141,6 +144,8 @@ class SupplyNetwork(NetworkModel):
                         f"firm {firm.id!r} is grouped under {stage.name!r}, "
                         f"but declares stage {firm.stage!r}"
                     )
+                if firm.stage in EXTRA_STAGES:
+                    continue
                 if firm.stage == STAGES[-1]:
                     if firm.suppliers:
                         raise ValueError(
@@ -165,11 +170,13 @@ class SupplyNetwork(NetworkModel):
     def firms_in(self, stage: str) -> list[Firm]:
         """Return firms belonging to a named stage."""
 
-        if stage not in STAGES:
+        if stage not in ALL_STAGES:
             raise ValueError(f"unknown stage {stage!r}")
         for stage_group in self.stages:
             if stage_group.name == stage:
                 return stage_group.firms
+        if stage in EXTRA_STAGES:
+            return []
         raise ValueError(f"stage {stage!r} is not present in the network")
 
     def firm(self, firm_id: str) -> Firm:
@@ -199,13 +206,16 @@ class SupplyNetwork(NetworkModel):
 
         if any(existing.id == firm.id for stage in self.stages for existing in stage.firms):
             raise ValueError(f"firm id {firm.id!r} already exists")
-        candidate = SupplyNetwork(stages=[
+        stages = [
             Stage(
                 name=stage.name,
                 firms=[*stage.firms, firm] if stage.name == firm.stage else list(stage.firms),
             )
             for stage in self.stages
-        ])
+        ]
+        if firm.stage not in {stage.name for stage in self.stages}:
+            stages.append(Stage(name=firm.stage, firms=[firm]))
+        candidate = SupplyNetwork(stages=stages)
         self.stages = candidate.stages
 
     @staticmethod

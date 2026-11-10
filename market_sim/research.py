@@ -76,9 +76,7 @@ class ResearchLab:
                     project = candidate
                     break
             cost = project.cost * runner.long_run.price_index
-            if runtime.cash < self.cfg.cash_cover * cost:
-                continue
-            if not env.can_spend(firm.id, cost):
+            if not env.arrange_funding(firm.id, cost, "rnd", self.cfg.cash_cover, state):
                 continue
             self.running[firm.id] = (project.name, env.period, env.period + project.duration_days,
                                      cost / project.duration_days, state.year)

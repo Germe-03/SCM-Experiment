@@ -316,6 +316,9 @@ class Mergers:
         n_rt = env.runtimes[new.id]
         total_cash = rt_big.cash + rt_small.cash
         n_rt.adjust_cash(total_cash - n_rt.cash, f"fusion:{big.id}+{small.id}")
+        if env.banking is not None:
+            env.banking.transfer_loans(big.id, new.id)  # Phase 55: investment loans go along
+            env.banking.transfer_loans(small.id, new.id)
         if hasattr(env, "transfer_commodity_stock"):
             env.transfer_commodity_stock(big.id, new.id)
             env.transfer_commodity_stock(small.id, new.id)

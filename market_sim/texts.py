@@ -19,6 +19,8 @@ from market_sim.llm import unchecked_numbers
 USE_LLM_DEFAULT = False
 
 STAGE_DE = {"retailer": "Detailhandel", "wholesaler": "Grosshandel", "distributor": "Verteilung", "factory": "Hersteller"}
+# Phase 56: truck dealers sit outside the beverage chain; they only get a label for stories.
+STAGE_LABEL = {**STAGE_DE, "truck_dealer": "Lastwagenhandel"}
 CAT_DE = {"beer": "Bier", "wine": "Wein", "spirits": "Spirituosen"}
 EXIT_DE = {"bankruptcy": "Konkurs", "takeover": "Übernahme", "poisoning": "Vergiftung", "merger": "Fusion"}
 KEY_EVENTS = {"takeover", "merger_formed", "merger_blocked", "holding_formed", "holding_takeover",
@@ -154,7 +156,7 @@ def rnd_year_lines(data: dict, year: int) -> list[str]:
 def firm_facts(data: dict, firm_id: str) -> str:
     firm = data["firms"][firm_id]
     yearly = firm.get("yearly", [])
-    lines = [f"Name: {firm['name']}", f"Stufe: {'Gastronomie' if firm.get('channel') == 'restaurant' else STAGE_DE.get(firm['stage'], firm['stage'])}"]
+    lines = [f"Name: {firm['name']}", f"Stufe: {'Gastronomie' if firm.get('channel') == 'restaurant' else STAGE_LABEL.get(firm['stage'], firm['stage'])}"]
     if firm.get("category") and firm["stage"] == "factory":
         lines.append(f"Kategorie: {CAT_DE.get(firm['category'], firm['category'])}{' (Import)' if firm.get('importer') else ''}")
     lines.append(f"Im Markt ab Jahr {firm.get('entry_year', 1)}")
@@ -351,7 +353,7 @@ def _event_sentence(data: dict, event: dict, picker: _Picker, zeit: str = "") ->
     stufe = (
         "Gastronomie"
         if firm.get("channel") == "restaurant"
-        else STAGE_DE.get(stage, "")
+        else STAGE_LABEL.get(stage, "")
     )
     target = re.search(r"(?:^| )an (\S+?)(?: für|,|$)", str(event.get("details", "")))
     values = {
@@ -589,7 +591,7 @@ def template_story(
     stufe = (
         "Gastronomie"
         if firm.get("channel") == "restaurant"
-        else STAGE_DE.get(stage, "")
+        else STAGE_LABEL.get(stage, "")
     )
     entry_year = firm.get("entry_year", 1)
     sentences = []

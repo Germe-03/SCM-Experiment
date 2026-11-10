@@ -73,8 +73,9 @@ def test_interest_uses_policy_only_when_enabled(enabled, policy_rate, cash):
     rt.cash, rt.last_year_revenue, rt.consecutive_loss_years = cash, 2000, 2
     cfg = runner.config.bank
     base = policy_rate + cfg.loan_margin if enabled else cfg.base_rate
-    deposit = max(0, policy_rate - cfg.deposit_spread) if enabled else cfg.deposit_rate
-    negative = max(cfg.negative_rate, -policy_rate) if enabled else cfg.negative_rate
+    deposit = max(cfg.deposit_rate_floor, policy_rate - cfg.deposit_spread) if enabled else cfg.deposit_rate
+    negative = (max(cfg.negative_rate_floor, cfg.negative_policy_factor * policy_rate, -policy_rate)
+                if enabled else cfg.negative_rate)
     threshold = max(cfg.deposit_threshold_min, cfg.deposit_threshold_revenue_fraction * 2000)
     expected = (-cash * min(cfg.max_rate, base + 2 * cfg.risk_premium_per_loss_year
                            + cfg.leverage_premium * 0.5) / 365 if cash < 0 else

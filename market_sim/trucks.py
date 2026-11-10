@@ -45,9 +45,33 @@ class Dealer:
     operating_cost: float = 0.0
     profit: float = 0.0
     loss_years: int = 0
+    # Phase 56: the dealer is a firm; its cash flows reach the firm's accounts on the next day.
+    rt: object = None
+    pending: dict = field(default_factory=lambda: {"revenue": 0.0, "cogs": 0.0, "purchases": 0.0, "fixed": 0.0})
 
     def stock_total(self) -> int:
         return len(self.stock_used) + sum(len(v) for v in self.stock_new.values())
+
+    def buy_stock(self, price: float) -> None:
+        """Pay for a truck going into stock (an asset, not an expense)."""
+        self.cash -= price
+        self.pending["purchases"] += price
+
+    def sell_stock(self, price: float, basis: float) -> None:
+        """Sale of a truck: revenue now, cost of goods sold at the purchase price."""
+        self.cash += price
+        self.revenue += price
+        self.cogs += basis
+        self.pending["revenue"] += price
+        self.pending["cogs"] += basis
+
+    def book_fixed(self, amount: float) -> None:
+        self.cash -= amount
+        self.pending["fixed"] += amount
+
+    @property
+    def firm_active(self) -> bool:
+        return self.active and (self.rt is None or self.rt.active)
 
 
 class TruckMarket:
@@ -121,6 +145,18 @@ class TruckMarket:
                 runtime.fixed_cost += cash_cost + book_loss
                 runtime.adjust_cash(book_loss, "lastwagen_buchverlust")
         self.pending = {}
+        for did in sorted(self.dealers):
+            dealer = self.dealers[did]
+            rt = dealer.rt
+            if rt is None or not rt.active:
+                continue
+            p = dealer.pending
+            if any(p.values()):
+                rt.revenue += p["revenue"]
+                rt.purchase_cost += p["cogs"]
+                rt.fixed_cost += p["fixed"]
+                rt.adjust_cash(-p["purchases"] + p["cogs"], "lastwagenhandel:Lagerbestand")
+                dealer.pending = {"revenue": 0.0, "cogs": 0.0, "purchases": 0.0, "fixed": 0.0}
         res = self.cfg.residual_value
         for fid in sorted(self.fleets):
             runtime = env.runtimes.get(fid)
@@ -165,7 +201,56 @@ class TruckMarket:
         return dealer
 
     def _active_dealers(self) -> list[Dealer]:
+        for dealer in self.dealers.values():
+            if dealer.active and dealer.rt is not None and not dealer.rt.active:
+                # Closed by the runner (bankruptcy, takeover): the stock is gone with the firm.
+                dealer.active = False
+                dealer.stock_new = {t: [] for t in self.types}
+                dealer.stock_used = []
         return [self.dealers[d] for d in sorted(self.dealers) if self.dealers[d].active]
+
+    # -- Phase 56: dealers are firms ----------------------------------------
+    def dealer_firm(self, dealer: Dealer, env):
+        """The Firm record of a dealer (stage truck_dealer, outside the beverage chain)."""
+        from market_sim.models import Firm
+        regions = sorted(self.geography.regions)
+        number = int(dealer.id.rsplit("_", 1)[1])
+        scale = env.config.costs.initial_cash_scale or 1.0
+        return Firm(
+            id=dealer.id, name=dealer.name, stage="truck_dealer", archetype="reliable", tendency="reliable",
+            cash=dealer.cash / scale, inventory=0, sell_price=1.0, quality_level=0.5, reputation=0.5,
+            reliability=0.5, capacity=0, employees=0, wage_level=0.0, productivity_per_employee=1.0,
+            r_and_d_level=0.0, r_and_d_budget=0.0, supplier_priority="balanced",
+            category="lastwagen", region=regions[(number - 1) % len(regions)])
+
+    def register_dealer(self, runner, state, dealer: Dealer) -> None:
+        """Make the dealer a firm of the network (accounts, bank, stock market, reports)."""
+        if dealer.rt is not None:
+            return
+        firm = self.dealer_firm(dealer, runner.env)
+        runner.add_firm(firm, state, announce=False)
+        dealer.rt = runner.env.runtimes[dealer.id]
+
+    def register_all(self, runner, state) -> None:
+        for did in sorted(self.dealers):
+            if self.dealers[did].active:
+                self.register_dealer(runner, state, self.dealers[did])
+
+    def merge_dealers(self, target_id: str, buyer_id: str) -> None:
+        """A dealer taken over by another: stock and book go to the buyer."""
+        target, buyer = self.dealers.get(target_id), self.dealers.get(buyer_id)
+        if target is None or buyer is None:
+            return
+        for name, trucks in target.stock_new.items():
+            buyer.stock_new.setdefault(name, []).extend(trucks)
+            for truck in trucks:
+                truck.owner = buyer.id
+        for truck in target.stock_used:
+            truck.owner = buyer.id
+        buyer.stock_used.extend(target.stock_used)
+        target.stock_new = {t: [] for t in self.types}
+        target.stock_used = []
+        target.active = False
 
     def _restock(self, env) -> None:
         names = list(self.types)
@@ -181,7 +266,7 @@ class TruckMarket:
             for t in names:
                 price = self.list_price(env, t)
                 while len(dealer.stock_new[t]) < target[t] and dealer.cash >= price > 0:
-                    dealer.cash -= price
+                    dealer.buy_stock(price)
                     dealer.stock_new[t].append(self._new_truck(t, dealer.id, price))
                     if "trucks" in env.commodity_bought:
                         env.commodity_bought["trucks"] += 1.0
@@ -190,6 +275,9 @@ class TruckMarket:
     def begin_year_end(self, runner, state) -> None:
         env = runner.env
         cfg = self.cfg
+        for dealer in self.dealers.values():
+            if dealer.rt is not None and dealer.rt.active:
+                dealer.cash = dealer.rt.cash  # the firm's account is the truth (interest, tax, loans)
         self.price_history.append({
             "year": state.year, "level": round(env.commodity_level("trucks"), 4),
             "prices": {t: round(self.list_price(env, t), 2) for t in self.types}})
@@ -247,7 +335,7 @@ class TruckMarket:
         runtime = env.runtimes[firm.id]
         runtime.adjust_cash(price, "lastwagen_verkauf")
         self._pend(firm.id, book_loss=truck.book_value - price)
-        dealer.cash -= price
+        dealer.buy_stock(price)
         dealer.taken_back_year += 1
         self.fleets[firm.id].remove(truck)
         truck.owner, truck.cost_basis = dealer.id, price
@@ -295,6 +383,10 @@ class TruckMarket:
         extra = sum(self.annual_cost(env, t) for t in plan)
         threshold = service_cost * (1 + cfg.switch_margin) if fleet else service_cost * (1 - cfg.switch_margin)
         want_own = shipped > 0 and own_variable + existing + extra < threshold
+        carriers = getattr(runner.env.geography, "carriers", None)
+        if not fleet and carriers is not None and carriers.service_locked(firm.id, state.year):
+            # Phase 54: a running transport contract with the Post or a courier is respected.
+            want_own = False
         for truck in fleet:
             t = self.types[truck.type]
             maint = t.maintenance_rate * self.list_price(env, truck.type)
@@ -314,7 +406,7 @@ class TruckMarket:
                 if offer is None:
                     continue
                 price, _, _, dealer, used, source = offer
-                if runtime.cash < cfg.cash_cover * price or not env.can_spend(firm.id, price):
+                if not env.arrange_funding(firm.id, price, "truck", cfg.cash_cover, state):
                     break
                 if used:
                     dealer.stock_used.remove(source)
@@ -325,9 +417,7 @@ class TruckMarket:
                     dealer.sold_new_year += 1
                     dealer.sold_by_type_year[type_name] = dealer.sold_by_type_year.get(type_name, 0) + 1
                 runtime.adjust_cash(-price, "lastwagen_kauf")
-                dealer.cash += price
-                dealer.revenue += price
-                dealer.cogs += truck.cost_basis
+                dealer.sell_stock(price, truck.cost_basis)
                 truck.owner, truck.purchase_price, truck.book_value = firm.id, price, price
                 truck.maintained, truck.downtime_days = True, 0
                 truck.maint_daily = self.types[type_name].maintenance_rate * self.list_price(env, type_name) / self.days
@@ -352,7 +442,7 @@ class TruckMarket:
             stock = dealer.stock_used + [t for v in dealer.stock_new.values() for t in v]
             dealer.storage_cost = cfg.dealer_storage_rate * sum(t.cost_basis for t in stock)
             dealer.operating_cost = cfg.dealer_operating_cost * index
-            dealer.cash -= dealer.storage_cost + dealer.operating_cost
+            dealer.book_fixed(dealer.storage_cost + dealer.operating_cost)
             dealer.profit = dealer.revenue - dealer.cogs - dealer.storage_cost - dealer.operating_cost
             dealer.loss_years = dealer.loss_years + 1 if dealer.profit < 0 else 0
             self.dealer_history.append({
@@ -366,7 +456,10 @@ class TruckMarket:
                 dealer.active = False
                 dealer.stock_new = {t: [] for t in self.types}
                 dealer.stock_used = []
-                self._event(state, dealer.id, "truck_dealer_exit", f"{dealer.name} gibt auf")
+                if dealer.rt is not None and dealer.rt.active:
+                    runner.close_firm_now(dealer.id, state.year, state, "truck_dealer_exit", f"{dealer.name} gibt auf")
+                else:
+                    self._event(state, dealer.id, "truck_dealer_exit", f"{dealer.name} gibt auf")
         self._restock(env)
         u, v = self.rng.random(), self.rng.random()
         active = self._active_dealers()
@@ -376,6 +469,7 @@ class TruckMarket:
             lo, hi = cfg.dealer_margin
             dealer = self._new_dealer(state.year + 1, cfg.dealer_start_cash * index, lo + v * (hi - lo))
             self._event(state, dealer.id, "truck_dealer_entry", f"{dealer.name} startet als Lastwagenhändler")
+            self.register_dealer(runner, state, dealer)
             self._restock(env)
         for fid in sorted(self.fleets):
             for type_name in self.types:

@@ -698,6 +698,53 @@ class MarketEnvironment:
         budget = self.spending_budget(firm_id, max(amount, 1e-9))
         return budget > 0 and amount <= budget
 
+    @property
+    def loans_enabled(self) -> bool:
+        return self.banking is not None and self.config.banking.loans.enabled
+
+    def policy_rate(self) -> float:
+        return self.central_bank.policy_rate if self.config.central_bank.enabled else self.config.bank.base_rate
+
+    def arrange_funding(self, firm_id: str, amount: float, purpose: str, cover: float = 1.0,
+                        state=None, commit: bool = True) -> bool:
+        """Phase 55: may the firm start an investment of ``amount``, from cash or an investment loan?
+
+        Without loans this is the old rule (cash >= cover x amount and the credit line allows it).
+        With loans the firm keeps a cash reserve of a few months of costs, risk-friendly firms
+        prefer credit, the bank lends only within its limits (else "Kredit abgelehnt"), and a high
+        policy rate makes the firm skip the project more often. commit=False only asks.
+        """
+        runtime = self.runtimes[firm_id]
+        old_ok = runtime.cash >= cover * amount and (amount <= 0 or self.can_spend(firm_id, amount))
+        banking = self.banking
+        lc = self.config.banking.loans
+        if banking is None or not lc.enabled or amount <= 0:
+            return old_ok
+        rng = banking.loan_rng
+        policy = self.policy_rate()
+        skip = min(lc.max_skip, lc.rate_damping * max(0.0, policy - lc.rate_neutral))
+        if commit and skip > 0 and rng.random() < skip:
+            return False
+        reserve = lc.reserve_months / 12.0 * lc.cost_share * runtime.last_year_revenue
+        cash_ok = old_ok and runtime.cash - amount >= reserve
+        year = state.year if state is not None else self.credit_year
+        days = self.config.simulation.days_per_year
+        events = state.events if state is not None else banking.credit_events
+        offer, reason = banking.loan_offer(firm_id, runtime, amount, purpose, policy)
+        if not commit:
+            return cash_ok or offer is not None
+        risk = max(0.0, min(1.0, self.commodity_courage.get(firm_id, 0.5)))
+        prefers_credit = cash_ok and rng.random() < lc.preference_base + lc.preference_risk * risk
+        if cash_ok and not (prefers_credit and offer is not None):
+            return True
+        if offer is None:
+            if reason.startswith("Bank:") and banking.accounts.get(firm_id):
+                banking.reject(firm_id, banking.primary_bank(firm_id), float(reason[5:]), year, days)
+            return False
+        bank, rate, years = offer
+        banking.grant_loan(firm_id, runtime, bank, amount, rate, years, purpose, year, days, events)
+        return True
+
     def affordable_units(self, firm_id: str, quantity: int, unit_cost: float) -> int:
         if self.banking is None or not self.config.banking.block_purchases or quantity <= 0 or unit_cost <= 0:
             return quantity
@@ -934,9 +981,10 @@ class MarketEnvironment:
         if self.config.central_bank.enabled:
             policy_rate = self.central_bank.policy_rate
             base_rate = policy_rate + cfg.loan_margin
-            deposit_rate = max(0.0, policy_rate - cfg.deposit_spread)
-            if policy_rate < 0:
-                negative_rate = max(negative_rate, -policy_rate)
+            # Phase 55: both deposit rates follow the policy rate (small positive below the
+            # threshold, negative above it).
+            deposit_rate = max(cfg.deposit_rate_floor, policy_rate - cfg.deposit_spread)
+            negative_rate = max(cfg.negative_rate_floor, cfg.negative_policy_factor * policy_rate, -policy_rate)
         if self.banking is not None:
             if firm_id is None:
                 firm_id = next(fid for fid, rt in self.runtimes.items() if rt is runtime)
@@ -956,6 +1004,8 @@ class MarketEnvironment:
             runtime.negative_interest_cost += negative
         if self.banking is not None:
             self.banking.book_interest(firm_id, debt, cost, negative)
+        if self.banking is not None and self.banking.loans:
+            cost += self.banking.accrue_loan_interest(firm_id)
         runtime.interest_cost += cost
         runtime.cash -= cost
 

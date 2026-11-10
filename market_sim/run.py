@@ -10,7 +10,7 @@ from pathlib import Path
 from market_sim.checkpoint import load_checkpoint, year_end_saver
 from market_sim.config import MarketConfig, load_market_config
 from market_sim.kpi import AnnualReport, BankAnnualReport, SystemKPIs
-from market_sim.models import STAGES, SupplyNetwork, load_firms
+from market_sim.models import EXTRA_STAGES, STAGES, SupplyNetwork, load_firms
 from market_sim.policies import policies_for_network
 from market_sim.runner import RunResult, SimulationRunner
 
@@ -77,7 +77,7 @@ def _ranking_rows(result: RunResult) -> list[dict[str, object]]:
     }
     final_reports = result.annual_reports[-1] if result.annual_reports else {}
     rows = []
-    for stage in STAGES:
+    for stage in [*STAGES, *EXTRA_STAGES]:
         for firm in result.network.firms_in(stage):
             report = final_reports.get(firm.id)
             rows.append({

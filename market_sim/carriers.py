@@ -84,6 +84,10 @@ class CarrierMarket:
             region: 0.0 for region in geography.regions
         }
         self.bundesbeitrag_total = 0.0
+        # Phase 54: profits of the Post are kept; losses are paid from here before the Bund helps.
+        self.reserve = 0.0
+        # Share of tariff x fuel-km the Post really bills (transport-efficiency projects lower it).
+        self.realization = 1.0
         self.reports: list[dict] = []
         self.lost_units = 0
 
@@ -95,6 +99,10 @@ class CarrierMarket:
 
     def rate(self, supplier: Firm, customer: Firm) -> float:
         return self.carrier_for(supplier, customer).tariff
+
+    def service_locked(self, firm_id: str, year: int) -> bool:
+        """Phase 54: no contracts without couriers."""
+        return False
 
     def service_rate(self, firm: Firm) -> float:
         return self.post.tariff
@@ -197,6 +205,11 @@ class CarrierMarket:
             * runner.long_run.price_index
         )
 
+    def variable_cost_rate(self, price_index: float) -> float:
+        """Variable cost per unit-km of the Post; follows the price index (Phase 54)."""
+        rate = self.cfg.post.variable_rate
+        return rate * price_index if self.cfg.post.variable_follows_inflation else rate
+
     def adapt_network(self, price_index: float) -> None:
         fuel_km = self.post.fuel_km
         floor = self.cfg.post.fixed_cost_per_day
@@ -243,10 +256,16 @@ class CarrierMarket:
         year = state.year
         post = self.post
         fixed = self.fixed_cost_year(runner)
-        variable = self.cfg.post.variable_rate * post.fuel_km
+        variable = self.variable_cost_rate(runner.long_run.price_index) * post.fuel_km
         profit = post.revenue - fixed - variable
-        bundesbeitrag = max(0.0, -profit)
-        post.cash += profit + bundesbeitrag
+        if self.cfg.post.reserve_enabled:
+            covered = min(self.reserve, max(0.0, -profit))
+            self.reserve = max(0.0, self.reserve + profit)
+            bundesbeitrag = max(0.0, -profit - covered)
+            post.cash = self.reserve
+        else:
+            bundesbeitrag = max(0.0, -profit)
+            post.cash += profit + bundesbeitrag
         self.bundesbeitrag_total += bundesbeitrag
         if bundesbeitrag > 0:
             state.events.append({
@@ -285,16 +304,29 @@ class CarrierMarket:
         self.adapt_network(runner.long_run.price_index)
 
         old = post.tariff
-        if self.smoothed_fuel_km is not None and self.smoothed_fuel_km > 0:
+        if self.cfg.post.revenue_realization and post.fuel_km > 0 and old > 0:
+            raw = min(1.0, max(0.3, post.revenue / (old * post.fuel_km)))
+            self.realization += self.cfg.post.realization_smoothing * (raw - self.realization)
+        # Cost-covering on the volume expected next year: the smoothed one, but not above last year's.
+        expected = self.smoothed_fuel_km
+        if expected is not None and self.cfg.post.expect_min_of_last and post.fuel_km > 0:
+            expected = min(expected, post.fuel_km)
+        if expected is not None and expected > 0:
             next_fixed = (
                 self.network_per_day
                 * self.days_per_year
                 * runner.long_run.price_index
             )
-            target = (
-                self.cfg.post.variable_rate
-                + next_fixed / self.smoothed_fuel_km
-            ) * (1 + self.cfg.post.margin)
+            # Cost-covering on the expected (smoothed) volume; the reserve gap is closed slowly.
+            reserve_gap = 0.0
+            if self.cfg.post.reserve_enabled:
+                reserve_gap = self.cfg.post.reserve_adjust * (
+                    self.cfg.post.reserve_target_years * next_fixed - self.reserve
+                )
+            target = max(0.0, (
+                self.variable_cost_rate(runner.long_run.price_index)
+                + (next_fixed + reserve_gap) / expected
+            ) * (1 + self.cfg.post.margin) / max(0.3, self.realization))
             desired = old + self.cfg.post.tariff_adjust * (target - old)
             step = self.cfg.post.max_tariff_step
             post.tariff = min(old * (1 + step), max(old * (1 - step), desired))
@@ -326,6 +358,8 @@ class CarrierMarket:
             "profit": round(profit, 2),
             "bundesbeitrag": round(bundesbeitrag, 2),
             "cash": round(post.cash, 2),
+            "reserve": round(self.reserve, 2),
+            "realization": round(self.realization, 4),
             "capacity_per_day": round(post.capacity_per_day, 1),
             "utilization": round(utilization, 4),
             "busy_days": post.busy_days,

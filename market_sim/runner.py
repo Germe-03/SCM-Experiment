@@ -219,7 +219,7 @@ class SimulationRunner:
         self.env.research = self.lab
         self.env.marketing = self.marketing
         self.exits = {}
-        return RunState(
+        state = RunState(
             daily_series={
                 firm.id: {
                     "inventory": [], "backlog": [], "cash": [],
@@ -233,6 +233,10 @@ class SimulationRunner:
             recent_demand={firm.id: [] for firm in self._firms()},
             recent_sales={firm.id: [] for firm in self._firms()},
         )
+        geo = self.env.geography
+        if geo is not None and getattr(geo, "trucks", None) is not None:
+            geo.trucks.register_all(self, state)  # Phase 56: the truck dealers are firms
+        return state
 
     def continue_run(
         self, state: RunState, until_year: int,
@@ -420,7 +424,7 @@ class SimulationRunner:
         })
 
     def add_firm(
-        self, firm: Firm, state: RunState, policy: FirmPolicy | None = None,
+        self, firm: Firm, state: RunState, policy: FirmPolicy | None = None, announce: bool = True,
     ) -> None:
         """Register a firm at a year boundary and align all result series."""
 
@@ -460,6 +464,8 @@ class SimulationRunner:
                 reputation=firm.reputation, capacity_utilization=0.0,
                 supplier_reliability={}, main_problems=["Not yet active"],
             )
+        if not announce:
+            return
         entry_year = state.year + 1
         state.market_entries[entry_year] = state.market_entries.get(entry_year, 0) + 1
         state.events.append({
@@ -566,6 +572,7 @@ class SimulationRunner:
                 if f.id in decisions
             ))
             global_day += 1
+            self._dealer_daily(daily_series)
             for firm in self._firms():
                 runtime = self.env.runtimes[firm.id]
                 series = daily_series[firm.id]
@@ -612,6 +619,7 @@ class SimulationRunner:
             starts, history_starts, price_totals, retailer_served, retailer_lost,
             utilization, previous,
         ))
+        self._add_dealer_summaries(summaries[-1], starts)
         reports, kpis = self._build_reports(
             year + 1, summaries[-1], price_totals, retailer_served,
             retailer_lost, stockout_days, utilization, daily_turnover,
@@ -620,6 +628,7 @@ class SimulationRunner:
             b2b_received, b2b_shipped, daily_prices,
         )
         kpis = self._add_experiment_kpis(kpis, reports, annual_reports[-1] if annual_reports else None, summaries[-1])
+        self._add_dealer_reports(reports, summaries[-1], year + 1)
         kpis = kpis.model_copy(update={
             "market_entries": state.market_entries.get(year + 1, 0),
         })
@@ -629,7 +638,7 @@ class SimulationRunner:
         annual_reports.append(reports)
         system_kpis.append(kpis)
         financial_ends = self._financial_snapshot_all()
-        for firm in self._firms():
+        for firm in self._reported_firms():
             start = financial_starts[firm.id]
             end = financial_ends[firm.id]
             financial_breakdown[firm.id].append({
@@ -654,7 +663,7 @@ class SimulationRunner:
         # P4b fix: exits are deterministic year-end events; cash freezes
         # from the following tick after the configured grace period.
         exits_before = len(self.exits)
-        for firm in self._firms():
+        for firm in self._reported_firms():
             runtime = self.env.runtimes[firm.id]
             if not runtime.active:
                 continue
@@ -735,7 +744,7 @@ class SimulationRunner:
         if self.stock_market is not None and self.stock_market.listed:
             system_kpis[-1] = system_kpis[-1].model_copy(update=self.stock_market.year_end_stats())
         # Taxes, fines, dividends and takeovers are booked after the accounts close: count them in this year.
-        for firm in self._firms():
+        for firm in self._reported_firms():
             if not financial_breakdown.get(firm.id):
                 continue
             begin = financial_starts.get(firm.id, {}).get("cash_flows", {})
@@ -759,6 +768,12 @@ class SimulationRunner:
             update[f"debt_{stage}"] = sum(max(0.0, -self.env.runtimes[f.id].cash) for f in firms
                                          if self.env.runtimes[f.id].active)
             update[f"active_firms_{stage}"] = sum(self.env.runtimes[f.id].active for f in firms)
+        dealers = self._dealers()
+        update["active_firms_truck_dealer"] = sum(self.env.runtimes[f.id].active for f in dealers)
+        update["negative_interest_truck_dealer"] = sum(financial_breakdown[f.id][-1]["negative_interest_cost"] for f in dealers)
+        update["interest_cost_truck_dealer"] = sum(financial_breakdown[f.id][-1]["interest_cost"] for f in dealers)
+        update["debt_truck_dealer"] = sum(max(0.0, -self.env.runtimes[f.id].cash) for f in dealers
+                                          if self.env.runtimes[f.id].active)
         system_kpis[-1] = system_kpis[-1].model_copy(update=update)
 
     def _phase10_kpis(self) -> dict[str, float]:
@@ -1129,6 +1144,55 @@ class SimulationRunner:
     @staticmethod
     def _clamp(value: float, low: float = 0.0, high: float = 1.0) -> float:
         return max(low, min(high, value))
+
+    def _dealers(self) -> list[Firm]:
+        """Phase 56: truck dealers, firms outside the beverage chain."""
+        return sorted(self.network.firms_in("truck_dealer"), key=lambda firm: firm.id)
+
+    def _reported_firms(self) -> list[Firm]:
+        return self._firms() + self._dealers()
+
+    def _dealer_daily(self, daily_series) -> None:
+        trucks = getattr(self.env.geography, "trucks", None) if self.env.geography is not None else None
+        for firm in self._dealers():
+            runtime = self.env.runtimes[firm.id]
+            series = daily_series[firm.id]
+            dealer = trucks.dealers.get(firm.id) if trucks is not None else None
+            series["inventory"].append(dealer.stock_total() if dealer is not None and runtime.active else 0)
+            series["backlog"].append(0)
+            series["cash"].append(runtime.cash)
+            series["cumulative_profit"].append(runtime.profit)
+
+    def _add_dealer_summaries(self, summaries, starts) -> None:
+        trucks = getattr(self.env.geography, "trucks", None) if self.env.geography is not None else None
+        for firm in self._dealers():
+            runtime = self.env.runtimes[firm.id]
+            revenue_start, profit_start = starts.get(firm.id, (0.0, 0.0))
+            dealer = trucks.dealers.get(firm.id) if trucks is not None else None
+            summaries[firm.id] = YearSummary(
+                revenue=runtime.revenue - revenue_start, profit=runtime.profit - profit_start,
+                avg_inventory=float(dealer.stock_total()) if dealer is not None and runtime.active else 0.0,
+                avg_backlog=0.0, lost_sales=0, service_level=1.0, avg_sell_price=0.0,
+                quality=runtime.quality_level, capacity_utilization=0.0, cash=runtime.cash)
+
+    def _add_dealer_reports(self, reports, summaries, year) -> None:
+        dealers = [f for f in self._dealers() if self.env.runtimes[f.id].active]
+        total = sum(summaries[f.id].revenue for f in dealers)
+        for firm in self._dealers():
+            summary = summaries[firm.id]
+            runtime = self.env.runtimes[firm.id]
+            problems = []
+            if runtime.cash < 0:
+                problems.append("Negative cash")
+            if summary.profit < 0:
+                problems.append("Losing money")
+            reports[firm.id] = AnnualReport(
+                archetype=firm.archetype, year=year, firm_id=firm.id, revenue=summary.revenue, profit=summary.profit,
+                market_share=summary.revenue / total if total and runtime.active else 0.0,
+                average_sell_price=0.0, average_quality=min(1.0, max(0.0, runtime.quality_level)),
+                stockout_days=0, lost_sales=0, employee_turnover=0.0, average_wage=0.0,
+                reputation=firm.reputation, capacity_utilization=0.0,
+                supplier_reliability={}, main_problems=problems)
 
     def _firms(self) -> list[Firm]:
         return sorted(

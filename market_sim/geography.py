@@ -209,18 +209,20 @@ class Geography:
         if utilization >= cfg.expand_utilization and capacity:
             units = max(1, round(capacity * cfg.expand_fraction))
             cost = units * unit_cost
-            if runtime.cash >= cfg.cash_cover * cost:
-                self._start(env, firm, "expand", units, cost, days, state)
-                return
-        if firm.stage == "retailer" and runtime.cash >= cfg.cash_cover * unit_cost * capacity * cfg.site_fraction:
+            if env.arrange_funding(firm.id, cost, "expand", cfg.cash_cover, commit=False):
+                if self._start(env, firm, "expand", units, cost, days, state):
+                    return
+        if (firm.stage == "retailer" and env.arrange_funding(
+                firm.id, unit_cost * capacity * cfg.site_fraction, "site", cfg.cash_cover, commit=False)):
             region = self._best_new_region(runner, firm)
             if region is not None:
                 units = max(1, round(capacity * cfg.site_fraction))
                 self._start(env, firm, "site", (region, units), units * unit_cost, days, state)
 
-    def _start(self, env, firm, kind, payload, cost, days, state) -> None:
-        if not env.can_spend(firm.id, cost):
-            return
+    def _start(self, env, firm, kind, payload, cost, days, state) -> bool:
+        # Phase 55: cash or investment loan (without loans: the old cash rule).
+        if not env.arrange_funding(firm.id, cost, kind, self.cfg.cash_cover, state):
+            return False
         cfg = self.cfg
         build = cfg.build_days.get(firm.stage, days)
         finish = env.period + build
@@ -230,6 +232,7 @@ class Geography:
         what = f"+{payload} Kapazität" if kind == "expand" else f"Standort {payload[0]}"
         state.events.append({"year": state.year, "day": days, "firm": firm.id, "event": f"{kind}_started",
                              "details": f"{what}, Kosten {chf(cost)}, fertig in {build} Tagen"})
+        return True
 
     def _finish_projects(self, runner, state) -> None:
         env = runner.env

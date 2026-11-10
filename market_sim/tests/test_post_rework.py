@@ -42,7 +42,8 @@ def _simulate_year(market, runner, year, volume, load_days=0.0):
 
 
 def test_start_tariff_covers_costs_at_start_volume():
-    runner, market = _market()
+    # The reserve nudge (Phase 54) is off here: the artificial first year has no network cost yet.
+    runner, market = _market(_config(reserve_adjust=0.0))
     volume = 1e7
 
     _simulate_year(market, runner, 1, volume)
@@ -104,3 +105,32 @@ def test_carrier_config_defaults():
 
     assert config.carriers.enabled is True
     assert config.carriers.couriers.enabled is True
+
+
+def test_post_reserve_pays_losses_before_the_bund():
+    runner, market = _market(_config(reserve_adjust=0.0))
+    volume = 1e7
+    _simulate_year(market, runner, 1, volume)
+    assert market.reserve > 0
+    reserve = market.reserve
+
+    # A loss smaller than the reserve is paid from it, the Bund pays nothing.
+    market.post.days = market.days_per_year
+    market.post.fuel_km = market.post.unit_km = volume
+    market.post.revenue = market.fixed_cost_year(runner) * 0 + 0.9 * volume + market.fixed_cost_year(
+        SimpleNamespace(long_run=SimpleNamespace(price_index=1.0))) - 0.5 * reserve
+    state = SimpleNamespace(year=2, events=[])
+    market.year_end(SimpleNamespace(long_run=SimpleNamespace(price_index=1.0), env=runner.env), state)
+    row = market.reports[-1]
+    assert row["bundesbeitrag"] == 0
+    assert row["reserve"] == pytest.approx(0.5 * reserve, rel=0.01)
+
+    # A loss larger than the reserve is covered by the Bund for the rest only.
+    market.post.days = market.days_per_year
+    market.post.fuel_km = market.post.unit_km = volume
+    market.post.revenue = 0.0
+    market.year_end(SimpleNamespace(long_run=SimpleNamespace(price_index=1.0), env=runner.env),
+                    SimpleNamespace(year=3, events=[]))
+    row = market.reports[-1]
+    assert row["reserve"] == 0
+    assert row["bundesbeitrag"] == pytest.approx(-row["profit"] - 0.5 * reserve, rel=0.01)

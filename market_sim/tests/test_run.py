@@ -59,6 +59,7 @@ def test_bankruptcy_exits_in_result_and_outputs(tmp_path, capsys, enabled):
     config = config.model_copy(update={
         "bank": config.bank.model_copy(update={"enabled": False}),
         "market_entry": config.market_entry.model_copy(update={"enabled": False}),
+        "trucks": config.trucks.model_copy(update={"enabled": False}),  # no truck dealers (Phase 56)
         "bankruptcy": config.bankruptcy.model_copy(update={
             "enabled": enabled, "cash_threshold": 1e15, "min_years_before_exit": 1,
             "min_firms_per_stage": 0, "max_exits_per_stage_per_year": 0,

@@ -84,6 +84,8 @@ def test_full_run_is_deterministic_and_strategies_stay_bounded(ten_year_results)
     config = load_market_config()
     for reports in first.annual_reports:
         for firm_id, report in reports.items():
+            if first.network.firm(firm_id).stage not in config.stage_prices:
+                continue  # Phase 56: truck dealers have no price band
             band = config.stage_prices[first.network.firm(firm_id).stage]
             assert band.min <= report.average_sell_price <= band.max
             assert 0 <= report.average_quality <= config.rnd.quality_cap
