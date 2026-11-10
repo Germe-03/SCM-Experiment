@@ -11,7 +11,8 @@ def _config(enabled=True, couriers=False, **post):
     carriers = config.carriers.model_copy(update={
         "enabled": enabled, "post": config.carriers.post.model_copy(update=post),
         "couriers": config.carriers.couriers.model_copy(update={"enabled": couriers})})
-    return config.model_copy(update={"carriers": carriers})
+    trucks = config.trucks.model_copy(update={"enabled": False})
+    return config.model_copy(update={"carriers": carriers, "trucks": trucks})
 
 
 def _run(config, years=2, days=30, seed=0):

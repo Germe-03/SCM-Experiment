@@ -25,6 +25,7 @@ from market_sim.laws import LawBook, assess_laws
 from market_sim.labor import LaborMarket
 from market_sim.config import MarketConfig, MarketEventTypeConfig
 from market_sim.environment import MarketEnvironment, MarketResult
+from market_sim.classification import classify, observe
 from market_sim.kpi import ARCHETYPE_DE, REGION_DE, STAGE_DE, chf
 from market_sim.kpi import (
     AnnualReport, BankAnnualReport, SystemKPIs, bullwhip_variance_ratio, herfindahl_index,
@@ -75,6 +76,8 @@ class RunResult:
     patents: list[dict[str, object]] = field(default_factory=list)
     # Phase 28: one row per year and carrier (Post, later couriers).
     carriers: list[dict[str, object]] = field(default_factory=list)
+    # Phase 53: truck fleets, used trucks, dealers.
+    trucks: dict = field(default_factory=dict)
     offence_ledger: list[dict[str, object]] = field(default_factory=list)
     holdings: list[dict[str, object]] = field(default_factory=list)
     # Phase 40: holdings with subsidiaries (one snapshot per group at the end) and their log.
@@ -265,6 +268,8 @@ class SimulationRunner:
             brand_reports=list(state.brand_reports), class_reports=list(state.class_reports),
             rnd_reports=list(self.lab.reports) if self.lab is not None else [],
             patents=self.patent_office.report() if self.patent_office is not None else [],
+            trucks=(self.env.geography.trucks.export()
+                    if self.env.geography is not None and getattr(self.env.geography, "trucks", None) is not None else {}),
             carriers=list(self.env.geography.carriers.reports)
             if self.env.geography is not None and self.env.geography.carriers is not None else [],
             holdings=list(self.holdings.history) + self.holdings.snapshot(state.year) if self.holdings is not None else [],
@@ -685,8 +690,9 @@ class SimulationRunner:
             if central_bank.year_end(self.long_run.inflation, sum(demand_series), expected_demand):
                 state.events.append({
                     "year": state.year, "day": self.config.simulation.days_per_year, "firm": "SNB",
-                    "event": "policy_rate_changed",
-                    "details": f"Leitzins Folgejahr {central_bank.policy_rate:.2%}, "
+                    "event": "policy_rate_emergency" if central_bank.last_emergency else "policy_rate_changed",
+                    "details": ("Ausserordentlicher Eingriff: " if central_bank.last_emergency else "")
+                               + f"Leitzins Folgejahr {central_bank.policy_rate:.2%}, "
                                f"Teuerung {central_bank.inflation:.2%}, "
                                f"Konjunkturlücke (Modellindikator) {central_bank.output_gap:.2%}",
                 })
@@ -928,6 +934,7 @@ class SimulationRunner:
             firm = template.model_copy(deep=True, update={
                 "id": f"{stage}_e{counter:02d}", "name": name,
                 "archetype": archetypes[int(archetype_roll * len(archetypes))],
+                "tendency": archetypes[int(archetype_roll * len(archetypes))],
                 "cash": cfg.start_cash_fraction * self._entry_cash[stage],
                 "capacity": max(1, round(template.capacity * capacity_share)),
                 "machine_capacity": max(1, round(template.machine_capacity * capacity_share))
@@ -937,82 +944,43 @@ class SimulationRunner:
                 "quality_level": template.quality_level * cfg.start_quality_fraction,
                 "inventory": 0, "backlog": 0, "suppliers": [],
                 "region": self.env.geography.entrant_region(self, stage) if self.env.geography else template.region,
-                "extra_regions": [], "transport_mode": "own",
+                "extra_regions": [], "transport_mode": "service" if self.config.trucks.enabled else "own",
             })
             self.add_firm(firm, state)
             # add_firm also supports external registration before the next year.
             state.market_entries[state.year + 1] -= 1
             state.market_entries[state.year] = state.market_entries.get(state.year, 0) + 1
             state.events[-1].update(year=state.year, day=self.config.simulation.days_per_year,
-                                    details=f"Strategie {ARCHETYPE_DE.get(firm.archetype, firm.archetype)}")
+                                    details=f"Anfangs eingestuft als {ARCHETYPE_DE.get(firm.archetype, firm.archetype)}")
+            if isinstance(self.lab, ResearchTreeLab):
+                self.lab.inherit_on_entry(self, state, firm, active)
 
     def _change_strategies(self, state: RunState) -> int:
-        """Use a simultaneous ranking and two unconditional draws per firm."""
+        """Phase 52: firms act freely; classify each one into the nearest existing strategy.
+
+        The two draws per firm are kept (unused) so that all later random streams stay unchanged.
+        """
         cfg = self.config.strategy_change
-        bottom = set()
-        rankings = {}
-        mean_returns: dict[str, dict[str, float]] = {}
-        for stage in STAGES:
-            active = [f for f in self.network.firms_in(stage)
-                      if self.env.runtimes[f.id].active and state.annual_reports[-1][f.id].archetype]
-            ordered = sorted(active, key=lambda f: (
-                state.summaries[-1][f.id].profit / max(1.0, state.summaries[-1][f.id].revenue), f.id))
-            bottom.update(f.id for f in ordered[:len(ordered) // 3])
-            returns: dict[str, list[float]] = {}
-            for reports in state.annual_reports[-cfg.imitation_window_years:]:
-                for f in active:
-                    report = reports[f.id]
-                    if report.archetype and report.revenue > 0:
-                        returns.setdefault(report.archetype, []).append(report.profit / report.revenue)
-            rankings[stage] = sorted(returns, key=lambda a: (-sum(returns[a]) / len(returns[a]), a))
-            mean_returns[stage] = {a: sum(v) / len(v) for a, v in returns.items()}
         changes = 0
         for firm in self._firms():
-            roll, choice_roll = self._phase1_rng.random(), self._phase1_rng.random()
+            self._phase1_rng.random(), self._phase1_rng.random()
             runtime = self.env.runtimes[firm.id]
+            strategy = self.strategies.get(firm.id)
             if (not cfg.enabled or not runtime.active or firm.stage not in cfg.stages
-                    or not state.annual_reports[-1][firm.id].archetype):
-                continue
-            summary = state.summaries[-1][firm.id]
-            bad = summary.profit < 0 or (cfg.count_bottom_third and firm.id in bottom)
-            runtime.consecutive_bad_years = runtime.consecutive_bad_years + 1 if bad else 0
-            if runtime.consecutive_bad_years < cfg.bad_years_trigger or (
-                runtime.last_strategy_change_year is not None
-                and state.year - runtime.last_strategy_change_year < cfg.lockout_years
-            ):
+                    or strategy is None or not state.annual_reports[-1][firm.id].archetype):
                 continue
             old = firm.archetype
-            reason = "explore" if roll < cfg.explore_probability else "imitate"
-            options = sorted(a for a in FirmPolicy._PRESETS if a != old) if reason == "explore" else [
-                a for a in rankings[firm.stage] if a != old]
-            if reason == "imitate" and options:
-                returns = mean_returns[firm.stage]
-                own = returns.get(old, float("-inf"))
-                if returns[options[0]] - own < cfg.min_return_gap:
-                    options = []
-            if not options:
+            new = classify(firm.stage, observe(firm, strategy, self.config), old, cfg.hysteresis)
+            if new == old:
                 continue
-            new = options[int(choice_roll * len(options))] if reason == "explore" else options[0]
             firm.archetype = new
-            cost = cfg.switch_cost_fraction_of_revenue * summary.revenue
-            runtime.fixed_cost += cost
-            runtime.cash -= cost
-            firm.reputation = self._clamp(firm.reputation - cfg.reputation_dip)
-            runtime.consecutive_bad_years = 0
             runtime.last_strategy_change_year = state.year
-            state.summaries[-1][firm.id] = replace(summary, profit=summary.profit - cost, cash=runtime.cash)
             report = state.annual_reports[-1][firm.id]
-            state.annual_reports[-1][firm.id] = report.model_copy(update={
-                "profit": report.profit - cost, "reputation": firm.reputation,
-            })
-            financial = state.financial_breakdown[firm.id][-1]
-            financial["fixed_cost"] += cost
-            financial["profit"] -= cost
-            financial["cash"] = runtime.cash
+            state.annual_reports[-1][firm.id] = report.model_copy(update={"archetype": new})
             state.events.append({"year": state.year, "day": self.config.simulation.days_per_year,
                                  "firm": firm.id, "event": "strategy_change",
-                                 "details": f"{ARCHETYPE_DE.get(old, old)} → {ARCHETYPE_DE.get(new, new)}, "
-                                            f"{'ausprobiert' if reason == 'explore' else 'nachgeahmt'}"})
+                                 "details": f"Neu eingestuft: {ARCHETYPE_DE.get(old, old)} → "
+                                            f"{ARCHETYPE_DE.get(new, new)}"})
             changes += 1
         return changes
 

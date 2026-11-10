@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import math
+
+from market_sim.models import behaviour_of
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -28,7 +30,7 @@ class Marketing:
             runtime = env.runtimes[firm.id]
             if not self.cfg.enabled or not runtime.active or runtime.cash <= 0:
                 continue
-            share = self.cfg.budget_share.get(runner.network.firm(firm.id).archetype, 0.0)
+            share = self.cfg.budget_share.get(behaviour_of(runner.network.firm(firm.id)), 0.0)
             if firm.stage in ("wholesaler", "distributor"):
                 continue  # trade firms do not advertise to consumers
             self.daily_budget[firm.id] = share * runtime.last_year_revenue / days

@@ -37,6 +37,8 @@ def test_damage_hits_only_own_fleet_shipments():
     geo.cfg.damage_probability = 1.0
     supplier, customer = runner.network.firm("wholesaler_01"), runner.network.firm("retailer_01")
     supplier.transport_mode = "own"
+    from market_sim.trucks import Truck
+    geo.trucks.fleets[supplier.id] = [Truck(id="t", type="gross", owner=supplier.id)]
     parcel = {"alpen_lager": 100}
     assert geo.ship(env, supplier, customer, parcel) == 5 and parcel["alpen_lager"] == 95
     supplier.transport_mode = "service"

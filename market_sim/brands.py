@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from math import floor
 from typing import TYPE_CHECKING
 
+from market_sim.models import behaviour_of
 from market_sim.config import MarketConfig
 from market_sim.models import Firm
 
@@ -125,9 +126,9 @@ class BrandBook:
     def add_brand_for(self, firm: Firm) -> str:
         """Give a new brewery its own brand, positioned by its archetype."""
         brand_id = f"{firm.id}_brand"
-        positioning = self.cfg.entrant_positioning.get(firm.archetype, "standard")
+        positioning = self.cfg.entrant_positioning.get(behaviour_of(firm), "standard")
         if firm.category == "beer":
-            traits = list(self.cfg.entrant_traits.get(firm.archetype, ["lager"]))
+            traits = list(self.cfg.entrant_traits.get(behaviour_of(firm), ["lager"]))
         else:
             traits = [firm.category]
         trend_trait = getattr(self, "entrant_trait", None)
@@ -208,7 +209,7 @@ class BrandBook:
         if firm.stage != "retailer":
             return self.global_weight
         own = self.retail_weight.get(firm.id, self.global_weight)
-        bias = self.cat_cfg.retailer_bias.get(firm.archetype)
+        bias = self.cat_cfg.retailer_bias.get(behaviour_of(firm))
         if not bias:
             return own
         bw = self.cat_cfg.bias_weight

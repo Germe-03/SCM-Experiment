@@ -26,17 +26,30 @@ class FirmPolicy:
         "growth": (0.35, 1.03, 1.20, 0.76, "capacity", 9, 0.75, 3, 0.45),
     }
 
+    @classmethod
+    def price_position(cls, stage: str, archetype: str) -> float:
+        """Price position (0 = band floor, 1 = ceiling) that an archetype aims at."""
+        position = cls._PRESETS.get(archetype, cls._PRESETS["standard"])[0]
+        if stage == "factory" and archetype == "growth":
+            return 0.2
+        if archetype == "low_cost":
+            return 0.3
+        if stage == "retailer":
+            return {"standard": 0.457, "reliable": 0.50, "growth": 0.303,
+                    "premium": 0.58}.get(archetype, position)
+        return position
+
     def decide_annual(
         self, firm: Firm, last_summary: "YearSummary | None", config: MarketConfig,
         rival_price: float | None = None,
     ) -> AnnualStrategy:
-        preset = self._PRESETS.get(firm.archetype, self._PRESETS["standard"])
+        preset = self._PRESETS.get(firm.behaviour, self._PRESETS["standard"])
         price_position, wage, rnd, quality, priority, stock, risk, hires, overtime = preset
         # The network has no low-cost factory. Its growth factory supplies the
         # discount chain and therefore needs a source-stage price position.
-        if firm.stage == "factory" and firm.archetype == "growth":
+        if firm.stage == "factory" and firm.behaviour == "growth":
             price_position = 0.2
-        elif firm.archetype == "low_cost":
+        elif firm.behaviour == "low_cost":
             # Discount firms sit below the stage base price, but not at the floor:
             # at 0.2 retail discounters went bankrupt in most seeds.
             price_position = 0.3
@@ -49,7 +62,7 @@ class FirmPolicy:
                 "reliable": 0.50,
                 "growth": 0.303,
                 "premium": 0.58,
-            }.get(firm.archetype, price_position)
+            }.get(firm.behaviour, price_position)
         stage_band = config.stage_prices[firm.stage]
         # Firms position themselves around the stage base price, not across
         # the full (wide) safety band.
@@ -60,7 +73,7 @@ class FirmPolicy:
         # P3 fix: retain a light own-price anchor inside the stage band.
         anchor = max(band_low, min(band_high, firm.sell_price))
         base = max(band_low, min(band_high, 0.25 * anchor + 0.75 * archetype_price))
-        positioning = firm.archetype
+        positioning = firm.behaviour
         rnd_multiplier = rnd
         stock_days = stock
         adaptive = config.adaptive_strategy
@@ -141,7 +154,7 @@ class FirmPolicy:
         low = max(band_low, base - half_band)
         high = min(band_high, base + half_band)
         if last_summary is None:
-            effective_hires = hires if firm.archetype == "growth" else 0
+            effective_hires = hires if firm.behaviour == "growth" else 0
         elif last_summary.capacity_utilization > 0.85:
             effective_hires = min(adaptive.max_hires_per_year, max(1, hires))
         elif last_summary.capacity_utilization < 0.40:

@@ -41,19 +41,22 @@ function rndTreeSvg(tree,firmId=null){
   delete visiting[name];depths[name]=value;return value
  }
  stages.forEach(stage=>depth(stage.name));
- const columns={};stages.forEach(stage=>{const d=depths[stage.name];if(!columns[d])columns[d]=[];columns[d].push(stage.name)});
- const positions={};let maxDepth=0,maxRows=1;
- Object.keys(columns).forEach(key=>{const d=Number(key);maxDepth=Math.max(maxDepth,d);maxRows=Math.max(maxRows,columns[key].length);columns[key].forEach((name,i)=>{positions[name]={x:20+i*270,y:20+d*120}})});
- const width=40+(maxRows-1)*270+250,height=40+maxDepth*120+76,progress=rndProgress(tree,firmId),suffix=String(tree)+'-'+String(firmId||'sector'),marker='rnd-arrow-'+suffix.replace(/[^a-zA-Z0-9_-]/g,'_');
- let svg='<svg width="100%" viewBox="0 0 '+width+' '+height+'" role="img" aria-label="'+esc(rndTreeNames()[tree]||tree)+'">';
+ const branchNames={automation:'Automation',rezeptur:'Rezeptur',verpackung:'Verpackung',energie:'Energie',marke:'Marke',wein:'Wein',qualitaet:'Qualität',logistik:'Logistik',lager:'Lager',kunden:'Kunden'};
+ const branches=[],positions={};let maxDepth=0;
+ stages.forEach(stage=>{const b=stage.branch||'sonstige';if(!branches.includes(b))branches.push(b)});
+ const colW=220,nodeW=200;
+ stages.forEach(stage=>{const d=depths[stage.name],col=branches.indexOf(stage.branch||'sonstige');maxDepth=Math.max(maxDepth,d);positions[stage.name]={x:10+col*colW,y:44+d*120}});
+ const width=20+branches.length*colW,height=44+maxDepth*120+90,progress=rndProgress(tree,firmId),suffix=String(tree)+'-'+String(firmId||'sector'),marker='rnd-arrow-'+suffix.replace(/[^a-zA-Z0-9_-]/g,'_');
+ let svg='<svg width="100%" viewBox="0 0 '+width+' '+height+'" style="min-width:'+width+'px" role="img" aria-label="'+esc(rndTreeNames()[tree]||tree)+'">';
+ branches.forEach((b,i)=>{svg+='<text data-branch="'+esc(b)+'" x="'+(10+i*colW+nodeW/2)+'" y="22" text-anchor="middle" fill="var(--ink)" font-size="13" font-weight="600">'+esc(branchNames[b]||(b.charAt(0).toUpperCase()+b.slice(1)))+'</text>'});
  svg+='<defs><marker id="'+esc(marker)+'" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="var(--muted)"/></marker></defs>';
  stages.forEach(stage=>(stage.requires||[]).filter(name=>byName[name]).forEach(name=>{
-  const from=positions[name],to=positions[stage.name],x1=from.x+125,y1=from.y+76,x2=to.x+125,y2=to.y-2,mid=(y1+y2)/2,edge=esc(name).replace(/&gt;/g,'>')+'>'+esc(stage.name).replace(/&gt;/g,'>');
-  svg+='<path data-edge="'+edge+'" d="M'+x1+' '+y1+' C'+x1+' '+mid+' '+x2+' '+mid+' '+x2+' '+y2+'" fill="none" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#'+esc(marker)+')"/>'
+  const from=positions[name],to=positions[stage.name],cross=(byName[name].branch||'')!==(stage.branch||''),x1=from.x+nodeW/2,y1=from.y+76,x2=to.x+nodeW/2,y2=to.y-2,mid=(y1+y2)/2,edge=esc(name).replace(/&gt;/g,'>')+'>'+esc(stage.name).replace(/&gt;/g,'>');
+  svg+='<path data-edge="'+edge+'" d="M'+x1+' '+y1+' C'+x1+' '+mid+' '+x2+' '+mid+' '+x2+' '+y2+'" fill="none" stroke="var(--muted)" stroke-width="'+(cross?'1':'1.5')+'"'+(cross?' stroke-dasharray="4 3" opacity=".55"':'')+' marker-end="url(#'+esc(marker)+')"/>'
  }));
  stages.forEach(stage=>{
   const name=stage.name,pos=positions[name],info=progress[name],state=firmId?(info.firms[firmId]||'open'):(info.implemented?'implemented':info.researched?'researched':'open');
-  const patent=rndPatent(tree,name,range.to),active=patent&&patent.active;
+  const patent=rndPatent(tree,name,range.to),active=patent&&patent.active,expired=patent&&!patent.active;
   let style=state==='implemented'?'fill:var(--good);fill-opacity:.18;stroke:var(--good)':state==='researched'?'fill:var(--c4);fill-opacity:.18;stroke:var(--c4)':'fill:var(--soft);stroke:var(--line)';
   style+=';stroke-width:'+(active?'3':'1');
   if(active)style=style.replace(/stroke:var\(--(?:good|c4|line)\)/,'stroke:var(--accent)');
@@ -67,11 +70,11 @@ function rndTreeSvg(tree,firmId=null){
     lines.push(patentLine)
    }else lines.push('Patent abgelaufen (Jahr '+esc(patent.end_year)+')')
   }else if(stage.patentable)lines.push('patentierbar');
-  svg+='<g data-stage="'+esc(name)+'" data-state="'+state+'"><title>'+esc(label)+'</title><rect x="'+pos.x+'" y="'+pos.y+'" width="250" height="76" rx="9" style="'+style+'"/><text x="'+(pos.x+10)+'" y="'+(pos.y+19)+'" fill="var(--ink)" font-size="12">'+esc(label)+'</text>';
+  svg+='<g data-stage="'+esc(name)+'" data-state="'+state+'"'+(expired?' data-patent="expired"':'')+'><title>'+esc(label)+'</title><rect x="'+pos.x+'" y="'+pos.y+'" width="'+nodeW+'" height="76" rx="9" style="'+style+'"/>'+(expired?'<rect x="'+(pos.x-3)+'" y="'+(pos.y-3)+'" width="'+(nodeW+6)+'" height="82" rx="11" fill="none" stroke="#8b5cf6" stroke-width="2" stroke-dasharray="5 3"/>':'')+'<text x="'+(pos.x+10)+'" y="'+(pos.y+19)+'" fill="var(--ink)" font-size="12">'+esc(label)+'</text>';
   lines.forEach((line,i)=>{svg+='<text x="'+(pos.x+10)+'" y="'+(pos.y+36+i*14)+'" fill="var(--muted)" font-size="11">'+line+'</text>'});
   svg+='</g>'
  });
- return svg+'</svg>'
+ return '<div style="overflow-x:auto">'+svg+'</svg></div>'
 }
 function renderRndTrees(){
  const names=rndTreeNames(),trees=Object.keys(names).filter(tree=>D.rnd_trees&&D.rnd_trees[tree]);
@@ -79,7 +82,7 @@ function renderRndTrees(){
  let tree=S.rdTree||store.get('rd-tree','factory');if(!trees.includes(tree))tree=trees[0];S.rdTree=tree;
  $('#rd-tree-chips').innerHTML=trees.map(key=>'<button class="chip" data-tree="'+esc(key)+'" aria-pressed="'+(key===tree?'true':'false')+'">'+esc(names[key])+'</button>').join('');
  $('#rd-tree-chips').onclick=e=>{const b=e.target.closest('button[data-tree]');if(!b)return;S.rdTree=b.dataset.tree;store.set('rd-tree',S.rdTree);renderRndTrees()};
- $('#rd-tree').innerHTML='<p class="hint"><span style="color:var(--good)">■</span> umgesetzt · <span style="color:var(--c4)">■</span> erforscht · <span style="color:var(--muted)">■</span> offen · <span style="color:var(--accent)">■</span> Patent aktiv · Stand Ende Jahr '+range.to+'</p>'+rndTreeSvg(tree)
+ $('#rd-tree').innerHTML='<p class="hint"><span style="color:var(--good)">■</span> umgesetzt · <span style="color:var(--c4)">■</span> erforscht · <span style="color:var(--muted)">■</span> offen · <span style="color:var(--accent)">■</span> Patent aktiv · <span style="color:#8b5cf6">■</span> Patent abgelaufen · Stand Ende Jahr '+range.to+'</p>'+rndTreeSvg(tree)
 }
 function renderPatentTable(){
  const rows=(D.patents||[]).filter(row=>row.granted_year<=range.to).slice().sort((a,b)=>b.granted_year-a.granted_year);

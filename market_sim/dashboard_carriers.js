@@ -1,4 +1,4 @@
-// Phase 30: Post und Kuriere im Reiter Transport.
+// Phase 30/46: Post und Kuriere im Reiter Kuriere.
 function carrierYears(){
  return [...new Set((D.carriers||[]).map(row=>row.year))].sort((a,b)=>a-b)
 }
@@ -12,7 +12,7 @@ function couriersByRegion(year){
  }
  return counts
 }
-function renderTransport(){
+function renderCouriers(){
  const rows=D.carriers||[];
  if(!rows.length){
   $('#tr-kpis').innerHTML=empty('Post und Kuriere sind in diesem Lauf ausgeschaltet (carriers.enabled).');
@@ -45,7 +45,7 @@ function renderTransport(){
  }))},options:{scales:{
   x:{grid:{display:false}},
   y:{stacked:true,min:0,max:100,ticks:{callback:value=>pct(value/100)}}
- }}});
+ },plugins:{tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${pct((c.parsed.y||0)/100)}`}}}}});
 
  chart('tr-post',{type:'bar',data:{labels:years,datasets:[
   {label:'Bundesbeitrag (Mio. CHF)',data:yearsWithRows.map(row=>row?row.bundesbeitrag/1e6:null),backgroundColor:pal()[0]+'aa',yAxisID:'y',order:2},
@@ -108,3 +108,5 @@ function renderTransport(){
  }).join('');
  $('#tr-table').innerHTML=`<thead><tr>${headers.map((header,index)=>`<th${index>=4&&index<=8?' class="num"':''}>${header}</th>`).join('')}</tr></thead><tbody>${body}</tbody>`
 }
+
+function renderTransport(){renderCouriers()}

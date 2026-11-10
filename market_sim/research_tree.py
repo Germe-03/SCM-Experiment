@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from market_sim.models import behaviour_of
 from market_sim.config import ResearchStageConfig
 from market_sim.kpi import PROJECT_DE, chf
 from market_sim.research import ResearchLab
@@ -29,6 +30,7 @@ class ResearchTreeLab(ResearchLab):
         self.progress: dict[str, dict[str, str]] = {}
         self.first_success: dict[tuple[str, str], int] = {}
         self.running: dict[str, tuple[str, int, int, float, int, str, str]] = {}
+        self.inherited_stages = 0
 
     def daily(self, env) -> None:
         for firm_id, (_, _, end, daily_cost, _, _, _) in self.running.items():
@@ -85,6 +87,58 @@ class ResearchTreeLab(ResearchLab):
             ):
                 buyer_progress[name] = "researched"
         self.running.pop(seller_id, None)
+
+    def inherit_on_entry(self, runner: SimulationRunner, state: RunState, firm, peers: list) -> list[str]:
+        """Phase 51: a new firm gets implemented stages in proportion to its industry's research level.
+
+        The share is the mean share of implemented stages of the active peers (same tree, same
+        category); popular stages come first, prerequisites must be met and stages held under
+        another firm's patent are skipped. Deterministic, no random draws.
+        """
+        cfg = self.cfg
+        if not cfg.enabled or not cfg.entry_inheritance_enabled:
+            return []
+        tree = tree_key(firm)
+        tree_stages = self.stages.get(tree, {})
+        available = [s for s in tree_stages.values() if self.available(firm, s)]
+        same = [p for p in peers if p.id != firm.id and tree_key(p) == tree and p.category == firm.category]
+        same = same or [p for p in peers if p.id != firm.id and tree_key(p) == tree]
+        if not available or not same:
+            return []
+        shares = []
+        for peer in same:
+            mine = [s for s in tree_stages.values() if self.available(peer, s)]
+            done = sum(1 for s in mine if self.progress.get(peer.id, {}).get(s.name) == "implemented")
+            shares.append(done / len(mine) if mine else 0.0)
+        target = round(sum(shares) / len(shares) * cfg.entry_inheritance_factor * len(available))
+        office = getattr(runner, "patent_office", None)
+        popularity = {s.name: sum(1 for p in same if self.progress.get(p.id, {}).get(s.name) == "implemented")
+                      for s in available}
+        order = {name: i for i, name in enumerate(tree_stages)}
+        granted: list[str] = []
+        progress = self.progress.setdefault(firm.id, {})
+        while len(granted) < target:
+            candidates = [
+                s for s in available
+                if progress.get(s.name) != "implemented" and popularity[s.name] > 0
+                and self.requirements_met(firm, tree, s)
+                and not (office is not None and office.blocked(firm.id, tree, s.name))
+            ]
+            if not candidates:
+                break
+            stage = max(candidates, key=lambda s: (popularity[s.name], -order[s.name]))
+            self._apply_stage(runner, firm, stage)
+            progress[stage.name] = "implemented"
+            granted.append(stage.name)
+        if granted:
+            self.inherited_stages += len(granted)
+            state.events.append({
+                "year": state.year, "day": runner.config.simulation.days_per_year, "firm": firm.id,
+                "event": "rnd_inherited",
+                "details": f"Forschungsstand der Branche übernommen: {len(granted)} Stufen "
+                           f"({', '.join(PROJECT_DE.get(n, n) for n in granted)})",
+            })
+        return granted
 
     def year_end(self, runner: SimulationRunner, state: RunState) -> None:
         env = runner.env
@@ -237,7 +291,7 @@ class ResearchTreeLab(ResearchLab):
                 continue
 
             options = self.options(firm)
-            preferred_branches = self.cfg.branch_preferences.get(firm.archetype, [])
+            preferred_branches = self.cfg.branch_preferences.get(behaviour_of(firm), [])
             preferred = [stage for stage in options if stage.branch in preferred_branches]
             pool = preferred or options
             if not pool or choice_roll >= self.cfg.start_probability:

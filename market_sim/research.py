@@ -5,6 +5,7 @@ from __future__ import annotations
 import random
 from typing import TYPE_CHECKING
 
+from market_sim.models import behaviour_of
 from market_sim.brands import Brand
 from market_sim.kpi import PROJECT_DE, chf
 
@@ -63,7 +64,7 @@ class ResearchLab:
                 continue
             options = [p for p in self.cfg.projects if p.enabled and firm.stage in p.stages
                        and (p.kind != "alkoholfrei" or firm.category == "beer")]
-            preferred = [p for p in options if p.name in self.cfg.preferences.get(firm.archetype, [])]
+            preferred = [p for p in options if p.name in self.cfg.preferences.get(behaviour_of(firm), [])]
             pool = preferred or options
             if not pool or choice_roll >= self.cfg.start_probability:
                 continue

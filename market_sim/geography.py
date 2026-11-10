@@ -39,6 +39,14 @@ class Geography:
             from market_sim.couriers import CourierMarket
             market = CourierMarket if config.carriers.couriers.enabled else CarrierMarket
             self.carriers = market(config, self, seed)
+        # Phase 53: own truck fleets; every shipper starts with the Post and builds a fleet later.
+        self.trucks = None
+        if getattr(config, "trucks", None) is not None and config.trucks.enabled and self.carriers is not None:
+            from market_sim.trucks import TruckMarket
+            self.trucks = TruckMarket(config, self, seed)
+            for firm in firms:
+                if firm.stage != "retailer":
+                    firm.transport_mode = "service"
         for index, firm in enumerate(sorted(firms, key=lambda f: (STAGES.index(f.stage), f.id))):
             if firm.region is None:
                 firm.region = self._default_region(firm.stage, index)
@@ -59,15 +67,19 @@ class Geography:
                 best = min(best, math.hypot(pa.x - pb.x, pa.y - pb.y) * self.cfg.road_factor + self.cfg.local_km)
         return best
 
-    def rate(self, firm: Firm) -> float:
-        base = self.cfg.service_rate if firm.transport_mode == "service" else self.cfg.own_rate
+    def rate(self, firm: Firm, service: bool | None = None) -> float:
+        if service is None:
+            service = firm.transport_mode == "service"
+        base = self.cfg.service_rate if service else self.cfg.own_rate
         return base * self.fuel_index * self.transport_factor.get(firm.id, 1.0)
 
-    def unit_transport_cost(self, supplier: Firm, customer: Firm) -> float:
-        if self.carriers is not None and supplier.transport_mode == "service":
+    def unit_transport_cost(self, supplier: Firm, customer: Firm, service: bool | None = None) -> float:
+        if service is None:
+            service = supplier.transport_mode == "service"
+        if self.carriers is not None and service:
             return self.km(supplier, customer) * (self.carriers.rate(supplier, customer)
                                                   * self.fuel_index * self.transport_factor.get(supplier.id, 1.0))
-        return self.km(supplier, customer) * self.rate(supplier)
+        return self.km(supplier, customer) * self.rate(supplier, service)
 
     def ship(self, env: MarketEnvironment, supplier: Firm, customer: Firm, parcel: dict[str, int]) -> int:
         """Book transport cost; an own fleet may damage goods. Returns destroyed units."""
@@ -75,7 +87,11 @@ class Geography:
         units = sum(parcel.values())
         if not units:
             return 0
-        cost = units * self.unit_transport_cost(supplier, customer)
+        service = supplier.transport_mode == "service"
+        if self.trucks is not None and supplier.stage != "retailer":
+            # Own fleet first; what exceeds today's truck capacity goes with the Post.
+            service = not (supplier.transport_mode == "own" and self.trucks.try_ship(supplier.id, units))
+        cost = units * self.unit_transport_cost(supplier, customer, service)
         runtime = env.runtimes[supplier.id]
         runtime.handling_cost += cost
         self.stats["transport_cost"] += cost
@@ -83,12 +99,14 @@ class Geography:
         damage_probability = self.cfg.damage_probability
         if self.carriers is not None:
             km = self.km(supplier, customer)
-            if supplier.transport_mode == "service":
+            if service:
                 self.last_delay = self.carriers.book(env.period, supplier, customer, units, km, cost, self.fuel_index)
                 damage_probability = self.carriers.damage_probability(supplier, customer)
             else:
                 self.carriers.record_own(customer, units, km)
-        if roll >= damage_probability or (supplier.transport_mode == "service" and self.carriers is None):
+        if self.trucks is not None and not service:
+            damage_probability *= self.trucks.damage_multiplier(supplier.id)
+        if roll >= damage_probability or (service and self.carriers is None):
             return 0
         destroyed = max(1, round(units * self.cfg.damage_share))
         taken = 0
@@ -105,11 +123,13 @@ class Geography:
         """Fleet fixed costs and depreciation of finished investments."""
         if self.carriers is not None:
             self.carriers.daily(env)
+        if self.trucks is not None:
+            self.trucks.daily(env)
         for firm_id, runtime in env.runtimes.items():
             if not runtime.active:
                 continue
             firm = env.network.firm(firm_id)
-            if firm.transport_mode == "own" and firm.stage != "retailer":
+            if firm.transport_mode == "own" and firm.stage != "retailer" and self.trucks is None:
                 runtime.fixed_cost += self.cfg.fleet_cost_per_day
             for amount, last in self.depreciation.get(firm_id, []):
                 if env.period <= last:
@@ -125,11 +145,15 @@ class Geography:
         self.fuel_index = max(0.5, self.fuel_index * math.exp(cfg.fuel_volatility * fuel_roll))
         self._finish_projects(runner, state)
         summaries = state.summaries[-1]
+        if self.trucks is not None:
+            self.trucks.begin_year_end(runner, state)
         for firm in runner._firms():
             runtime = env.runtimes[firm.id]
             if not runtime.active or firm.stage == "retailer":
                 continue
             self._choose_transport(runner, firm, summaries, state)
+        if self.trucks is not None:
+            self.trucks.finish_year_end(runner, state)
         # Only a tight stage invests: one busy firm alone would just take share from idle rivals.
         stage_use = {}
         for stage in STAGES:
@@ -159,9 +183,13 @@ class Geography:
         unit_value = runner.config.stage_prices[firm.stage].base * runner.config.unit_scale.real_units_per_sim_unit
         risk = runner.strategies.get(firm.id).risk_tolerance if firm.id in runner.strategies else 0.5
         damage = cfg.damage_probability * cfg.damage_share * unit_value * (1 + (1 - risk) * cfg.risk_aversion)
-        own = shipped * (mean_km * cfg.own_rate * self.fuel_index + damage) + cfg.fleet_cost_per_day * 365
         rate = self.carriers.service_rate(firm) if self.carriers is not None else cfg.service_rate
         service = shipped * mean_km * rate * self.fuel_index
+        if self.trucks is not None:
+            self.trucks.decide(runner, state, firm, shipped,
+                               shipped * (mean_km * cfg.own_rate * self.fuel_index + damage), service)
+            return
+        own = shipped * (mean_km * cfg.own_rate * self.fuel_index + damage) + cfg.fleet_cost_per_day * 365
         choice = "service" if service < own else "own"
         if choice != firm.transport_mode:
             firm.transport_mode = choice

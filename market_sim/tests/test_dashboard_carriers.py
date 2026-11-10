@@ -33,9 +33,11 @@ def test_dashboard_has_transport_tab_and_carrier_data(tmp_path):
 
     path = write_dashboard_html(data, tmp_path / "d.html")
     html = path.read_text(encoding="utf-8")
-    assert 'id="tab-transport"' in html
-    assert 'data-tab="transport"' in html
-    assert "function renderTransport" in html
+    assert 'id="tab-couriers"' in html
+    assert 'data-tab="couriers"' in html
+    assert "function renderCouriers" in html
+    assert "id=\"trucks-box\"" in html
+    assert "__TRUCKS__" not in html
     assert "__CARRIERS__" not in html
 
 

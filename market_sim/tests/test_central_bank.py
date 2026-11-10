@@ -139,7 +139,7 @@ def test_short_run_csv_events_and_checkpoint(tmp_path):
     assert straight.system_kpis == resumed.system_kpis
     assert straight.annual_reports == resumed.annual_reports
     assert straight.events == resumed.events
-    events = [e for e in straight.events if e['event'] == 'policy_rate_changed']
+    events = [e for e in straight.events if e['event'] in ('policy_rate_changed', 'policy_rate_emergency')]
     assert events and events[0]['firm'] == 'SNB' and events[0]['day'] == 3
     write_outputs(straight, tmp_path)
     with (tmp_path / 'system_kpis.csv').open(encoding='utf-8') as source:
@@ -156,3 +156,18 @@ def test_policy_updates_without_longrun():
     result = runner.run(1)
     assert result.system_kpis[0].inflation == 0
     assert result.system_kpis[0].policy_rate is not None
+
+
+def test_max_two_changes_per_five_years_and_emergency_exception():
+    cb = bank(max_step=0.0025)
+    changes = []
+    for year in range(1, 21):
+        if cb.year_end(0.02, 100, 100):
+            changes.append(year)
+    assert all(sum(1 for y in changes if start <= y < start + 5) <= 2 for start in range(1, 17))
+    assert changes
+    emergency = bank()
+    for _ in range(4):
+        assert emergency.year_end(0.05, 100, 100)
+        assert emergency.last_emergency
+    assert emergency.change_years == []

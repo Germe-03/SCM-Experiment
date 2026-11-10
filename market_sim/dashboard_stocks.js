@@ -26,7 +26,7 @@ function renderCompareStock(root,ids,actorName,colorOf){
  root.querySelector('#cp-stock-norm').onchange=e=>{store.set('cmp-stock-norm',e.target.checked);renderCompare()};
  wireStockIndexSwitch(root,'cmp',renderCompare)
 }
-// Grosses Auswahl-Diagramm (Index, Aktien, ETFs) und ETF-Gesamtdiagramm im Reiter Börse.
+// Grosses Auswahl-Diagramm (Index, Aktien, ETFs) im Reiter Börse.
 function exColor(j){const base=pal();return j<base.length?base[j]:'hsl('+Math.round((j*137.5)%360)+',65%,50%)'}
 function exEnsureCard(id,before,html){
  let card=document.getElementById(id);
@@ -70,7 +70,7 @@ function exItems(){
  if(rows.some(r=>r.electricity))items.push({key:'x:electricity',id:'electricity',type:'x',group:'Strom',label:'Strompreisindex',yearly:true,unit:'% des Basispreises'});
  return items}
 function renderStockExplorer(){
- const card=exEnsureCard('sx-explorer',document.getElementById('sx-compare'),'<h3>Alles im Vergleich</h3><p class="hint">Genau einen Eintrag wählen (Aktie, ETF, Rohstoff oder Strompreis), optional mit dem Börsenindex als zweiter Linie. Bei Start = 100 beginnt die Linie mit ihrem ersten Wert im Zeitraum.</p><div class="ex-grid" style="display:grid;grid-template-columns:300px minmax(0,1fr);gap:14px;align-items:start"><div class="ex-side"><div class="filters" style="flex-wrap:wrap"><input id="ex-search" type="search" placeholder="Name suchen …" aria-label="Name suchen" autocomplete="off" style="width:100%"><div class="chips" id="ex-types"></div><select id="ex-f-region" aria-label="Region"></select><select id="ex-f-cat" aria-label="Kategorie"></select><select id="ex-f-stage" aria-label="Stufe"></select><select id="ex-sort" aria-label="Sortierung"><option value="name">Sortierung: Name</option><option value="change">Sortierung: Veränderung</option></select></div><div id="ex-list" style="max-height:460px;overflow-y:auto;border:1px solid var(--border,#ccc);border-radius:6px"></div></div><div class="ex-main"><div class="filters"><label>Auflösung <select id="ex-res"><option value="year">Jahr</option><option value="month">Monat</option><option value="week">Woche</option></select></label><label class="switch-line"><input type="checkbox" id="ex-norm"> Start = 100</label><label class="switch-line"><input type="checkbox" id="ex-index"> Börsenindex einblenden</label></div><p class="hint" id="ex-hint" role="status"></p><div class="chart" style="height:460px"><canvas id="ex-chart"></canvas></div><div id="ex-stats" class="hint"></div></div></div><style>@media (max-width:800px){#sx-explorer .ex-grid{grid-template-columns:1fr!important}}#sx-explorer .ex-row{display:flex;justify-content:space-between;gap:8px;width:100%;padding:5px 8px;border:0;background:none;text-align:left;cursor:pointer;color:inherit;font:inherit}#sx-explorer .ex-row:hover{background:rgba(128,128,128,.12)}#sx-explorer .ex-row.active{background:rgba(60,120,220,.22);font-weight:600}#sx-explorer .ex-gh{padding:4px 8px;font-weight:700;font-size:12px;background:rgba(128,128,128,.15);position:sticky;top:0}</style>');
+ const card=exEnsureCard('sx-explorer',document.getElementById('sx-compare'),'<h3>Alles im Vergleich</h3><p class="hint">Genau einen Eintrag wählen (Aktie, ETF, Rohstoff oder Strompreis), optional mit dem Börsenindex als zweiter Linie. Bei Start = 100 beginnt die Linie mit ihrem ersten Wert im Zeitraum.</p><div class="ex-grid" style="display:grid;grid-template-columns:300px minmax(0,1fr);gap:14px;align-items:start"><div class="ex-side"><div class="filters" style="flex-wrap:wrap"><input id="ex-search" type="search" placeholder="Name suchen …" aria-label="Name suchen" autocomplete="off" style="width:100%"><div class="chips" id="ex-types"></div><select id="ex-f-region" aria-label="Region"></select><select id="ex-f-cat" aria-label="Kategorie"></select><select id="ex-f-stage" aria-label="Stufe"></select><select id="ex-sort" aria-label="Sortierung"><option value="name">Sortierung: Name</option><option value="change">Sortierung: Veränderung</option></select><label style="width:100%;font-size:12px">Aktien: mindestens <input id="ex-minyears" type="number" min="0" max="50" step="1" value="0" style="width:56px" aria-label="Mindestens so viele Jahre an der Börse"> Jahre an der Börse</label></div><div id="ex-list" style="max-height:460px;overflow-y:auto;border:1px solid var(--border,#ccc);border-radius:6px"></div></div><div class="ex-main"><div class="filters"><label>Auflösung <select id="ex-res"><option value="year">Jahr</option><option value="month">Monat</option><option value="week">Woche</option></select></label><label class="switch-line"><input type="checkbox" id="ex-norm"> Start = 100</label><label class="switch-line"><input type="checkbox" id="ex-index"> Börsenindex einblenden</label></div><p class="hint" id="ex-hint" role="status"></p><div class="chart" style="height:460px"><canvas id="ex-chart"></canvas></div><div id="ex-stats" class="hint"></div></div></div><style>@media (max-width:800px){#sx-explorer .ex-grid{grid-template-columns:1fr!important}}#sx-explorer .ex-row{display:flex;justify-content:space-between;gap:8px;width:100%;padding:5px 8px;border:0;background:none;text-align:left;cursor:pointer;color:inherit;font:inherit}#sx-explorer .ex-row:hover{background:rgba(128,128,128,.12)}#sx-explorer .ex-row.active{background:rgba(60,120,220,.22);font-weight:600}#sx-explorer .ex-gh{padding:4px 8px;font-weight:700;font-size:12px;background:rgba(128,128,128,.15);position:sticky;top:0}</style>');
  if(!card)return;
  const old=document.getElementById('sx-compare')?.closest('.card');if(old)old.style.display='none';
  const A=exAll(),items=exItems(),byKey=new Map(items.map(x=>[x.key,x]));
@@ -80,7 +80,8 @@ function renderStockExplorer(){
  let res=store.get('sx-ex-res','month');if(!['year','month','week'].includes(res))res='month';
  const norm=!!store.get('sx-ex-norm',true),withIndex=!!store.get('sx-ex-index',true);
  let fl=store.get('sx-ex-filter',null);if(!fl||typeof fl!=='object')fl={};
- fl={q:'',type:'all',region:'',category:'',stage:'',sort:'name',...fl};
+ fl={q:'',type:'all',region:'',category:'',stage:'',sort:'name',minYears:0,...fl};
+ fl.minYears=Math.max(0,Math.min(50,Math.floor(Number(fl.minYears))||0));
  const saveFl=()=>store.set('sx-ex-filter',fl);
  const TYPES=[['all','Alle'],['s','Aktien'],['e','ETFs'],['c','Rohstoffe'],['x','Strom']];
  const uniq=k=>[...new Set(items.filter(x=>x.type==='s'&&x[k]).map(x=>x[k]))];
@@ -90,11 +91,17 @@ function renderStockExplorer(){
  fillSel('#ex-f-stage','Stufe',uniq('stage').filter(v=>v!=='bank'&&v!=='courier'),fl.stage,v=>(typeof STAGE!=='undefined'&&STAGE[v])||v);
  card.querySelector('#ex-search').value=fl.q;card.querySelector('#ex-sort').value=fl.sort;
  card.querySelector('#ex-res').value=res;card.querySelector('#ex-norm').checked=norm;card.querySelector('#ex-index').checked=withIndex;
- const wPts=stockPoints('week'),yPts=exResPoints('year');
- const changes=new Map(items.map(x=>{const s=exStats(exRaw(x,x.yearly?yPts:wPts));return [x.key,s?s.change:null]}));
+ const wPts=stockPoints('week');
+ // Liste und Kennzahl unter dem Diagramm nutzen dieselbe Funktion und dieselben Punkte (gewählte Auflösung).
+ const pointsOf=x=>exResPoints(x.yearly?'year':res);
+ const changes=new Map(items.map(x=>{const s=exStats(exRaw(x,pointsOf(x)));return [x.key,s?s.change:null]}));
+ // Jahre an der Börse im gewählten Zeitraum: Jahre mit mindestens einem Kurs > 0.
+ const yearsListed=new Map(items.filter(x=>x.type==='s').map(x=>{const ys=new Set();wPts.forEach(i=>{if(D.stocks.prices[x.id]?.[i]>0)ys.add(D.stocks.years[i])});return [x.key,ys.size]}));
+ card.querySelector('#ex-minyears').value=fl.minYears;
  const drawList=()=>{
   const q=fl.q.trim().toLowerCase(),stockOnly=!!(fl.region||fl.category||fl.stage);
   let rows=items.filter(x=>(fl.type==='all'||x.type===fl.type)&&(!q||x.label.toLowerCase().includes(q)));
+  if(fl.minYears>0)rows=rows.filter(x=>x.type!=='s'||(yearsListed.get(x.key)||0)>=fl.minYears);
   if(stockOnly)rows=rows.filter(x=>x.type==='s'&&(!fl.region||x.region===fl.region)&&(!fl.category||x.category===fl.category)&&(!fl.stage||x.stage===fl.stage));
   const cmp=fl.sort==='change'?(a,b)=>(changes.get(b.key)??-Infinity)-(changes.get(a.key)??-Infinity):(a,b)=>a.label.localeCompare(b.label);
   let html='';
@@ -107,7 +114,7 @@ function renderStockExplorer(){
  const drawChart=()=>{
   const item=byKey.get(active),hint=card.querySelector('#ex-hint'),statsEl=card.querySelector('#ex-stats');
   if(!item){hint.textContent='Nichts ausgewählt.';statsEl.innerHTML='';chart('ex-chart',{type:'line',data:{labels:[],datasets:[]},options:{}});return}
-  const eff=item.yearly?'year':res,points=exResPoints(eff);
+  const eff=item.yearly?'year':res,points=pointsOf(item);
   const raw=exRaw(item,points),ds=stockDataset(item.label,norm?stockNormal(raw):raw,pal()[0],2.5);
   if(item.yearly)ds.pointRadius=3;
   const datasets=[ds];
@@ -115,6 +122,8 @@ function renderStockExplorer(){
   hint.textContent=item.yearly?'Für '+item.label+' gibt es nur Jahreswerte, darum wird die Jahres-Achse verwendet.':(raw.some(v=>v!=null)?'Lücken: vor dem Börsengang oder nach dem Austritt gibt es keinen Kurs.':'Keine Kurse im gewählten Zeitraum.');
   const opts=stockOptions(points,eff==='week'?'week':'month');
   opts.scales.y.title={display:true,text:norm?'Start = 100':(item.unit?item.label+' ('+item.unit+')':'Kurs in CHF / ETF-Stand')};
+  // Indexstand ist eine Zahl, kein Prozentwert (auch auf der rechten Achse bei Start = 100 aus).
+  opts.plugins.tooltip.callbacks.label=c=>c.dataset.label+': '+(c.parsed.y==null?'–':nf(c.parsed.y,2));
   opts.plugins.tooltip.mode='index';opts.plugins.tooltip.intersect=false;opts.interaction={mode:'index',intersect:false};
   if(eff==='year')opts.plugins.tooltip.callbacks.title=its=>its.length?'Jahr '+D.stocks.years[points[its[0].dataIndex]]:'';
   if(!norm&&withIndex)opts.scales.y2={position:'right',grid:{display:false},title:{display:true,text:'Indexstand'},...fmtAxis()};
@@ -128,22 +137,10 @@ function renderStockExplorer(){
  card.querySelector('#ex-f-region').onchange=e=>{fl.region=e.target.value;saveFl();drawList()};
  card.querySelector('#ex-f-cat').onchange=e=>{fl.category=e.target.value;saveFl();drawList()};
  card.querySelector('#ex-f-stage').onchange=e=>{fl.stage=e.target.value;saveFl();drawList()};
+ card.querySelector('#ex-minyears').oninput=e=>{fl.minYears=Math.max(0,Math.min(50,Math.floor(Number(e.target.value))||0));saveFl();drawList()};
  card.querySelector('#ex-sort').onchange=e=>{fl.sort=e.target.value;saveFl();drawList()};
  card.querySelector('#ex-list').onclick=e=>{const b=e.target.closest('button[data-key]');if(!b)return;active=b.dataset.key;store.set('sx-ex-active',active);drawList();drawChart()};
  card.querySelector('#ex-res').onchange=e=>{store.set('sx-ex-res',e.target.value);renderStockExplorer()};
  card.querySelector('#ex-norm').onchange=e=>{store.set('sx-ex-norm',e.target.checked);renderStockExplorer()};
  card.querySelector('#ex-index').onchange=e=>{store.set('sx-ex-index',e.target.checked);renderStockExplorer()};
  drawTypes();drawList();drawChart()}
-function renderEtfAllChart(){
- const card=exEnsureCard('etf-all',document.getElementById('etf-chart'),'<h3>Alle ETFs (Start = 100)</h3><p class="hint">ETFs einzeln ein- oder ausblenden.</p><div class="chips" id="eta-chips"></div><div class="chart" style="height:380px"><canvas id="etf-all-chart"></canvas></div>');
- if(!card)return;
- const defs=(D.etfs?D.etfs.definitions:[]).slice().sort((a,b)=>etfName(a).localeCompare(etfName(b)));
- if(!defs.length){card.style.display='none';return}
- card.style.display='';
- let hidden=store.get('etf-all-hidden',[]);if(!Array.isArray(hidden))hidden=[];
- const points=stockPoints('week');
- card.querySelector('#eta-chips').innerHTML='<button class="chip" data-eta="all">alle</button><button class="chip" data-eta="none">keine</button>'+defs.map((def,j)=>'<button class="chip" data-eta="'+esc(def.id)+'" aria-pressed="'+(hidden.includes(def.id)?'false':'true')+'" style="border-left:6px solid '+esc(exColor(j))+'">'+esc(etfName(def))+'</button>').join('');
- card.querySelector('#eta-chips').onclick=e=>{const b=e.target.closest('button[data-eta]');if(!b)return;const k=b.dataset.eta;if(k==='all')hidden=[];else if(k==='none')hidden=defs.map(d=>d.id);else hidden=hidden.includes(k)?hidden.filter(x=>x!==k):hidden.concat(k);store.set('etf-all-hidden',hidden);renderEtfAllChart()};
- const datasets=defs.map((def,j)=>({def,j})).filter(o=>!hidden.includes(o.def.id)).map(o=>stockDataset(etfName(o.def),stockNormal(points.map(i=>{const v=D.etfs.levels[o.def.id]?.[i];return v>0?v:null})),exColor(o.j)));
- const opts=stockOptions(points,'week');opts.plugins.legend={display:true,labels:{boxWidth:10,font:{size:10}}};
- chart('etf-all-chart',{type:'line',data:{labels:points.map(i=>stockLabel(i,'week')),datasets},options:opts})}

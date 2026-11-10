@@ -187,6 +187,7 @@ class EtfBook:
         self.rows: list[dict] = []
         self._last: dict[str, dict[str, float]] = {}
         self._last_weights: dict[str, dict[str, float]] = {}
+        self._holdings: dict[str, dict[str, float]] = {}
 
     @staticmethod
     def groups_for(firm: object) -> list[tuple[str, str]]:
@@ -204,6 +205,11 @@ class EtfBook:
         return groups
 
     def _capped_weights(self, ids: list[str], prices: dict[str, float]) -> dict[str, float]:
+        """Basket weights: by market value (price, equal share counts) or equal.
+
+        A weight cap is deliberately not applied: forcing penny stocks up to the cap
+        and rebalancing harvests their swings and blew the ETF levels up to the millions.
+        """
         if not ids:
             return {}
 
@@ -211,35 +217,14 @@ class EtfBook:
             fid: prices[fid] if self.cfg.etf_weighting == "market_cap" else 1.0
             for fid in ids
         }
-        cap = max(self.cfg.etf_max_weight, 1.0 / len(ids))
-        if cap <= 1.0 / len(ids):
-            return {fid: 1.0 / len(ids) for fid in ids}
-
+        total = sum(bases.values())
         weights: dict[str, float] = {}
-        remaining_ids = list(ids)
-        remaining_weight = 1.0
-
-        while remaining_ids:
-            total_basis = sum(bases[fid] for fid in remaining_ids)
-            capped = [
-                fid for fid in remaining_ids
-                if remaining_weight * bases[fid] / total_basis > cap
-            ]
-            if not capped:
-                assigned = 0.0
-                for fid in remaining_ids[:-1]:
-                    weight = remaining_weight * bases[fid] / total_basis
-                    weights[fid] = weight
-                    assigned += weight
-                weights[remaining_ids[-1]] = remaining_weight - assigned
-                break
-
-            for fid in capped:
-                weights[fid] = cap
-                remaining_ids.remove(fid)
-                remaining_weight -= cap
-
-        return {fid: weights[fid] for fid in ids}
+        assigned = 0.0
+        for fid in ids[:-1]:
+            weights[fid] = bases[fid] / total
+            assigned += weights[fid]
+        weights[ids[-1]] = 1.0 - assigned
+        return weights
 
     def update(self, members: dict[str, object], prices: dict[str, float],
                global_day: int, year: int, day: int) -> None:
@@ -268,31 +253,55 @@ class EtfBook:
         row = {"global_day": global_day, "year": year, "day": day}
         for etf_id in sorted(self.definitions):
             member_ids = current.get(etf_id, set())
+            # Hysteresis: entry at the minimum price, exit only below half of it, so a
+            # share hovering around the limit does not jump in and out ("buy high, sell low").
+            held = self._holdings.get(etf_id, {})
             eligible = sorted(
                 fid for fid in member_ids
-                if prices.get(fid, 0.0) > 0 and prices.get(fid, 0.0) >= self.cfg.etf_min_price
+                if prices.get(fid, 0.0) > 0 and (
+                    prices.get(fid, 0.0) >= self.cfg.etf_min_price
+                    or (fid in held and prices.get(fid, 0.0) >= 0.5 * self.cfg.etf_min_price))
             )
             if len(eligible) < self.cfg.etf_min_members:
                 self._last[etf_id] = {}
                 self._last_weights.pop(etf_id, None)
+                self._holdings.pop(etf_id, None)
                 continue
 
+            # Buy-and-hold between rebalances: fixed share quantities, so the level follows
+            # the basket value instead of a daily rebalanced mean of returns (which drifts
+            # upwards with volatile prices and let the ETFs explode).
+            holdings = self._holdings.get(etf_id, {})
             if etf_id not in self.levels:
                 self.levels[etf_id] = self.cfg.etf_base
             else:
-                common = sorted(set(eligible) & set(self._last.get(etf_id, {})))
+                # Members that just fell below the minimum price still count on their last move
+                # (otherwise only the gains of penny stocks around the limit would be kept).
+                common = sorted(fid for fid in holdings
+                                if fid in member_ids and prices.get(fid, 0.0) > 0
+                                and fid in self._last.get(etf_id, {}))
                 if common:
-                    previous_weights = self._last_weights[etf_id]
-                    total_weight = sum(previous_weights[fid] for fid in common)
-                    weights = {
-                        fid: previous_weights[fid] / total_weight for fid in common
-                    }
-                    factor = sum(
-                        weights[fid] * prices[fid] / self._last[etf_id][fid]
-                        for fid in common
-                    )
-                    self.levels[etf_id] *= factor
+                    before = sum(holdings[fid] * self._last[etf_id][fid] for fid in common)
+                    after = sum(holdings[fid] * prices[fid] for fid in common)
+                    if before > 0:
+                        self.levels[etf_id] *= after / before
 
+            # No periodic rebalancing (it harvests volatility and inflates the level). Only on
+            # member changes: leavers are dropped, continuing members keep their quantities
+            # (scaled pro rata) and newcomers enter with their target weight.
+            if not holdings or set(holdings) != set(eligible):
+                target = self._capped_weights(eligible, prices)
+                keep = [fid for fid in eligible if fid in holdings]
+                new = [fid for fid in eligible if fid not in holdings]
+                kept_value = {fid: holdings[fid] * prices[fid] for fid in keep}
+                total = sum(kept_value.values())
+                if not keep or total <= 0:
+                    self._holdings[etf_id] = {fid: target[fid] / prices[fid] for fid in eligible}
+                else:
+                    share = 1.0 - sum(target[fid] for fid in new)
+                    new_holdings = {fid: share * kept_value[fid] / total / prices[fid] for fid in keep}
+                    new_holdings.update({fid: target[fid] / prices[fid] for fid in new})
+                    self._holdings[etf_id] = new_holdings
             self._last[etf_id] = {fid: prices[fid] for fid in eligible}
             self._last_weights[etf_id] = self._capped_weights(eligible, prices)
             row[etf_id] = round(self.levels[etf_id], 4)

@@ -7,6 +7,7 @@ import random
 from typing import TYPE_CHECKING
 
 from market_sim.kpi import PROJECT_DE, chf
+from market_sim.models import behaviour_of
 
 if TYPE_CHECKING:
     from market_sim.runner import RunState, SimulationRunner
@@ -43,11 +44,11 @@ class PatentOffice:
     def choose_years(self, firm, cash: float, price_index: float) -> int:
         """Choose a patent term: long archetypes and cash-rich firms patent longer."""
         if (
-            firm.archetype in self.cfg.long_archetypes
+            behaviour_of(firm) in self.cfg.long_archetypes
             or cash >= self.cfg.rich_cash_multiple * self.fee(self.cfg.max_years, price_index)
         ):
             return self.cfg.max_years
-        if firm.archetype in self.cfg.short_archetypes:
+        if behaviour_of(firm) in self.cfg.short_archetypes:
             return self.cfg.min_years
         return (self.cfg.min_years + self.cfg.max_years) // 2
 

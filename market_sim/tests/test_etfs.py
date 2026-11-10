@@ -232,7 +232,7 @@ def test_below_min_price_does_not_count():
     assert "category:beer" in book.rows[1]
 
 
-def test_weight_cap_30_percent():
+def test_weights_follow_price_without_cap():
     book = EtfBook(cfg(etf_min_members=3, etf_min_price=1.0, etf_max_weight=0.30))
     members = {"a": firm(), "b": firm(), "c": firm(), "d": firm()}
     prices = {"a": 100.0, "b": 1.0, "c": 1.0, "d": 1.0}
@@ -240,14 +240,12 @@ def test_weight_cap_30_percent():
     book.update(members, prices, 1, 1, 0)
     weights = book.weights("category:beer", prices)
 
-    assert weights["a"] == pytest.approx(0.30)
-    assert weights["b"] == pytest.approx(0.70 / 3)
-    assert weights["c"] == pytest.approx(0.70 / 3)
-    assert weights["d"] == pytest.approx(0.70 / 3)
+    assert weights["a"] == pytest.approx(100 / 103)
+    assert weights["b"] == pytest.approx(1 / 103)
     assert sum(weights.values()) == pytest.approx(1.0)
 
 
-def test_small_etf_equal_weights_when_cap_infeasible():
+def test_small_etf_weights_proportional_to_price():
     book = EtfBook(cfg(etf_min_members=3, etf_min_price=1.0, etf_max_weight=0.30))
     members = {"a": firm(), "b": firm(), "c": firm()}
     prices = {"a": 10.0, "b": 20.0, "c": 30.0}
@@ -255,7 +253,7 @@ def test_small_etf_equal_weights_when_cap_infeasible():
     book.update(members, prices, 1, 1, 0)
     weights = book.weights("category:beer", prices)
 
-    assert weights == pytest.approx({"a": 1 / 3, "b": 1 / 3, "c": 1 / 3})
+    assert weights == pytest.approx({"a": 10 / 60, "b": 20 / 60, "c": 30 / 60})
     assert sum(weights.values()) == pytest.approx(1.0)
 
 
@@ -343,7 +341,7 @@ def test_dashboard_export_applies_etf_rules():
         if result["members"]["category:beer"][index] == 4
     )
     full_weights = result["weights"]["category:beer"][full_member_index]
-    assert dict(full_weights)["a"] == pytest.approx(0.30)
+    assert dict(full_weights)["a"] == pytest.approx(100 / 103, abs=1e-5)
     assert len(full_weights) == 4
     assert sum(weight for _, weight in full_weights) == pytest.approx(
         1.0, abs=2e-6
@@ -354,3 +352,57 @@ def test_dashboard_export_applies_etf_rules():
     )
     assert "members" not in result_without_cfg
     assert "weights" not in result_without_cfg
+
+
+def _volatile_run(book, days=400):
+    """Three stable members plus one penny stock that swings around the minimum price."""
+    members = {fid: firm() for fid in "abcd"}
+    levels = []
+    for day in range(days):
+        swing = 1.0 + 0.5 * (1 if day % 2 else -1) + 0.0005 * day
+        prices = {"a": 50.0, "b": 50.0, "c": 50.0, "d": max(swing, 0.1)}
+        book.update(members, prices, day, 1 + day // 100, day % 100)
+        levels.append(book.rows[-1].get("category:beer"))
+    return levels
+
+
+def test_level_stays_continuous_with_member_changes():
+    levels = _volatile_run(EtfBook(cfg(etf_min_members=3, etf_min_price=1.0)))
+
+    assert all(level is not None for level in levels)
+    assert all(level == pytest.approx(100.0, rel=0.02) for level in levels)
+    steps = [b / a for a, b in zip(levels, levels[1:])]
+    assert max(steps) < 1.02 and min(steps) > 0.98
+
+
+def test_penny_stock_swings_do_not_inflate_level():
+    book = EtfBook(cfg(etf_min_members=3, etf_min_price=1.0, etf_max_weight=0.30))
+    levels = _volatile_run(book, days=2000)
+
+    assert max(levels) < 130.0 and min(levels) > 70.0
+
+
+def test_exit_move_below_min_price_still_counts():
+    book = EtfBook(cfg(etf_min_members=3, etf_min_price=1.0))
+    members = {fid: firm() for fid in "abc"}
+    book.update(members, {"a": 10.0, "b": 10.0, "c": 10.0}, 0, 1, 0)
+    members["d"] = firm()
+    book.update(members, {"a": 10.0, "b": 10.0, "c": 10.0, "d": 10.0}, 1, 1, 1)
+    before = book.rows[-1]["category:beer"]
+    book.update(members, {"a": 10.0, "b": 10.0, "c": 10.0, "d": 0.4}, 2, 1, 2)
+
+    assert before == pytest.approx(100.0)
+    assert book.rows[-1]["category:beer"] < before
+    assert "d" not in book._holdings["category:beer"]
+
+
+def test_level_not_rebased_after_gap():
+    book = EtfBook(cfg(etf_min_members=3, etf_min_price=1.0))
+    members = {fid: firm() for fid in "abc"}
+    book.update(members, {"a": 10.0, "b": 10.0, "c": 10.0}, 0, 1, 0)
+    book.update(members, {"a": 20.0, "b": 20.0, "c": 20.0}, 1, 1, 1)
+    book.update({"a": members["a"]}, {"a": 20.0}, 2, 1, 2)
+    book.update(members, {"a": 20.0, "b": 20.0, "c": 20.0}, 3, 1, 3)
+
+    assert "category:beer" not in book.rows[2]
+    assert book.rows[3]["category:beer"] == pytest.approx(book.rows[1]["category:beer"])

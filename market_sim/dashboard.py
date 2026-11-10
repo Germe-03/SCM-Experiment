@@ -25,10 +25,13 @@ def write_dashboard_html(data: dict, path: str | Path) -> Path:
     stocks = Path(__file__).with_name("dashboard_stocks.js").read_text(encoding="utf-8")
     etfs = Path(__file__).with_name("dashboard_etfs.js").read_text(encoding="utf-8")
     rnd = Path(__file__).with_name("dashboard_rnd.js").read_text(encoding="utf-8")
+    trucks_file = Path(__file__).with_name("dashboard_trucks.js")
+    trucks = trucks_file.read_text(encoding="utf-8") if trucks_file.exists() else ""
     html = (_HTML.replace("__DATA__", payload).replace("__CHART_JS__", CHART_JS_URL)
             .replace("__TABLE_FILTERS__", filters).replace("__STOCK_COMPARE__", stocks).replace("__ETFS__", etfs)
             .replace("__RND__", rnd)
             .replace("__HOLDINGS__", Path(__file__).with_name("dashboard_holdings.js").read_text(encoding="utf-8"))
+            .replace("__TRUCKS__", trucks)
             .replace("__CARRIERS__", Path(__file__).with_name("dashboard_carriers.js").read_text(encoding="utf-8")))
     target.write_text(html, encoding="utf-8")
     return target
@@ -126,10 +129,11 @@ body:has(dialog[open]){overflow:hidden}
   <button role="tab" data-tab="compare">Vergleich</button>
   <button role="tab" data-tab="chain">Lieferkette</button>
   <button role="tab" data-tab="finance">Finanzen</button>
+  <button role="tab" data-tab="banks">Banken</button>
   <button role="tab" data-tab="stocks">Börse</button>
   <button role="tab" data-tab="state">Staat</button>
   <button role="tab" data-tab="rnd">F&amp;E</button>
-  <button role="tab" data-tab="transport">Transport</button>
+  <button role="tab" data-tab="couriers">Kuriere</button>
   <button role="tab" data-tab="events">Ereignisse</button>
   <button role="tab" data-tab="chronicle">Chronik</button>
  </nav>
@@ -208,7 +212,7 @@ body:has(dialog[open]){overflow:hidden}
  </div>
 </section>
 <section role="tabpanel" id="tab-chain">
- <h2>Lieferkette</h2><p class="lead">Margen, Auslastung, Bestellschwankungen und Logistik pro Stufe.</p>
+ <h2>Lieferkette</h2><p class="lead">Margen, Auslastung, Bestellschwankungen, Transportkosten, Rohstoffe und Strompreis pro Stufe. Post und Kuriere stehen im Reiter Kuriere.</p>
  <div class="grid">
   <div class="card"><h3>Marge pro Stufe</h3><div class="chart"><canvas id="ch-margin"></canvas></div></div>
   <div class="card"><h3>Auslastung pro Stufe</h3><div class="chart"><canvas id="ch-util"></canvas></div></div>
@@ -217,16 +221,14 @@ body:has(dialog[open]){overflow:hidden}
   <div class="card"><h3>Transportkosten und Treibstoff</h3><div class="chart"><canvas id="ch-transport"></canvas></div></div>
   <div class="card"><h3>Eigene Flotte oder Transportdienst</h3><div class="chart"><canvas id="ch-service"></canvas></div></div>
   <div class="card wide"><h3>Ausbau und neue Standorte</h3><div class="chart"><canvas id="ch-build"></canvas></div></div>
+  <div class="card wide" id="cm-card"><h3>Rohstoffpreise</h3><p class="hint">Marktpreis je Rohstoff der Lieferkette in Prozent des Grundpreises (Jahreswerte). Die Preise bleiben zwischen 70 und 140 Prozent; hohe Nachfrage hebt sie leicht. In Klammern: die Produkte, die den Rohstoff brauchen.</p><p class="hint" id="cm-empty"></p><div class="chart"><canvas id="cm-chart"></canvas></div></div>
+  <div class="card wide" id="el-card"><h3>Strompreis</h3><p class="hint">Strompreisindex (Jahresmittel, 100 = Grundpreis, Monatsschwankung) und Stromkosten aller Firmen pro Jahr.</p><p class="hint" id="el-empty"></p><div class="chart"><canvas id="el-chart"></canvas></div></div>
  </div>
 </section>
 <section role="tabpanel" id="tab-finance">
- <h2>Finanzen</h2><p class="lead">Schulden, Zinsen, Ein- und Austritte.</p>
+ <h2>Finanzen</h2><p class="lead">Schulden, Zinsen, Ein- und Austritte. Banken und Leitzins stehen im Reiter Banken.</p>
  <div class="grid">
-  <div class="card"><h3>Leitzins und Teuerung</h3><p class="hint">Konjunkturlücke ist ein Modellindikator, kein BIP.</p><div class="chart"><canvas id="fi-policy"></canvas></div></div>
-  <div class="card"><h3>Banken: Eigenkapital</h3><div class="chart"><canvas id="fi-bank-equity"></canvas></div></div>
-  <div class="card"><h3>Banken: Kredite und Einlagen</h3><div class="chart"><canvas id="fi-bank-balances"></canvas></div></div>
   <div class="card"><h3>Cash aller Firmen (ohne Banken)</h3><p class="hint">Summe des Bargelds aller Hersteller, Händler und Kuriere am Jahresende.</p><div class="chart"><canvas id="fi-firm-cash"></canvas></div></div>
-  <div class="card wide"><h3>Banken im Vergleich</h3><p class="hint" id="fi-bank-year"></p><p class="hint">Eigenkapitalquote = Eigenkapital / Bilanzsumme. Bilanzsumme = grösserer Wert aus Krediten oder Einlagen + Eigenkapital.</p><div class="table-wrap"><table id="fi-banks"></table></div></div>
  </div>
  <div class="card"><h3>Negativzinsen pro Stufe</h3><div class="chart"><canvas id="fi-negative"></canvas></div></div>
  <div class="grid">
@@ -238,6 +240,17 @@ body:has(dialog[open]){overflow:hidden}
   <div class="card wide"><h3>Forschung, Umsetzung, Patentgebühren und Schadenersatz</h3><p class="hint">Alle Firmen zusammen. Schadenersatz: was Patentverletzer an die Inhaber zahlen. Forschung und Umsetzung geschätzt aus den abgeschlossenen Projekten.</p><div class="chart"><canvas id="fi-rnd"></canvas></div></div>
   <div class="card"><h3>Beteiligungen und Dividenden</h3><div class="chart"><canvas id="fi-stakes"></canvas></div></div>
   <div class="card"><h3>Wer hält was (Ende des Zeitraums)</h3><div class="table-wrap"><table id="fi-holdings"></table></div></div>
+ </div>
+</section>
+<section role="tabpanel" id="tab-banks">
+ <h2>Banken</h2><p class="lead">Eigenkapital, Kredite, Einlagen, Leitzins der SNB und Ereignisse der Banken.</p>
+ <div class="kpis" id="ba-kpis"></div>
+ <div class="grid">
+  <div class="card"><h3>Leitzins und Teuerung</h3><p class="hint">Konjunkturlücke ist ein Modellindikator, kein BIP.</p><div class="chart"><canvas id="fi-policy"></canvas></div></div>
+  <div class="card"><h3>Banken: Eigenkapital</h3><div class="chart"><canvas id="fi-bank-equity"></canvas></div></div>
+  <div class="card"><h3>Banken: Kredite und Einlagen</h3><div class="chart"><canvas id="fi-bank-balances"></canvas></div></div>
+  <div class="card wide"><h3>Banken im Vergleich</h3><p class="hint" id="fi-bank-year"></p><p class="hint">Eigenkapitalquote = Eigenkapital / Bilanzsumme. Bilanzsumme = grösserer Wert aus Krediten oder Einlagen + Eigenkapital.</p><div class="table-wrap"><table id="fi-banks"></table></div></div>
+  <div class="card wide"><h3>Bank-Ereignisse</h3><ul class="list" id="ba-events" style="max-height:260px;overflow:auto"></ul></div>
  </div>
 </section>
 <section role="tabpanel" id="tab-stocks">
@@ -252,8 +265,6 @@ body:has(dialog[open]){overflow:hidden}
   <div class="card"><h3>Grösste Gewinner / Verlierer im Zeitraum</h3><p class="hint">Je fünf noch kotierte Firmen mit Kurs am Anfang und Ende des Zeitraums.</p><div id="sx-movers"></div></div>
   <div class="card wide"><details><summary>Index pro Stufe (Start = 100)</summary><p class="hint">Nach Kurs gewichtet, gleiche Aktienzahl je Firma. Ein- und Austritte werden ohne Kurssprung verkettet.</p><div class="chart"><canvas id="sx-stages"></canvas></div></details></div>
   <div class="card wide"><h3>ETFs</h3><p class="hint">Körbe von Aktien, nur zur Anzeige (noch nicht kaufbar). Start = 100, nach Börsenwert gewichtet; Börsengänge und Austritte machen keinen Sprung. Zeile: Mitglieder mit Gewicht.</p><div class="chips" id="etf-kind" role="group" aria-label="ETF-Gruppe"></div><div class="chart"><canvas id="etf-chart"></canvas></div><div class="table-wrap"><table id="etf-table"></table></div><div id="etf-members"></div></div>
-  <div class="card wide" id="cm-card"><h3>Rohstoffpreise</h3><p class="hint">Marktpreis je Rohstoff der Lieferkette in Prozent des Grundpreises (Jahreswerte). Die Preise bleiben zwischen 70 und 140 Prozent; hohe Nachfrage hebt sie leicht. In Klammern: die Produkte, die den Rohstoff brauchen.</p><p class="hint" id="cm-empty"></p><div class="chart"><canvas id="cm-chart"></canvas></div></div>
-  <div class="card wide" id="el-card"><h3>Strompreis</h3><p class="hint">Strompreisindex (Jahresmittel, 100 = Grundpreis, Monatsschwankung) und Stromkosten aller Firmen pro Jahr.</p><p class="hint" id="el-empty"></p><div class="chart"><canvas id="el-chart"></canvas></div></div>
   <div id="hg-stocks" class="wide"></div>
   <div class="card wide"><h3>Börsen-Ereignisse</h3><ul class="list" id="sx-events" style="max-height:260px;overflow:auto"></ul></div>
  </div>
@@ -282,14 +293,15 @@ body:has(dialog[open]){overflow:hidden}
   <div class="card wide"><h3>Alle abgeschlossenen Projekte</h3><div class="table-wrap"><table id="rd-table"></table></div></div>
  </div>
 </section>
-<section role="tabpanel" id="tab-transport">
- <h2>Post und Kuriere</h2><p class="lead">Wer die Ware transportiert: eigene Flotte, Post oder private Kuriere.</p>
+<section role="tabpanel" id="tab-couriers">
+ <h2>Kuriere</h2><p class="lead">Wer die Ware transportiert: eigene Flotte, Post oder private Kuriere.</p>
  <div class="kpis" id="tr-kpis"></div>
  <div class="grid">
   <div class="card"><h3>Marktanteile (Einheiten x km)</h3><div class="chart"><canvas id="tr-shares"></canvas></div></div>
   <div class="card"><h3>Posttarif und Bundesbeitrag</h3><div class="chart"><canvas id="tr-post"></canvas></div></div>
   <div class="card"><h3>Mittlere Verspätung (Tage)</h3><div class="chart"><canvas id="tr-delay"></canvas></div></div>
   <div class="card"><h3>Kuriere pro Region</h3><svg id="tr-map" viewBox="0 0 400 260" role="img" aria-label="Kuriere pro Region"></svg></div>
+  <div id="trucks-box" class="wide"></div>
   <div class="card wide"><h3>Alle Transportanbieter</h3><div class="table-wrap"><table id="tr-table"></table></div></div>
  </div>
 </section>
@@ -301,7 +313,7 @@ body:has(dialog[open]){overflow:hidden}
  <button class="btn more" id="ev-more" hidden>Weitere anzeigen</button>
 </section>
 <section role="tabpanel" id="tab-chronicle">
- <h2>Chronik</h2><p class="lead">Jahresberichte, vom lokalen Sprachmodell aus geprüften Fakten geschrieben.</p>
+ <h2>Chronik</h2><p class="lead">Jahresberichte, aus den Ereignissen und Kennzahlen jedes Jahres zusammengestellt.</p>
  <div id="ch-list"></div>
 </section>
 </main>
@@ -380,7 +392,7 @@ function viewSnapshot(){return {tab:S.tab,fmFirm:S.fmFirm,cmp:[...S.cmp],flow:S.
 function rememberView(){if(!viewReady||restoringView)return;viewHistory[viewIndex]=viewSnapshot();history.replaceState({dashboardView:viewIndex},'', '#'+S.tab)}
 function backState(){const button=$('#view-back'),parent=$('#structure').open?$('#structure'):$('#flow').open?$('#flow'):document.body;if(button.parentElement!==parent)parent.appendChild(button);button.disabled=viewIndex<=0}
 function navigateView(change){if(restoringView){change();return}rememberView();change();if(!viewReady)return;viewHistory.splice(viewIndex+1);viewHistory.push(viewSnapshot());viewIndex=viewHistory.length-1;history.pushState({dashboardView:viewIndex},'', '#'+S.tab);backState()}
-function showTab(name,focus=false){if(name==='structure'){showTab('firms',focus);renderStructureDialog();return}if(name==='people')name='market';if(!tabs.some(b=>b.dataset.tab===name))name='overview';S.tab=name;
+function showTab(name,focus=false){if(name==='structure'){showTab('firms',focus);renderStructureDialog();return}if(name==='people')name='market';if(name==='transport')name='couriers';if(!tabs.some(b=>b.dataset.tab===name))name='overview';S.tab=name;
  tabs.forEach(b=>{const on=b.dataset.tab===name;b.setAttribute('aria-selected',on);b.tabIndex=on?0:-1;if(on&&focus)b.focus()});
  $$('section[role=tabpanel]').forEach(p=>p.classList.toggle('active',p.id==='tab-'+name));render()}
 function openTab(name,focus=false){navigateView(()=>{hideStructure();S.flow=null;if($('#flow').open)$('#flow').close();showTab(name,focus);window.scrollTo({top:0,behavior:'instant'})})}
@@ -661,7 +673,7 @@ function renderStructure(){$('#ms-legend').innerHTML=['factory','distributor','w
  $('#ms-timeline').innerHTML=`<svg viewBox="0 0 970 ${top}" aria-label="Firmen nach Stufe und Lebensdauer">${svg}</svg>`;wireFirmLinks($('#ms-timeline'))}
 
 // --- Lieferkette, Finanzen, Staat, F&E ----------------------------------
-function renderChain(){lines('ch-margin',byStage('margin_'),{fmt:'pct'});lines('ch-util',byStage('utilization_'),{fmt:'pct'});
+function renderChain(){renderCommodities();lines('ch-margin',byStage('margin_'),{fmt:'pct'});lines('ch-util',byStage('utilization_'),{fmt:'pct'});
  lines('ch-lost',[{label:'Verlorene Verkäufe',get:x=>x.total_lost_sales,color:css('--bad')}]);lines('ch-bull',[{label:'Bullwhip',get:x=>x.bullwhip_ratio}]);
  lines('ch-transport',[{label:'Transportkosten',get:x=>x.transport_cost,fmt:'chf'},{label:'Treibstoffindex',get:x=>x.fuel_index,axis:'y2'}],{fmt:'chf'});
  lines('ch-service',[{label:'Firmen mit Transportdienst',get:x=>x.firms_using_service},{label:'Schäden (Einheiten)',get:x=>x.damaged_units,axis:'y2'}]);
@@ -725,7 +737,6 @@ function renderStocks(){const s=D.stocks||{days:[],years:[],index:[],prices:{}},
  const movers=rows.filter(r=>r.change!=null),list=(title,rs)=>'<h4>'+title+'</h4><ul class="list">'+(rs.length?rs.map(r=>`<li>${name(r)} <span>${pct(r.change)}</span></li>`).join(''):'<li>Keine Firmen mit passenden Kursen.</li>')+'</ul>';
  $('#sx-movers').innerHTML=list('Gewinner',movers.filter(r=>r.change>0).sort((a,b)=>b.change-a.change).slice(0,5))+list('Verlierer',movers.filter(r=>r.change<0).sort((a,b)=>a.change-b.change).slice(0,5));wireFirmLinks($('#sx-movers'));
  chart('sx-stages',{type:'line',data:{labels:points.map(i=>stockLabel(i,period)),datasets:FM_GROUPS.filter(g=>g!=='bank'&&g!=='courier').map(g=>{const values=stockStageSeries(g);return stockDataset(fmGroupLabel(g),stockNormal(points.map(i=>values[i]),all.map(i=>values[i]).find(v=>v>0)),stageColor()[g])})},options:stockOptions(points,period)});
- renderCommodities();
  $('#sx-events').innerHTML=eventList((D.events||[]).filter(e=>inRange(e.year)&&['exchange_opened','listed','delisted'].includes(e.event)))
 }
 const CM_NAME={malt:'Gerste/Malz',hops:'Hopfen',packaging:'Glas',wheat:'Weizen',grapes:'Trauben',cork:'Korken',fruit:'Früchte',energy:'Strom'};
@@ -740,9 +751,14 @@ function renderCommodities(){const rows=(D.commodities||[]).filter(r=>inRange(r.
  const el=rows.filter(r=>r.electricity);$('#el-empty').textContent=el.length?'':'Kein Strompreis im gewählten Zeitraum.';
  const total=r=>Object.values(r.electricity.cost||{}).reduce((a,b)=>a+b,0);
  chart('el-chart',{type:'line',data:{labels:el.map(r=>'Jahr '+r.year),datasets:[{label:'Strompreisindex (%)',data:el.map(r=>r.electricity.index*100),borderColor:pal()[0],pointRadius:3,borderWidth:2,tension:.2,yAxisID:'y'},{label:'Stromkosten aller Firmen (CHF)',data:el.map(total),borderColor:pal()[3],pointRadius:3,borderWidth:2,tension:.2,yAxisID:'y2'}]},options:{scales:{y:{suggestedMin:50,ticks:{callback:v=>v+' %'}},y2:{position:'right',grid:{display:false},ticks:{callback:v=>chf(v)}}}}})}
+function renderBankTab(){renderBanks();
+ const rows=(D.banks||[]).filter(b=>inRange(b.year)),year=sys().at(-1)?.year,last=rows.filter(b=>b.year===year),sum=k=>last.reduce((a,b)=>a+(+b[k]||0),0);
+ const policy=sys().at(-1)?.policy_rate,infl=sys().at(-1)?.inflation;
+ $('#ba-kpis').innerHTML=[kpi('Banken aktiv',nf(last.filter(b=>b.active!==false).length)),kpi('Einlagen total',chf(sum('deposits'))),kpi('Kredite total',chf(sum('loans'))),kpi('Leitzins aktuell',pct(policy)),kpi('Teuerung aktuell',pct(infl))].join('');
+ $('#ba-events').innerHTML=eventList((D.events||[]).filter(e=>inRange(e.year)&&(/^bank_|^credit_|^account_/.test(e.event)||e.event==='policy_rate_changed')))}
 function renderFirmCash(){const firms=Object.values(D.firms||{}).filter(f=>f.stage!=='bank');
- lines('fi-firm-cash',[{label:'Cash aller Firmen',get:x=>firms.reduce((a,f)=>a+((f.yearly||[]).find(r=>r.year===x.year)?.cash||0),0)}],{fmt:'chf'})}
-function renderFinance(){renderBanks();renderFirmCash();renderHoldings();renderRndMoney('fi-rnd');lines('fi-labor',[{label:'Offene Stellen',get:x=>x.open_positions},{label:'Abgeworben',get:x=>x.poached_workers},{label:'Lohnniveau',get:x=>x.wage_index_mean,axis:'y2'}]);lines('fi-negative',byGroup('negative_interest_',r=>r.negative_interest_cost||0,'chf'),{fmt:'chf'});lines('fi-debt',byGroup('debt_',r=>Math.max(0,-(r.cash||0)),'chf',true),{fmt:'chf'});lines('fi-interest',byGroup('interest_cost_',r=>r.interest_cost||0,'chf'),{fmt:'chf'});
+ lines('fi-firm-cash',[{label:'Cash aller Firmen',get:x=>firms.filter(f=>inYear(f,x.year,true)).reduce((a,f)=>a+((f.yearly||[]).find(r=>r.year===x.year)?.cash||0),0)}],{fmt:'chf'})}
+function renderFinance(){renderFirmCash();renderHoldings();renderRndMoney('fi-rnd');lines('fi-labor',[{label:'Offene Stellen',get:x=>x.open_positions},{label:'Abgeworben',get:x=>x.poached_workers},{label:'Lohnniveau',get:x=>x.wage_index_mean,axis:'y2'}]);lines('fi-negative',byGroup('negative_interest_',r=>r.negative_interest_cost||0,'chf'),{fmt:'chf'});lines('fi-debt',byGroup('debt_',r=>Math.max(0,-(r.cash||0)),'chf',true),{fmt:'chf'});lines('fi-interest',byGroup('interest_cost_',r=>r.interest_cost||0,'chf'),{fmt:'chf'});
  const s=sys(),restr=y=>D.events.filter(e=>e.year===y&&e.event==='restructuring').length;
  chart('fi-churn',{type:'bar',data:{labels:s.map(x=>x.year),datasets:[{label:'Eintritte',data:s.map(x=>x.market_entries),backgroundColor:pal()[0]+'bb'},{label:'Konkurse',data:s.map(x=>x.bankruptcies),backgroundColor:css('--bad')+'bb'},{label:'Sanierungen',data:s.map(x=>restr(x.year)),backgroundColor:pal()[3]+'bb'},{type:'line',label:'Strategiewechsel',data:s.map(x=>x.strategy_changes),borderColor:pal()[4],pointRadius:0}]},options:{scales:{x:{grid:{display:false}}}}});
  lines('fi-hhi',[{label:'HHI',get:x=>x.market_concentration}])}
@@ -921,7 +937,7 @@ $('#flow').addEventListener('click',e=>{if(e.target.id==='flow')closeFlow()});
    wait.innerHTML=esc(pretty(a.answer)).replace(/\n/g,'<br>')+(a.sources&&a.sources.length?`<div class="hint" style="margin-top:6px">Quellen: ${a.sources.map(esc).join(' · ')}</div>`:'')}
   catch(err){wait.innerHTML='Keine Antwort vom Chat-Server. Läuft <code>python -m market_sim.serve</code> und ist das Sprachmodell erreichbar?'}
   finally{$('#chat-send').disabled=false;input.focus()}}})();
-const VIEWS={chronicle:renderChronicle,map:renderMap,overview:renderOverview,market:()=>{renderMarket();renderPeople();renderStructure()},firms:renderFirms,compare:renderCompare,chain:renderChain,finance:renderFinance,stocks:renderStocks,state:renderState,rnd:renderRnd,transport:renderTransport,events:renderEvents};
+const VIEWS={chronicle:renderChronicle,map:renderMap,overview:renderOverview,market:()=>{renderMarket();renderPeople();renderStructure()},firms:renderFirms,compare:renderCompare,chain:renderChain,finance:renderFinance,banks:renderBankTab,stocks:renderStocks,state:renderState,rnd:renderRnd,couriers:renderCouriers,events:renderEvents};
 function render(){destroy();VIEWS[S.tab]()}
 showTab(location.hash.slice(1)||'overview');viewHistory.push(viewSnapshot());viewIndex=0;viewReady=true;history.replaceState({dashboardView:0},'', '#'+S.tab);history.scrollRestoration='manual';backState();
 __TABLE_FILTERS__
@@ -929,27 +945,16 @@ __STOCK_COMPARE__
 __ETFS__
 __RND__
 __CARRIERS__
+__TRUCKS__
 __HOLDINGS__
 </script></body></html>'''
 
 
 def _texts(data: dict, config, out: Path, seed: int, years: int) -> dict:
-    """Stories and chronicle from the language model, cached per seed and run length."""
-    from market_sim.llm import make_client
+    """Stories and chronicle from templates (Phase 49): fast and deterministic, no cache needed."""
     from market_sim.texts import generate_texts
 
-    cache = out / f"texts_seed{seed}_{years}y.json"
-    if cache.exists():
-        return json.loads(cache.read_text(encoding="utf-8"))
-    cfg = config.ollama
-    llm = make_client(cfg)
-    if not llm.available():
-        print(f"Sprachmodell {llm.model} nicht erreichbar: es entstehen nur Kurzfassungen aus den Fakten.")
-    texts = generate_texts(data, llm, progress=lambda done, total: print(f"Texte {done}/{total}", end="\r"))
-    print()
-    out.mkdir(parents=True, exist_ok=True)
-    cache.write_text(json.dumps(texts, ensure_ascii=False, indent=1), encoding="utf-8")
-    return texts
+    return generate_texts(data, None, seed=seed)
 
 
 def main(argv: list[str] | None = None) -> Path:

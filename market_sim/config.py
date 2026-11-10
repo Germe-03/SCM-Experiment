@@ -177,6 +177,8 @@ class CommodityConfig(ConfigModel):
     # A firm with risk_tolerance 0 buys ahead only this far below the average price.
     stock_discount_threshold: float = Field(default=0.10, ge=0, lt=1)
     stock_cash_share: float = Field(default=0.10, ge=0, le=1)
+    # Phase 53: further traded goods that are not raw materials of any product (e.g. "trucks").
+    extra_markets: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _costs_not_negative(self) -> Self:
@@ -190,13 +192,14 @@ class CommodityConfig(ConfigModel):
     def all_names(self) -> list[str]:
         """Every raw material that has a market price."""
         if not self.components_by_category:
-            return list(self.components)
-        return sorted({n for amounts in self.components_by_category.values() for n in amounts})
+            return [n for n in self.components if n not in self.extra_markets]
+        names = {n for amounts in self.components_by_category.values() for n in amounts}
+        return sorted(names | set(self.extra_markets))
 
     def amounts(self, category: str | None) -> dict[str, float]:
         """Raw materials (and amounts per unit) a firm of this category buys."""
         if not self.components_by_category:
-            return {name: 1.0 for name in self.components}
+            return {name: 1.0 for name in self.components if name not in self.extra_markets}
         found = self.components_by_category.get(category or "")
         if found is None:
             found = self.components_by_category.get(self.fallback_category)
@@ -389,6 +392,11 @@ class CentralBankConfig(ConfigModel):
     demand_effect_cap: float = Field(default=0.05, ge=0, le=1)
     inflation_effect: float = Field(default=0.05, ge=0)
     inflation_effect_cap: float = Field(default=0.005, ge=0)
+    # Phase 50: at most N rate changes per rolling window of years; inflation
+    # above emergency_inflation allows an extraordinary move outside the limit.
+    max_changes_per_window: int = Field(default=2, ge=1)
+    window_years: int = Field(default=5, ge=1)
+    emergency_inflation: float = Field(default=0.03, ge=0)
 
     @model_validator(mode="after")
     def _rate_bounds(self) -> Self:
@@ -483,6 +491,9 @@ class StrategyChangeConfig(ConfigModel):
     # Imitate only when the best archetype beats the own one by this return gap.
     min_return_gap: float = Field(default=0.0, ge=0)
     stages: list[str] = Field(default_factory=lambda: ["retailer", "wholesaler", "distributor", "factory"])
+    # Phase 52: firms no longer choose a strategy; the yearly classification only relabels them.
+    # A new label needs to be this much closer (relative distance) than the current one.
+    hysteresis: float = Field(default=0.15, ge=0)
 
 
 class ConsumerWeights(ConfigModel):
@@ -786,6 +797,75 @@ class CourierConfig(ConfigModel):
     max_region_share: float = Field(default=0.6, ge=0, le=1)
 
 
+class TruckTypeConfig(ConfigModel):
+    """Phase 53: one truck type (list price = commodities.components["trucks"] x price_factor x market level)."""
+
+    name: str
+    label: str
+    # Units a truck can carry per day (sim units, same unit as shipments).
+    capacity: float = Field(gt=0)
+    price_factor: float = Field(gt=0)
+    # Yearly maintenance as a share of the current list price.
+    maintenance_rate: float = Field(default=0.06, ge=0)
+    life_years: int = Field(default=10, ge=1)
+    # Yearly breakdown probability of a new, maintained truck.
+    failure_base: float = Field(default=0.05, ge=0, le=1)
+    # Repair cost (share of list price) and days out of service after a repairable breakdown.
+    repair_share: float = Field(default=0.10, ge=0)
+    repair_days: int = Field(default=20, ge=0)
+
+
+class TrucksConfig(ConfigModel):
+    """Phase 53: own truck fleets, used-truck trade and truck dealers."""
+
+    enabled: bool = False
+    types: list[TruckTypeConfig] = Field(default_factory=list)
+    # Fleet capacity wanted = peak_factor x mean daily shipments.
+    peak_factor: float = Field(default=1.3, gt=0)
+    # Own fleet must be this much cheaper than the Post to be built (and this much dearer to be dropped).
+    switch_margin: float = Field(default=0.10, ge=0)
+    max_new_trucks_per_firm_year: int = Field(default=3, ge=1)
+    cash_cover: float = Field(default=2.0, ge=0)
+    # Failure risk x this without maintenance; plus age_failure_slope * (age/life)^2 for old trucks.
+    unmaintained_failure_multiplier: float = Field(default=3.0, ge=1)
+    age_failure_slope: float = Field(default=0.25, ge=0)
+    # Share of failures that are total losses: base + age_total_loss * (age/life) (x2 if unmaintained).
+    total_loss_base: float = Field(default=0.10, ge=0, le=1)
+    age_total_loss: float = Field(default=0.40, ge=0, le=1)
+    # Disposal cost of a scrapped truck as share of its list price.
+    disposal_share: float = Field(default=0.06, ge=0)
+    # Residual value of a truck at the end of its life (share of its list price when new).
+    residual_value: float = Field(default=0.05, ge=0, le=1)
+    # Firms offer trucks older than this share of their life to a dealer.
+    sell_age_fraction: float = Field(default=0.6, ge=0, le=1)
+    # Dealer pays this share of the current value for a used truck.
+    buyback_factor: float = Field(default=0.8, gt=0, le=1)
+    # A dealer takes back at most this share of the new trucks it sold in the previous year.
+    takeback_share: float = Field(default=0.2, ge=0, le=1)
+    # Own-fleet damage risk x (1 + this x (unmaintained share + mean age/life)).
+    damage_age_factor: float = Field(default=1.0, ge=0)
+    # Dealers.
+    dealer_start_count: int = Field(default=1, ge=0)
+    dealer_max_count: int = Field(default=4, ge=1)
+    dealer_max_stock: int = Field(default=12, ge=1)
+    dealer_start_cash: float = Field(default=30_000_000.0, ge=0)
+    dealer_margin: tuple[float, float] = (0.10, 0.20)
+    dealer_used_margin: float = Field(default=0.10, ge=0)
+    dealer_storage_rate: float = Field(default=0.02, ge=0)
+    dealer_operating_cost: float = Field(default=400_000.0, ge=0)
+    dealer_entry_probability: float = Field(default=0.25, ge=0, le=1)
+    dealer_exit_loss_years: int = Field(default=3, ge=1)
+    dealer_names: list[str] = Field(default_factory=lambda: [
+        "Alpen Trucks", "Gotthard Nutzfahrzeuge", "Rhein Fahrzeughandel", "Limmat Lastwagen",
+        "Jura Truck Center", "Säntis Fahrzeuge"])
+
+    @model_validator(mode="after")
+    def _types_needed(self) -> Self:
+        if self.enabled and not self.types:
+            raise ValueError("trucks need at least one truck type")
+        return self
+
+
 class CarriersConfig(ConfigModel):
     """Phase 28-30: the Post (and later couriers) replace the anonymous transport service."""
 
@@ -837,6 +917,9 @@ class ResearchConfig(ConfigModel):
         default_factory=lambda: {"simple": 0.75, "medium": 0.5, "complex": 0.25})
     # Archetype -> preferred branches of the trees.
     branch_preferences: dict[str, list[str]] = Field(default_factory=dict)
+    # Phase 51: a new firm starts with the research level of its industry (share of implemented stages).
+    entry_inheritance_enabled: bool = True
+    entry_inheritance_factor: float = Field(default=1.0, ge=0, le=1)
 
 
 class MarketingConfig(ConfigModel):
@@ -1122,6 +1205,7 @@ class MarketConfig(ConfigModel):
     categories: CategoriesConfig = Field(default_factory=CategoriesConfig)
     geography: GeographyConfig = Field(default_factory=GeographyConfig)
     carriers: CarriersConfig = Field(default_factory=CarriersConfig)
+    trucks: TrucksConfig = Field(default_factory=TrucksConfig)
     state: StateConfig = Field(default_factory=StateConfig)
     research: ResearchConfig = Field(default_factory=ResearchConfig)
     patents: PatentsConfig = Field(default_factory=PatentsConfig)

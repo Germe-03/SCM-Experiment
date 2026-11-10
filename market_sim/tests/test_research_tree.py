@@ -355,3 +355,23 @@ def test_phase34_level_needs_previous_level():
     assert "prozessautomation_2" in names and "prozessautomation_3" not in names
     lab.progress[firm.id]["prozessautomation_2"] = "implemented"
     assert "prozessautomation_3" in {stage.name for stage in lab.options(firm)}
+
+
+def test_new_firm_inherits_industry_research_level():
+    from market_sim.run import build_runner
+    runner, _ = build_runner(years=2, days_per_year=2)
+    lab = runner.lab
+    state = runner.start()
+    factories = [f for f in runner.network.firms_in("factory") if runner.env.runtimes[f.id].active]
+    tree = "factory"
+    for firm in factories:
+        names = [s.name for s in lab.stages[tree].values() if lab.available(firm, s)][:2]
+        lab.progress[firm.id] = {n: "implemented" for n in names}
+    template = factories[0].model_copy(update={"id": "factory_x1"})
+    runner.add_firm(template, state)
+    granted = lab.inherit_on_entry(runner, state, template, factories)
+    assert 0 < len(granted) <= 2
+    assert all(lab.progress["factory_x1"][n] == "implemented" for n in granted)
+    assert state.events[-1]["event"] == "rnd_inherited"
+    other = runner.network.firms_in("retailer")[0]
+    assert lab.inherit_on_entry(runner, state, other, []) == []

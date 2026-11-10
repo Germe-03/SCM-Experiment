@@ -85,10 +85,14 @@ def test_demand_effect_is_light() -> None:
     env_b.step(0, _orders(env_b, 0))
 
     for name, price in env_a.commodity_price.items():
+        if name in config.commodities.extra_markets:
+            continue
         assert price > 1.0
         assert price <= previous_a[name] * exp(0.04) * 1.0001
 
     for name, price in env_b.commodity_price.items():
+        if name in config.commodities.extra_markets:
+            continue
         assert price < previous_b[name]
         assert price >= previous_b[name] * exp(-0.04) * 0.9999
         assert price >= 0.7

@@ -26,7 +26,7 @@ def test_unknown_category_falls_back_and_empty_config_is_old_behaviour() -> None
     cfg = load_market_config().commodities
     assert cfg.amounts("unbekannt") == cfg.amounts("beer")
     old = cfg.model_copy(update={"components_by_category": {}})
-    assert old.amounts("wine") == {name: 1.0 for name in old.components}
+    assert old.amounts("wine") == {name: 1.0 for name in old.components if name not in old.extra_markets}
 
 
 def test_purchases_only_of_own_category() -> None:

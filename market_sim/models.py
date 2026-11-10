@@ -54,10 +54,20 @@ class Firm(NetworkModel):
     transport_mode: str = "own"
     # Phase 10: "store" or "restaurant" (restaurants sit next to stores at the retail tier).
     channel: str = "store"
+    # Phase 52: stable hidden behavioural disposition (an archetype key) that shapes the firm's
+    # decisions; `archetype` is only the yearly classification of the observed behaviour.
+    tendency: str = ""
+
+    @property
+    def behaviour(self) -> str:
+        """Return the disposition that drives decisions (falls back to the archetype)."""
+        return self.tendency or self.archetype
 
     @model_validator(mode="after")
     def _capture_initial_economic_anchors(self) -> Self:
         """P3 fix: retain immutable inputs for non-compounding annual policy."""
+        if not self.tendency:
+            self.tendency = self.archetype
         if self.initial_wage_level is None:
             self.initial_wage_level = self.wage_level
         if self.initial_r_and_d_budget is None:
@@ -237,3 +247,8 @@ def load_firms(path: str | Path | None = None) -> SupplyNetwork:
         for stage in STAGES
     ]
     return SupplyNetwork(stages=stages)
+
+
+def behaviour_of(firm) -> str:
+    """Return the decision-driving disposition of a firm-like object (tendency, else archetype)."""
+    return getattr(firm, "tendency", "") or firm.archetype

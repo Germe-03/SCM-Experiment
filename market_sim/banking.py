@@ -421,6 +421,9 @@ class CentralBank:
         self.inflation = 0.0
         self.output_gap = 0.0
         self.demand_multiplier = 1.0
+        self.year_index = 0
+        self.change_years: list[int] = []
+        self.last_emergency = False
 
     @property
     def inflation_adjustment(self) -> float:
@@ -435,6 +438,8 @@ class CentralBank:
             return False
         old_rate = self.policy_rate
         self.inflation = inflation
+        self.year_index += 1
+        self.last_emergency = False
         gap = demand / expected - 1 if expected > 0 else 0.0
         gap = max(-cfg.gap_cap, min(cfg.gap_cap, gap))
         self.output_gap += cfg.gap_smoothing * (gap - self.output_gap)
@@ -445,7 +450,19 @@ class CentralBank:
                   + cfg.inflation_weight * (inflation - cfg.target_inflation)
                   + cfg.gap_weight * self.output_gap)
         target = round(target / 0.0025) * 0.0025
-        self.policy_rate = max(cfg.min_rate, min(cfg.max_rate,
-                               max(old_rate - cfg.max_step, min(old_rate + cfg.max_step, target))))
-        self.policy_rate = round(self.policy_rate, 12)
-        return self.policy_rate != old_rate
+        new_rate = max(cfg.min_rate, min(cfg.max_rate,
+                       max(old_rate - cfg.max_step, min(old_rate + cfg.max_step, target))))
+        new_rate = round(new_rate, 12)
+        if new_rate == old_rate:
+            return False
+        emergency = inflation > cfg.emergency_inflation
+        recent = [y for y in self.change_years if y > self.year_index - cfg.window_years]
+        self.change_years = recent
+        if emergency:
+            self.last_emergency = True
+        elif len(recent) >= cfg.max_changes_per_window:
+            return False
+        else:
+            self.change_years.append(self.year_index)
+        self.policy_rate = new_rate
+        return True
