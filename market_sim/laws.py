@@ -12,7 +12,8 @@ if TYPE_CHECKING:
 
 METRIC_DE = {
     "margin_retailer": "Händlermarge", "margin_wholesaler": "Grosshandelsmarge", "margin_factory": "Herstellermarge",
-    "share_spirits": "Anteil Spirituosen", "share_wine": "Anteil Wein", "offences": "begangene Straftaten",
+    "share_spirits": "Anteil Spirituosen", "share_wine": "Anteil Wein",
+    "share_softdrinks": "Anteil Softdrinks", "share_water": "Anteil Wasser", "offences": "begangene Straftaten",
     "offences_detected": "entdeckte Straftaten", "average_customer_price": "Kundenpreis",
 }
 
@@ -56,6 +57,18 @@ class LawBook:
             self.minimum_wage = law.strength * config.workforce.wage_reference / runner.long_run.price_index
         elif law.kind == "excise":
             env.excise[law.category] = env.excise.get(law.category, 0.0) + law.strength
+        elif law.kind == "sugar_tax":
+            # Like an excise tax on the unit cost, but only on softdrinks; part of the demand moves to water.
+            category = law.category or "softdrinks"
+            env.excise[category] = env.excise.get(category, 0.0) + law.strength
+            book = env.brand_book
+            if book is not None and law.demand_shift:
+                book.law_shift[category] = book.law_shift.get(category, 1.0) * (1 - law.demand_shift)
+                book.law_shift[law.shift_to] = book.law_shift.get(law.shift_to, 1.0) * (1 + law.demand_shift)
+        elif law.kind == "deposit":
+            # Deposit system: a fixed cost per unit (in today's money), growing with the price level.
+            for category in law.categories or ["softdrinks", "water"]:
+                env.deposit[category] = env.deposit.get(category, 0.0) + law.strength / runner.long_run.price_index
         elif law.kind == "ad_ban" and runner.marketing is not None:
             runner.marketing.banned_categories.add(law.category)
         elif law.kind == "packaging":

@@ -43,8 +43,11 @@ def test_market_prices_stay_in_band_and_are_seeded() -> None:
     assert len(first.commodity_history) == 8 + 1
     assert len(second.commodity_history) == 8 + 1
     for row in first.commodity_history:
-        assert all(cfg.market_band_min <= price <= cfg.market_band_max
-                   for price in row["prices"].values())
+        for name, price in row["prices"].items():
+            spec = cfg.market_specs.get(name)
+            low = spec.band_min if spec and spec.band_min is not None else cfg.market_band_min
+            high = spec.band_max if spec and spec.band_max is not None else cfg.market_band_max
+            assert low <= price <= high
     assert [row["prices"] for row in first.commodity_history] == [
         row["prices"] for row in second.commodity_history
     ]
@@ -58,6 +61,7 @@ def test_demand_effect_is_light() -> None:
             "market_enabled": True,
             "market_annual_volatility": 0.0,
             "market_demand_strength": 0.04,
+            "market_specs": {},
         }),
         "categories": config.categories.model_copy(update={"enabled": False}),
     })

@@ -77,8 +77,9 @@ class Geography:
         if service is None:
             service = supplier.transport_mode == "service"
         if self.carriers is not None and service:
-            return self.km(supplier, customer) * (self.carriers.rate(supplier, customer)
-                                                  * self.fuel_index * self.transport_factor.get(supplier.id, 1.0))
+            km = self.km(supplier, customer)
+            return km * self.carriers.km_multiplier(km) * (self.carriers.rate(supplier, customer)
+                                                           * self.fuel_index * self.transport_factor.get(supplier.id, 1.0))
         return self.km(supplier, customer) * self.rate(supplier, service)
 
     def ship(self, env: MarketEnvironment, supplier: Firm, customer: Firm, parcel: dict[str, int]) -> int:
@@ -90,7 +91,8 @@ class Geography:
         service = supplier.transport_mode == "service"
         if self.trucks is not None and supplier.stage != "retailer":
             # Own fleet first; what exceeds today's truck capacity goes with the Post.
-            service = not (supplier.transport_mode == "own" and self.trucks.try_ship(supplier.id, units))
+            service = not (supplier.transport_mode == "own"
+                           and self.trucks.try_ship(supplier.id, units, self.km(supplier, customer)))
         cost = units * self.unit_transport_cost(supplier, customer, service)
         runtime = env.runtimes[supplier.id]
         runtime.handling_cost += cost
@@ -180,14 +182,21 @@ class Geography:
             return
         customers = [f for f in runner._firms() if env.runtimes[f.id].active and f.stage == runner.network.downstream_stage(firm.stage)]
         mean_km = sum(self.km(firm, c) for c in customers) / len(customers) if customers else cfg.local_km
+        # Long hauls are dearer with the Post: mean of km x surcharge factor (equals mean_km without carriers).
+        if self.carriers is not None and customers:
+            mean_paid_km = sum(self.km(firm, c) * self.carriers.km_multiplier(self.km(firm, c))
+                               for c in customers) / len(customers)
+        else:
+            mean_paid_km = mean_km
         unit_value = runner.config.stage_prices[firm.stage].base * runner.config.unit_scale.real_units_per_sim_unit
         risk = runner.strategies.get(firm.id).risk_tolerance if firm.id in runner.strategies else 0.5
         damage = cfg.damage_probability * cfg.damage_share * unit_value * (1 + (1 - risk) * cfg.risk_aversion)
         rate = self.carriers.service_rate(firm) if self.carriers is not None else cfg.service_rate
-        service = shipped * mean_km * rate * self.fuel_index
+        service = shipped * mean_paid_km * rate * self.fuel_index
         if self.trucks is not None:
             self.trucks.decide(runner, state, firm, shipped,
-                               shipped * (mean_km * cfg.own_rate * self.fuel_index + damage), service)
+                               shipped * (mean_km * cfg.own_rate * self.fuel_index + damage), service,
+                               mean_km=mean_km)
             return
         own = shipped * (mean_km * cfg.own_rate * self.fuel_index + damage) + cfg.fleet_cost_per_day * 365
         choice = "service" if service < own else "own"

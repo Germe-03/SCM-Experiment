@@ -14,9 +14,10 @@ def network() -> SupplyNetwork:
 
 def test_default_network_has_competitive_funnel(network: SupplyNetwork) -> None:
     counts = {stage: len(network.firms_in(stage)) for stage in STAGES}
-    # Phase 4: 2 breweries plus 2 wineries, a distillery and 2 importers; Phase 10: 4 restaurants.
-    assert counts == {"retailer": 14, "wholesaler": 6, "distributor": 4, "factory": 7}
-    assert sum(counts.values()) == 31
+    # Phase 4: 2 breweries plus 2 wineries, a distillery and 2 importers; Phase 10: 4 restaurants;
+    # softdrinks and water: 3 bottlers and 2 mineral springs.
+    assert counts == {"retailer": 14, "wholesaler": 6, "distributor": 4, "factory": 12}
+    assert sum(counts.values()) == 36
     assert all(2 <= count <= 14 for count in counts.values())
 
 

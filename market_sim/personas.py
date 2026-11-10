@@ -2,6 +2,9 @@
 
 import random
 
+CATEGORY_LABELS = {"beer": "Bier", "wine": "Wein", "spirits": "Spirituosen", "softdrinks": "Softdrinks",
+                   "water": "Wasser"}
+
 
 def generate_personas(config, seed, class_reports=(), brand_reports=()):
     cfg = config.personas
@@ -18,7 +21,7 @@ def generate_personas(config, seed, class_reports=(), brand_reports=()):
         typical = brands.get(row.get("favourite_brand"), {}).get("name")
         if not typical:
             candidates = [b for b in brands.values() if b["category"] == category]
-            typical = max(candidates, key=lambda b: (b["units_sold"], b["brand"]))["name"] if candidates else {"beer": "Bier", "wine": "Wein", "spirits": "Spirituosen"}.get(category, category)
+            typical = max(candidates, key=lambda b: (b["units_sold"], b["brand"]))["name"] if candidates else CATEGORY_LABELS.get(category, category)
         for gender in ("woman", "man"):
             rng = random.Random(f"personas-{seed}-{cls.name}-{gender}")
             age = rng.randint(*cfg.age_ranges[cls.age_group])

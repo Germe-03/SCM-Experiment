@@ -21,6 +21,8 @@ market_entry:
   names:
     factory_wine: [Lavaux Vins, Rebenhof, Valais Wein, Seeland Kellerei, Chablais Vins, Bündner Herrschaft, Tessiner Weingut, Bielersee Kellerei]
     factory_spirits: [Alpen Destillerie, Jura Brennerei, Säntis Spirituosen, Ticino Distillati, Emmentaler Brennerei, Zuger Kirsch, Appenzeller Destillerie, Rigi Spirituosen]
+    factory_softdrinks: [Limmat Abfüllung, Säntis Drinks, Léman Boissons, Napf Getränke, Aare Limonaden, Ticino Bibite, Jura Fruchtsäfte, Rhein Abfüllerei]
+    factory_water: [Quelle Engelberg, Bergquelle Glarus, Source du Jura, Fonte Ticino, Quelle Melchsee, Gurnigel Wasser, Saanen Quellen, Aqua Safiental]
     factory_import: [Helvetia Import, Mondial Getränke, Global Vins, Alpina Import, Rhein Import, Atlas Getränke, Euro Vins, Iberia Import]
     restaurant: [Gasthof Sonne, Bar Centrale, Wirtschaft zum Hirschen, Café du Pont, Osteria Bellavista, Brauerei-Stübli, Restaurant Rössli, Zum Goldenen Löwen, Bistro Bahnhof, Pizzeria Da Gino, Bar Rhypark, Gasthaus Linde, Café Bärengraben, Beizli zum Ochsen]
     retailer: [Aare Laden, Rigi Markt, Limmat Shop, Emme Markt, Jura Laden, Pilatus Markt, Reuss Shop, Sihl Laden, Thur Markt, Linth Laden, Saane Shop, Birs Markt, Glatt Laden, Albis Markt, Töss Shop, Kander Laden]
@@ -288,13 +290,13 @@ costs:
 
 # Rent, vehicles and machines, real CHF per day; grows with capacity.
 fixed_costs:
-  base_per_day: {factory: 55000.0, distributor: 12000.0, wholesaler: 12000.0, retailer: 18000.0}
-  per_capacity_unit_per_day: {factory: 1820.0, distributor: 3700.0, wholesaler: 3500.0, retailer: 3300.0}
+  base_per_day: {factory: 55000.0, distributor: 8000.0, wholesaler: 9600.0, retailer: 14400.0}
+  per_capacity_unit_per_day: {factory: 1820.0, distributor: 2600.0, wholesaler: 2800.0, retailer: 2640.0}
 
 # Raw materials per produced sim-unit (real CHF); each index fluctuates over time.
 commodities:
   # Grundpreis je Einheit Rohstoff; malt = Gerste/Malz, packaging = Glas (Schlüssel bleibt wegen Gesetz/F&E).
-  components: {malt: 6300.0, hops: 1700.0, packaging: 6000.0, wheat: 4000.0, grapes: 9000.0, cork: 800.0, fruit: 7000.0, trucks: 800000.0}
+  components: {malt: 6300.0, hops: 1700.0, packaging: 6000.0, wheat: 4000.0, grapes: 9000.0, cork: 800.0, fruit: 7000.0, sugar: 5000.0, co2: 1500.0, pet: 3500.0, trucks: 800000.0}
   # Phase 53: Lastwagen haben einen Marktpreis wie ein Rohstoff, gehen aber in kein Produkt ein.
   extra_markets: [trucks]
   # Menge je produzierter Einheit; Summe je Kategorie = 14000 (wie früher ohne Energie).
@@ -302,6 +304,10 @@ commodities:
     beer: {malt: 0.7, wheat: 0.6, hops: 1.0, packaging: 0.915}
     wine: {grapes: 1.0, packaging: 0.7, cork: 1.0}
     spirits: {wheat: 1.0, fruit: 1.0, packaging: 0.5}
+    # Softdrinks: Zucker, Fruchtkonzentrat (Markt fruit), CO2, PET/Dosen. Wasser: die Quelle ersetzt den
+    # Rohstoff; fast nur PET und etwas CO2, dazu Strom und (schwere) Fracht.
+    softdrinks: {sugar: 0.6, fruit: 0.4, co2: 0.7, pet: 0.9}
+    water: {co2: 0.4, pet: 1.2}
   fallback_category: beer
   index_volatility: 0.08
   index_mean_reversion: 0.2
@@ -318,8 +324,13 @@ commodities:
   stockpile_enabled: true
   stock_days: 30
   stock_storage_cost_per_year: 0.06
-  stock_spoilage_per_year: {malt: 0.05, hops: 0.25, packaging: 0.0, wheat: 0.04, grapes: 0.30, cork: 0.0, fruit: 0.30}
+  stock_spoilage_per_year: {malt: 0.05, hops: 0.25, packaging: 0.0, wheat: 0.04, grapes: 0.30, cork: 0.0, fruit: 0.30, sugar: 0.02, co2: 0.0, pet: 0.0}
   stock_unstorable: []
+  # Zucker schwankt stark, CO2 kann knapp werden (Preissprung), PET folgt dem Erdölpreis.
+  market_specs:
+    sugar: {volatility: 0.20, band_min: 0.6, band_max: 1.8}
+    co2: {volatility: 0.10, band_min: 0.7, band_max: 2.4, shortage_probability: 0.08, shortage_factor: 1.5}
+    pet: {volatility: 0.12, band_min: 0.7, band_max: 1.6}
   stock_discount_threshold: 0.10
   stock_cash_share: 0.10
 
@@ -430,6 +441,9 @@ long_run:
     - {name: sparwelle, trait: discount, strength: 0.25}
     - {name: tradition, trait: lager, strength: 0.15, age_groups: ["35-64", "65+"]}
     - {name: wein_boom, trait: wine, strength: 0.30}
+    # Softdrinks und Wasser: Gesundheitstrend (Wasser), Durst-Welle (Süssgetränke).
+    - {name: gesundheitstrend, trait: water, strength: 0.25}
+    - {name: softdrink_welle, trait: softdrinks, strength: 0.20}
 
 # Phase 4: a fixed alcohol need split over beer, wine and spirits (units are standard
 # drinks), wineries with harvest and maturation, a distillery, importers and exports.
@@ -439,18 +453,22 @@ categories:
     - {name: beer, value_factor: 1.0, relative_volume: 1.0, income_tilt: 0.95}
     - {name: wine, value_factor: 1.6, relative_volume: 0.35, income_tilt: 1.25}
     - {name: spirits, value_factor: 2.2, relative_volume: 0.12, income_tilt: 1.05}
+    # Softdrinks und Wasser sind Zusatznachfrage (kein Alkohol, jedes Alter inkl. unter 18, das über die
+    # Haushalte der erwachsenen Klassen läuft: age_tilt). Starke Saison, Wasser stabil und schwer (Fracht).
+    - {name: softdrinks, value_factor: 0.7, relative_volume: 0.7, income_tilt: 0.93, alcoholic: false, season_amplitude: 0.12, age_tilt: {"18-34": 1.3, "35-64": 0.97, "65+": 0.55}, handling_weight: 0.85}
+    - {name: water, value_factor: 0.5, relative_volume: 0.6, income_tilt: 0.98, alcoholic: false, season_amplitude: 0.03, age_tilt: {"18-34": 1.0, "35-64": 1.0, "65+": 1.0}, handling_weight: 1.0}
   # Consumers switch to another category only when theirs is gone; score x this factor.
   substitution: 0.5
   # Retail, wholesale and distribution grow to carry the extra wine and spirits volume.
-  downstream_capacity_factor: 1.47
+  downstream_capacity_factor: 2.77
   # Calibrated so that system profit stays at 5-15 % of consumer revenue.
-  handling_cost_factor: 1.53
+  handling_cost_factor: 1.55
   retailer_bias:
-    premium: {beer: 0.35, wine: 0.45, spirits: 0.20}
-    low_cost: {beer: 0.80, wine: 0.15, spirits: 0.05}
-    standard: {beer: 0.68, wine: 0.24, spirits: 0.08}
-    reliable: {beer: 0.68, wine: 0.24, spirits: 0.08}
-    growth: {beer: 0.70, wine: 0.20, spirits: 0.10}
+    premium: {beer: 0.20, wine: 0.30, spirits: 0.12, softdrinks: 0.20, water: 0.18}
+    low_cost: {beer: 0.34, wine: 0.05, spirits: 0.02, softdrinks: 0.33, water: 0.26}
+    standard: {beer: 0.30, wine: 0.10, spirits: 0.04, softdrinks: 0.30, water: 0.26}
+    reliable: {beer: 0.30, wine: 0.10, spirits: 0.04, softdrinks: 0.30, water: 0.26}
+    growth: {beer: 0.32, wine: 0.08, spirits: 0.04, softdrinks: 0.30, water: 0.26}
   bias_weight: 0.3
   harvest_day: 270
   yield_sd: 0.15
@@ -644,11 +662,11 @@ research:
   trees_enabled: true
   follower_discount: {simple: 0.75, medium: 0.5, complex: 0.25}
   branch_preferences:
-    premium: [marke, verpackung, energie, kunden, gastro]
-    low_cost: [automation, rezeptur, energie, lager]
-    growth: [automation, marke, logistik, kunden]
-    standard: [automation, rezeptur, verpackung, lager]
-    reliable: [automation, logistik, lager]
+    premium: [marke, verpackung, energie, kunden, gastro, zucker, quelle]
+    low_cost: [automation, rezeptur, energie, lager, quelle]
+    growth: [automation, marke, logistik, kunden, zucker]
+    standard: [automation, rezeptur, verpackung, lager, zucker, quelle]
+    reliable: [automation, logistik, lager, quelle]
   trees:
     factory:
       - {name: prozessautomation, branch: automation, complexity: simple, kind: productivity, effect: 0.15, cost: 36000000, duration_days: 405, success_probability: 1.0, implementation_cost: 18000000, implementation_days: 90}
@@ -679,6 +697,16 @@ research:
       - {name: solaranlage, branch: energie, requires: [klimaneutrale_brauerei], complexity: medium, kind: component_reduction, component: energy, effect: 0.15, cost: 36000000, duration_days: 365, success_probability: 1.0, implementation_cost: 24000000, implementation_days: 120}
       - {name: abwasseraufbereitung, branch: energie, requires: [solaranlage], complexity: simple, kind: component_reduction, component: energy, effect: 0.08, cost: 24000000, duration_days: 275, success_probability: 1.0, implementation_cost: 12000000, implementation_days: 70}
       - {name: abfuellanlage, branch: automation, requires: [prognose_software_2], complexity: medium, kind: robotics, effect: 0.15, cost: 42000000, duration_days: 365, success_probability: 1.0, implementation_cost: 24000000, implementation_days: 120}
+      - {name: softdrinks_sortiment, branch: marke, complexity: medium, categories: [beer], kind: new_category, adds_category: softdrinks, effect: 0.0, cost: 42000000, duration_days: 405, success_probability: 1.0, implementation_cost: 15000000, implementation_days: 70}
+      - {name: zuckerreduziert, branch: zucker, complexity: simple, categories: [softdrinks], kind: component_reduction, component: sugar, effect: 0.25, cost: 24000000, duration_days: 275, success_probability: 1.0, implementation_cost: 12000000, implementation_days: 70}
+      - {name: light_getraenke, branch: zucker, requires: [zuckerreduziert], complexity: medium, categories: [softdrinks], kind: new_brand, effect: 0.06, cost: 36000000, duration_days: 365, success_probability: 1.0, implementation_cost: 12000000, implementation_days: 70}
+      - {name: natuerliche_suessstoffe, branch: zucker, requires: [light_getraenke], complexity: complex, categories: [softdrinks], kind: component_reduction, component: sugar, effect: 0.3, cost: 54000000, duration_days: 545, success_probability: 1.0, implementation_cost: 18000000, implementation_days: 90}
+      - {name: geschmacksrichtung_softdrink, branch: marke, complexity: simple, categories: [softdrinks], kind: new_brand, effect: 0.08, cost: 30000000, duration_days: 365, success_probability: 1.0, implementation_cost: 12000000, implementation_days: 70}
+      - {name: energydrink, patentable: true, branch: marke, requires: [geschmacksrichtung_softdrink], complexity: complex, categories: [softdrinks], kind: new_brand, effect: 0.12, cost: 60000000, duration_days: 545, success_probability: 1.0, implementation_cost: 18000000, implementation_days: 90}
+      - {name: abfuellanlage_getraenke, branch: automation, complexity: medium, categories: [softdrinks, water], kind: productivity, effect: 0.15, cost: 42000000, duration_days: 365, success_probability: 1.0, implementation_cost: 24000000, implementation_days: 120}
+      - {name: leichtere_pet, branch: verpackung, complexity: simple, categories: [softdrinks, water], kind: component_reduction, component: pet, effect: 0.15, cost: 24000000, duration_days: 275, success_probability: 1.0, implementation_cost: 12000000, implementation_days: 70}
+      - {name: quellenausbau, branch: quelle, complexity: medium, categories: [water], kind: productivity, effect: 0.2, cost: 42000000, duration_days: 405, success_probability: 1.0, implementation_cost: 24000000, implementation_days: 135}
+      - {name: aromawasser, branch: quelle, requires: [quellenausbau], complexity: medium, categories: [water], kind: new_brand, effect: 0.06, cost: 36000000, duration_days: 365, success_probability: 1.0, implementation_cost: 12000000, implementation_days: 70}
     distributor:
       - {name: routenplanung, branch: logistik, complexity: simple, kind: transport_efficiency, effect: 0.15, cost: 18000000, duration_days: 275, success_probability: 1.0, implementation_cost: 6000000, implementation_days: 45}
       - {name: kuehlkette, patentable: true, branch: logistik, requires: [routenplanung], complexity: medium, kind: storage_automation, effect: 0.20, cost: 30000000, duration_days: 405, success_probability: 1.0, implementation_cost: 15000000, implementation_days: 90}
@@ -833,6 +861,9 @@ laws:
     - {name: werbeverbot, title_de: Werbeverbot für Spirituosen, kind: ad_ban, category: spirits, probability_per_year: 0.03, earliest_year: 10, watch: [share_spirits]}
     - {name: mehrwegpflicht, title_de: Mehrwegpflicht für Flaschen, kind: packaging, probability_per_year: 0.03, earliest_year: 10, strength: 0.15, watch: [margin_factory, average_customer_price]}
     - {name: kontrollen, title_de: Strengere Kontrollen, kind: controls, probability_per_year: 0.04, earliest_year: 6, strength: 1.5, watch: [offences, offences_detected]}
+    # Zuckersteuer: nur Softdrinks, verteuert die Stückkosten und verschiebt Nachfrage zu Wasser. Pfand: Kosten je Einheit.
+    - {name: zuckersteuer, title_de: Zuckersteuer auf Süssgetränke, kind: sugar_tax, category: softdrinks, probability_per_year: 0.05, earliest_year: 6, strength: 0.12, demand_shift: 0.08, shift_to: water, watch: [share_softdrinks, share_water, margin_factory]}
+    - {name: pfandpflicht, title_de: Pfand auf Getränkeverpackungen (Softdrinks und Wasser), kind: deposit, categories: [softdrinks, water], probability_per_year: 0.04, earliest_year: 8, strength: 600.0, watch: [margin_factory, average_customer_price]}
     - {name: importzoll, title_de: Höherer Importzoll, kind: import_tariff, probability_per_year: 0.03, earliest_year: 10, strength: 0.10, watch: [share_wine, margin_factory]}
 
 # Phase 11: regional labour markets. Hiring needs free workers in the firm's region;

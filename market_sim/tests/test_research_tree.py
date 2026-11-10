@@ -316,7 +316,7 @@ def test_phase34_tree_size_levels_and_no_failure():
 
     runner, _ = _runner()
     stages = runner.lab.stages
-    assert 25 <= len(stages["factory"]) <= 32
+    assert 25 <= len(stages["factory"]) <= 40
     for tree in ("distributor", "wholesaler", "retailer", "restaurant"):
         assert 8 <= len(stages[tree]) <= 10
     for tree, items in stages.items():

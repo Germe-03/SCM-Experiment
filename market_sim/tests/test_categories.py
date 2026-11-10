@@ -14,7 +14,7 @@ def _runner(days=10):
 def test_three_categories_and_new_producers_exist():
     runner, _ = _runner()
     book = runner.env.brand_book
-    assert set(book.base_share) == {"beer", "wine", "spirits"}
+    assert set(book.base_share) == {"beer", "wine", "spirits", "softdrinks", "water"}
     categories = {f.id: (f.category, f.importer) for f in runner.network.firms_in("factory")}
     assert categories["winery_01"] == ("wine", False)
     assert categories["importer_02"] == ("wine", True)

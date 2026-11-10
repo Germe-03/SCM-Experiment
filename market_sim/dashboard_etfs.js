@@ -1,5 +1,5 @@
 // Phase 23: ETFs im Reiter Börse (nur Anzeige, noch nicht kaufbar).
-function etfName(def){if(def.kind==='region')return 'ETF '+(REGION[def.key]||def.key);if(def.kind==='category')return 'ETF '+({beer:'Bier',wine:'Wein',spirits:'Spirituosen'}[def.key]||def.key);return 'ETF '+fmGroupLabel(def.key)}
+function etfName(def){if(def.kind==='region')return 'ETF '+(REGION[def.key]||def.key);if(def.kind==='category')return 'ETF '+({beer:'Bier',wine:'Wein',spirits:'Spirituosen',softdrinks:'Softdrinks',water:'Wasser'}[def.key]||def.key);return 'ETF '+fmGroupLabel(def.key)}
 function etfWeights(def,i){
  const weights=D.etfs?.weights?.[def.id]?.[i]||[];
  return weights.map(([id,weight])=>({id,weight})).sort((a,b)=>b.weight-a.weight)

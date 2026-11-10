@@ -92,6 +92,19 @@ class StateActor:
                     elif offence.kind == "material":
                         env.firm_material_factor[firm.id] = 1 - offence.benefit
 
+    def _distribute(self, runner, year, firm_id, runtime, summary, tax) -> None:
+        """Gewinnverwendung nach der Gewinnsteuer (nur wenn runner.profit_distribution gesetzt ist)."""
+        dist = getattr(runner, "profit_distribution", None)
+        if dist is None:
+            return
+        parent_rt = None
+        groups = getattr(runner, "holding_groups", None)
+        if groups is not None and groups.is_sub_only(firm_id):
+            group = groups.group_of(firm_id)
+            parent_rt = runner.env.runtimes.get(group.listing_id) if group is not None else None
+        dist.distribute(year, firm_id, runtime, summary.profit - tax, runtime.initial_cash,
+                        max(0.0, summary.revenue - summary.profit) / 12.0, parent_rt)
+
     def willing(self, firm_id: str) -> bool:
         """Only some firms consider breaking the law at all; the rest never weigh it."""
         return random.Random(f"honesty-{self.seed}-{firm_id}").random() < self.cfg.willing_share
@@ -119,6 +132,7 @@ class StateActor:
                 tax = max(0.0, summaries[dealer.id].profit) * cfg.profit_tax
                 d_rt.adjust_cash(-tax, "staat:Gewinnsteuer")
                 self.stats["taxes"] += tax
+                self._distribute(runner, year, dealer.id, d_rt, summaries[dealer.id], tax)
         for firm in runner._firms():
             runtime = env.runtimes[firm.id]
             rolls = [self.rng.random() for _ in cfg.offences] + [self.rng.random()]
@@ -144,6 +158,7 @@ class StateActor:
                 tax *= 1 - tax_offence.benefit
             runtime.adjust_cash(-tax, "staat:Gewinnsteuer")
             self.stats["taxes"] += tax
+            self._distribute(runner, year, firm.id, runtime, summary, tax)
             for offence, roll in zip(cfg.offences, rolls):
                 if offence.name not in self.active.get(firm.id, ()):
                     continue

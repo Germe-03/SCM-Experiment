@@ -623,3 +623,119 @@ firms:
     machine_capacity: 6
     category: wine
     importer: true
+
+  # Softdrinks (Süssgetränke, Eistee, Energydrinks): drei Abfüller, zusammen rund 110 Einheiten pro Tag.
+  - id: softdrink_01
+    name: "Alpentrunk Getränke AG"
+    stage: factory
+    archetype: standard
+    cash: 3000000
+    inventory: 800
+    backlog: 0
+    sell_price: 2.40
+    quality_level: 0.76
+    reputation: 0.76
+    reliability: 0.86
+    capacity: 40
+    employees: 3
+    wage_level: 5100
+    productivity_per_employee: 10.0
+    r_and_d_level: 0.40
+    r_and_d_budget: 70000
+    supplier_priority: reliability
+    suppliers: []
+    machine_capacity: 10
+    category: softdrinks
+    importer: false
+  - id: softdrink_02
+    name: "Seeland Abfüllung AG"
+    stage: factory
+    archetype: low_cost
+    cash: 2600000
+    inventory: 760
+    backlog: 0
+    sell_price: 2.10
+    quality_level: 0.62
+    reputation: 0.64
+    reliability: 0.80
+    capacity: 38
+    employees: 2
+    wage_level: 4800
+    productivity_per_employee: 14.0
+    r_and_d_level: 0.20
+    r_and_d_budget: 40000
+    supplier_priority: price
+    suppliers: []
+    machine_capacity: 10
+    category: softdrinks
+    importer: false
+  - id: softdrink_03
+    name: "Jungfrau Drinks AG"
+    stage: factory
+    archetype: premium
+    cash: 2400000
+    inventory: 600
+    backlog: 0
+    sell_price: 2.62
+    quality_level: 0.86
+    reputation: 0.80
+    reliability: 0.88
+    capacity: 30
+    employees: 2
+    wage_level: 5500
+    productivity_per_employee: 12.0
+    r_and_d_level: 0.55
+    r_and_d_budget: 90000
+    supplier_priority: quality
+    suppliers: []
+    machine_capacity: 6
+    category: softdrinks
+    importer: false
+
+  # Mineralwasser: zwei Quellen in den Bergregionen (Standortbindung), rund 95 Einheiten pro Tag.
+  - id: spring_01
+    name: "Gotthard Quellwasser AG"
+    stage: factory
+    archetype: premium
+    cash: 3400000
+    inventory: 1000
+    backlog: 0
+    sell_price: 2.50
+    quality_level: 0.88
+    reputation: 0.82
+    reliability: 0.90
+    capacity: 50
+    employees: 2
+    wage_level: 5300
+    productivity_per_employee: 20.0
+    r_and_d_level: 0.40
+    r_and_d_budget: 60000
+    supplier_priority: quality
+    suppliers: []
+    machine_capacity: 10
+    category: water
+    importer: false
+    region: zentralschweiz
+  - id: spring_02
+    name: "Bündner Bergquelle AG"
+    stage: factory
+    archetype: standard
+    cash: 3000000
+    inventory: 880
+    backlog: 0
+    sell_price: 2.25
+    quality_level: 0.74
+    reputation: 0.72
+    reliability: 0.84
+    capacity: 44
+    employees: 2
+    wage_level: 5100
+    productivity_per_employee: 18.0
+    r_and_d_level: 0.30
+    r_and_d_budget: 50000
+    supplier_priority: reliability
+    suppliers: []
+    machine_capacity: 8
+    category: water
+    importer: false
+    region: ostschweiz

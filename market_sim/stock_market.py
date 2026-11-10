@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import random
+import re
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -56,6 +57,40 @@ class StockMarket:
         return max(0.01 * max(1.0, rt.initial_cash),
                    multiple * mean_profit + group_cash)
 
+    @staticmethod
+    def _name(runner: SimulationRunner, firm_id: str | None) -> str:
+        if not firm_id:
+            return ""
+        try:
+            return runner.network.firm(firm_id).name
+        except Exception:
+            return firm_id
+
+    def delisting_reason(self, runner: SimulationRunner, state: RunState,
+                         fid: str) -> tuple[str, str | None]:
+        """Return (reason, successor id) for a delisted firm."""
+        groups = getattr(runner, "holding_groups", None)
+        if groups is not None:
+            group = groups.group_of(fid)
+            if group is None:
+                group = groups.groups.get(groups.sub_of.get(fid, ""))
+            if group is not None and fid != group.listing_id and group.dissolved_year is None:
+                return "holding", group.id
+        mergers = getattr(runner, "mergers", None)
+        for row in getattr(mergers, "log", []) or []:
+            if fid in row.get("parents", []):
+                return "merger", row.get("new")
+        for event in reversed(state.events):
+            if event.get("firm") != fid:
+                continue
+            kind = event.get("event")
+            if kind == "takeover":
+                match = re.search(r"von (\S+)", str(event.get("details", "")))
+                return "takeover", match.group(1) if match else None
+            if kind == "bankruptcy":
+                return "bankruptcy", None
+        return "exit", None
+
     def market_cap(self) -> float:
         return sum(self.prices[fid] * self.cfg.shares_per_firm for fid in sorted(self.listed))
 
@@ -92,8 +127,23 @@ class StockMarket:
         for fid in sorted(self.listed - set(active)):
             self.listed.remove(fid)
             self.stats["delistings"] += 1
+            reason, successor = self.delisting_reason(runner, state, fid)
+            name = self._name(runner, fid)
+            if reason == "holding":
+                group = groups.group_of(fid) if groups is not None else None
+                holding = group.name if group is not None else (successor or "")
+                text = f"von {holding} übernommen, gehandelt wird nur noch die Holding"
+            elif reason == "merger":
+                text = f"Fusion zu {self._name(runner, successor)}"
+            elif reason == "takeover":
+                text = f"übernommen von {self._name(runner, successor)}"
+            elif reason == "bankruptcy":
+                text = "Konkurs"
+            else:
+                text = "Marktaustritt"
             state.events.append({"year": year, "day": day, "firm": fid, "event": "delisted",
-                                 "details": f"Aktie von {fid} dekotiert"})
+                                 "details": f"Aktie von {name} dekotiert: {text}",
+                                 "reason": reason, "successor": successor})
 
         new_listings = []
         if year >= cfg.tradable_from_year:

@@ -102,7 +102,7 @@ def test_negative_cash_years_and_stage_minimum() -> None:
     assert runner.exits == {}  # one negative year is not enough
     runner._apply_bankruptcy(2)
     # The stage minimum is protected; among producers also the last one of each category.
-    for stage, expected in (("retailer", 1), ("factory", 3)):
+    for stage, expected in (("retailer", 1), ("factory", 5)):
         active = [f for f in network.firms_in(stage) if runner.env.runtimes[f.id].active]
         assert len(active) == expected
 

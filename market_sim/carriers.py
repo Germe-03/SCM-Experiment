@@ -91,6 +91,17 @@ class CarrierMarket:
         self.reports: list[dict] = []
         self.lost_units = 0
 
+    # Long hauls cost more per km (detours, empty return trips, sorting): above LONG_HAUL_KM the
+    # per-km tariff rises by LONG_HAUL_SURCHARGE for every further LONG_HAUL_KM, at most +60 %.
+    LONG_HAUL_KM = 120.0
+    LONG_HAUL_SURCHARGE = 0.3
+    LONG_HAUL_MAX = 1.6
+
+    def km_multiplier(self, km: float) -> float:
+        """Factor on the per-km tariff for a trip of ``km`` (1.0 up to the threshold)."""
+        extra = max(0.0, km - self.LONG_HAUL_KM) / self.LONG_HAUL_KM
+        return min(self.LONG_HAUL_MAX, 1.0 + self.LONG_HAUL_SURCHARGE * extra)
+
     def carriers(self) -> list[Carrier]:
         return [self.post]
 

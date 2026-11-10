@@ -13,6 +13,10 @@ if TYPE_CHECKING:
     from market_sim.runner import RunState, SimulationRunner
 
 
+CATEGORY_DE = {"beer": "Bier", "wine": "Wein", "spirits": "Spirituosen", "softdrinks": "Softdrinks",
+               "water": "Wasser"}
+
+
 class ResearchLab:
     """Runs at most one project per firm; costs are booked daily while it runs."""
 
@@ -90,7 +94,9 @@ class ResearchLab:
         if project.kind == "component_reduction":
             factors = env.component_factor.setdefault(firm.id, {})
             factors[project.component] = factors.get(project.component, 1.0) * (1 - project.effect)
-            component = {"malt": "Malz", "hops": "Hopfen", "packaging": "Verpackung", "energy": "Energie"}[project.component]
+            component = {"malt": "Malz", "hops": "Hopfen", "packaging": "Verpackung", "energy": "Energie",
+                         "sugar": "Zucker", "fruit": "Fruchtkonzentrat", "co2": "CO2",
+                         "pet": "PET/Dosen"}.get(project.component, project.component)
             return f"{component} −{project.effect:.0%}"
         if project.kind == "transport_efficiency":
             if env.geography is None:
@@ -118,6 +124,15 @@ class ResearchLab:
             return "kein Markenmarkt"
         self._brands += 1
         brand_id = f"{firm.id}_rd{self._brands:02d}"
+        if project.kind == "new_category":
+            # A brewery adds a brand of another product category (e.g. softdrinks) to its range.
+            category = project.adds_category
+            traits, positioning = [category], "standard"
+            reputation = firm.reputation
+            book.brands[brand_id] = Brand(brand_id, f"{firm.name} {CATEGORY_DE.get(category, category)} {self._brands}",
+                                          firm.id, positioning, reputation, traits, category, 0)
+            book.production_share[brand_id] = 1.0
+            return f"neue Marke {brand_id} ({CATEGORY_DE.get(category, category)})"
         if project.kind == "alkoholfrei":
             traits, positioning = ["alkoholfrei"], "standard"
         else:

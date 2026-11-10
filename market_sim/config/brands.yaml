@@ -18,3 +18,10 @@ brands:
   - {id: alpen_kraeuter, name: Alpen Kraeuter, owner: distillery_01, positioning: standard, category: spirits, traits: [spirits]}
   - {id: euro_pils, name: Euro Pils, owner: importer_01, positioning: cheap, category: beer, traits: [lager, discount, import]}
   - {id: rioja_import, name: Rioja Import, owner: importer_02, positioning: cheap, category: wine, traits: [wine, import]}
+  - {id: alpentrunk_cola, name: Alpentrunk Cola, owner: softdrink_01, positioning: standard, category: softdrinks, traits: [softdrinks]}
+  - {id: alpentrunk_eistee, name: Alpentrunk Eistee, owner: softdrink_01, positioning: standard, category: softdrinks, traits: [softdrinks]}
+  - {id: seeland_limo, name: Seeland Limo, owner: softdrink_02, positioning: cheap, category: softdrinks, traits: [softdrinks, discount]}
+  - {id: jungfrau_eistee, name: Jungfrau Eistee, owner: softdrink_03, positioning: premium, category: softdrinks, traits: [softdrinks]}
+  - {id: gotthard_still, name: Gotthard Still, owner: spring_01, positioning: premium, category: water, traits: [water]}
+  - {id: gotthard_prickelnd, name: Gotthard Prickelnd, owner: spring_01, positioning: standard, category: water, traits: [water]}
+  - {id: bergquelle_classic, name: Bergquelle Classic, owner: spring_02, positioning: standard, category: water, traits: [water]}

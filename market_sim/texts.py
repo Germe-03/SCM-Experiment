@@ -21,7 +21,8 @@ USE_LLM_DEFAULT = False
 STAGE_DE = {"retailer": "Detailhandel", "wholesaler": "Grosshandel", "distributor": "Verteilung", "factory": "Hersteller"}
 # Phase 56: truck dealers sit outside the beverage chain; they only get a label for stories.
 STAGE_LABEL = {**STAGE_DE, "truck_dealer": "Lastwagenhandel"}
-CAT_DE = {"beer": "Bier", "wine": "Wein", "spirits": "Spirituosen"}
+CAT_DE = {"beer": "Bier", "wine": "Wein", "spirits": "Spirituosen",
+          "softdrinks": "Softdrinks", "water": "Wasser"}
 EXIT_DE = {"bankruptcy": "Konkurs", "takeover": "Übernahme", "poisoning": "Vergiftung", "merger": "Fusion"}
 KEY_EVENTS = {"takeover", "merger_formed", "merger_blocked", "holding_formed", "holding_takeover",
               "holding_dissolved", "holding_sold", "poisoning", "offence_detected", "rnd_success", "site_finished", "expand_finished",
@@ -367,6 +368,12 @@ def _event_sentence(data: dict, event: dict, picker: _Picker, zeit: str = "") ->
     }
 
     templates = ct.EVENT_TEMPLATES.get(key)
+    if key == "delisted":
+        successor = event.get("successor")
+        values["nachfolger"] = _name(data, successor) if successor in (data.get("firms") or {}) else ""
+        reason_templates = ct.EVENT_TEMPLATES.get(f"delisted_{event.get('reason')}")
+        if reason_templates:
+            templates = reason_templates
     candidates = []
     if templates:
         conditions = _conditions(data, firm_id, event.get("year")) if firm_id is not None else set()
@@ -378,6 +385,8 @@ def _event_sentence(data: dict, event: dict, picker: _Picker, zeit: str = "") ->
             if "{firma}" in template and not values["firma"]:
                 continue
             if "{ziel}" in template and not values["ziel"]:
+                continue
+            if "{nachfolger}" in template and not values.get("nachfolger"):
                 continue
             candidates.append(template)
     if not candidates:

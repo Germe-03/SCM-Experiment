@@ -145,12 +145,23 @@ class FixedCostConfig(ConfigModel):
         return self
 
 
+class CommodityMarketSpec(ConfigModel):
+    """Own market behaviour of one raw material (volatile sugar, CO2 shortages)."""
+
+    volatility: float | None = Field(default=None, ge=0)
+    band_min: float | None = Field(default=None, gt=0)
+    band_max: float | None = Field(default=None, gt=0)
+    # Yearly chance of a shortage: the price jumps by shortage_factor.
+    shortage_probability: float = Field(default=0.0, ge=0, le=1)
+    shortage_factor: float = Field(default=1.5, gt=0)
+
+
 class CommodityConfig(ConfigModel):
     """Raw materials per produced sim-unit (real CHF) with fluctuating price indices."""
 
     # Base cost per component, e.g. malt, hops, packaging, energy.
     components: dict[str, float] = Field(default_factory=dict)
-    # Amount of each raw material per produced unit, by product category (beer, wine, spirits).
+    # Amount of each raw material per produced unit, by product category (beer, wine, spirits, softdrinks, water).
     # Empty = every firm uses every component once (old behaviour). Raw materials listed
     # in several categories (wheat, glass) share one market price.
     components_by_category: dict[str, dict[str, float]] = Field(default_factory=dict)
@@ -179,6 +190,8 @@ class CommodityConfig(ConfigModel):
     stock_cash_share: float = Field(default=0.10, ge=0, le=1)
     # Phase 53: further traded goods that are not raw materials of any product (e.g. "trucks").
     extra_markets: list[str] = Field(default_factory=list)
+    # Softdrinks: own volatility, price band and shortages for single raw materials (own random stream).
+    market_specs: dict[str, CommodityMarketSpec] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def _costs_not_negative(self) -> Self:
@@ -604,6 +617,17 @@ class CategoryConfig(ConfigModel):
     relative_volume: float = Field(gt=0)
     # Share multiplier per income level above the middle (wine rises with income).
     income_tilt: float = Field(default=1.0, gt=0)
+    # Softdrinks and water: no alcohol rules, so every age group buys (children live in the
+    # households of the adult classes, see age_tilt).
+    alcoholic: bool = True
+    # Extra seasonal swing on top of the general demand season (1 + amplitude x sin), the
+    # swing is doubled during a heat summer.
+    season_amplitude: float = Field(default=0.0, ge=0, lt=1)
+    # Share multiplier per age group (young households with children drink more softdrinks).
+    age_tilt: dict[str, float] = Field(default_factory=dict)
+    # Handling and freight cost per unit relative to beer (None = like value_factor).
+    # Water is cheap but heavy, so its handling weight is higher than its value.
+    handling_weight: float | None = Field(default=None, gt=0)
 
 
 class ImportConfig(ConfigModel):
@@ -730,9 +754,11 @@ class ResearchProjectConfig(ConfigModel):
     # markup x (1 + effect)), maturation (wine matures effect share faster).
     kind: Literal["productivity", "cost_reduction", "new_brand", "alkoholfrei",
                   "component_reduction", "transport_efficiency", "storage_automation", "robotics",
-                  "reputation", "awareness", "margin", "maturation"]
+                  "reputation", "awareness", "margin", "maturation", "new_category"]
     enabled: bool = True
-    component: Literal["malt", "hops", "packaging", "energy"] | None = None
+    component: Literal["malt", "hops", "packaging", "energy", "sugar", "fruit", "co2", "pet"] | None = None
+    # new_category: the firm adds a brand of this product category to its range.
+    adds_category: str | None = None
     cost: float = Field(gt=0)
     duration_days: int = Field(gt=0)
     success_probability: float = Field(ge=0, le=1)
@@ -743,6 +769,8 @@ class ResearchProjectConfig(ConfigModel):
     def validate_effect(self) -> Self:
         if self.kind == "component_reduction" and self.component is None:
             raise ValueError("component_reduction requires a component")
+        if self.kind == "new_category" and not self.adds_category:
+            raise ValueError("new_category requires adds_category")
         if self.kind in ("component_reduction", "transport_efficiency", "storage_automation", "robotics",
                          "maturation") and self.effect >= 1:
             raise ValueError("reduction effects must be smaller than one")
@@ -1127,11 +1155,18 @@ class MergersConfig(ConfigModel):
 class LawConfig(ConfigModel):
     name: str
     title_de: str
-    kind: Literal["minimum_wage", "excise", "ad_ban", "packaging", "controls", "import_tariff"]
+    kind: Literal["minimum_wage", "excise", "ad_ban", "packaging", "controls", "import_tariff",
+                  "sugar_tax", "deposit"]
     probability_per_year: float = Field(ge=0, le=1)
     earliest_year: int = Field(default=5, ge=1)
+    # sugar_tax: tax rate on the unit cost; deposit: real CHF per sim-unit (today's money).
     strength: float = 0.0
     category: str | None = None
+    # deposit: product categories that pay the deposit (empty = softdrinks and water).
+    categories: list[str] = Field(default_factory=list)
+    # sugar_tax: share of the demand that moves from `category` to `shift_to`.
+    demand_shift: float = Field(default=0.0, ge=0, lt=1)
+    shift_to: str = "water"
     # KPIs watched to judge whether the law had a clear effect.
     watch: list[str] = Field(default_factory=list)
 

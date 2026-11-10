@@ -78,6 +78,9 @@ class RunResult:
     carriers: list[dict[str, object]] = field(default_factory=list)
     # Phase 53: truck fleets, used trucks, dealers.
     trucks: dict = field(default_factory=dict)
+    # Phase 57: truck leasing and profit distribution under the OR.
+    leasing: dict = field(default_factory=dict)
+    profit_distribution: dict = field(default_factory=dict)
     offence_ledger: list[dict[str, object]] = field(default_factory=list)
     holdings: list[dict[str, object]] = field(default_factory=list)
     # Phase 40: holdings with subsidiaries (one snapshot per group at the end) and their log.
@@ -196,6 +199,10 @@ class SimulationRunner:
         self.mergers = Mergers(self, seed) if config.mergers.enabled else None
         self.stock_market = StockMarket(self, seed) if config.stock_market.enabled else None
         self.laws = LawBook(self, seed) if config.laws.enabled else None
+        # Phase 57: profit distribution (OR 672 ff.) and truck leasing.
+        from market_sim.profit_distribution import ProfitDistribution
+        self.profit_distribution = ProfitDistribution()
+        self.leasing = None
         self.labor = LaborMarket(self) if config.labor.enabled else None
         self._phase1_rng = random.Random(f"phase1-{seed}")
         self._entry_counters = {stage: 0 for stage in STAGES}
@@ -233,7 +240,14 @@ class SimulationRunner:
             recent_demand={firm.id: [] for firm in self._firms()},
             recent_sales={firm.id: [] for firm in self._firms()},
         )
-        geo = self.env.geography
+        geo = getattr(self.env, "geography", None)
+        # Phase 57: leasing needs the banks, which exist only after env.reset().
+        self.leasing = None
+        if geo is not None and getattr(geo, "trucks", None) is not None and getattr(self.env, "banking", None) is not None:
+            from market_sim.leasing import LeasingBook
+            self.leasing = LeasingBook(None, self.env.banking, geo.trucks,
+                                       self.config.simulation.days_per_year, self.seed)
+            geo.trucks.leasing = self.leasing
         if geo is not None and getattr(geo, "trucks", None) is not None:
             geo.trucks.register_all(self, state)  # Phase 56: the truck dealers are firms
         return state
@@ -282,6 +296,8 @@ class SimulationRunner:
             merger_log=self.mergers.report() if self.mergers is not None else [],
             laws=assess_laws(self.laws.enacted, [k.model_dump() for k in state.system_kpis], self.config.laws)
             if self.laws is not None else [],
+            leasing=self.leasing.export() if self.leasing is not None else {},
+            profit_distribution=self.profit_distribution.export() if self.profit_distribution is not None else {},
             offence_ledger=list(self.state_actor.offence_ledger) if self.state_actor is not None else [],
         )
 
@@ -359,6 +375,9 @@ class SimulationRunner:
             state.global_day + first + event.duration_days - 1,
             event.strength,
         ))
+        if event.type == "heat_summer" and getattr(self.env, "brand_book", None) is not None:
+            self.env.brand_book.heat_windows.append((state.global_day + first,
+                                                     state.global_day + first + event.duration_days - 1))
         state.events.append({
             "year": year, "day": first + 1, "firm": "", "event": event.type,
             "details": f"Nachfrage ×{event.strength:g} während {event.duration_days} Tagen",
@@ -564,6 +583,8 @@ class SimulationRunner:
                 total_demand = max(0, round(total_demand * self.env.central_bank.demand_multiplier))
             _, info = self.env.step(total_demand, {key: value.order_qty for key, value in decisions.items()})
             self.region_reporter.daily(self)
+            if self.leasing is not None:
+                self.leasing.daily(self.env)
             if self.stock_market is not None:
                 self.stock_market.daily(self, state, year + 1, day, global_day)
             demand_series.append(total_demand)
@@ -712,6 +733,8 @@ class SimulationRunner:
         geo = self.env.geography
         if geo is not None:
             geo.year_end(self, state)
+            if self.leasing is not None:
+                self.leasing.year_end(self, state)
         if self.state_actor is not None:
             self.state_actor.year_end(self, state)
             self.state_actor.takeovers(self, state)
@@ -867,7 +890,7 @@ class SimulationRunner:
             shares[book.brands[brand_id].category] = shares.get(book.brands[brand_id].category, 0.0) + sold / total
         exported = book.export_units
         book.export_units = 0
-        return {"export_units": exported, **{f"share_{c}": v for c, v in shares.items() if c in ("beer", "wine", "spirits")}}
+        return {"export_units": exported, **{f"share_{c}": v for c, v in shares.items() if c in ("beer", "wine", "spirits", "softdrinks", "water")}}
 
     def _enter_market(self, state: RunState) -> None:
         """Draw exactly three numbers per stage, including disabled/full stages."""

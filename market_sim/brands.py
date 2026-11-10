@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from math import floor
+from math import floor, pi, sin
 from typing import TYPE_CHECKING
 
 from market_sim.models import behaviour_of
@@ -108,6 +108,16 @@ class BrandBook:
         total_volume = sum(c.relative_volume for c in cats.categories) or 1.0
         self.base_share = {c.name: c.relative_volume / total_volume for c in cats.categories}
         self.global_weight = dict(self.base_share)
+        # Softdrinks and water: no alcohol rules, handling weight, seasons, heat summers and demand shifts by law.
+        self.cat_by_name = {c.name: c for c in cats.categories}
+        self.handling = {c.name: (c.value_factor if c.handling_weight is None else c.handling_weight)
+                         for c in cats.categories}
+        # (first day, last day) of heat summers in global days; the runner fills it from the heat_summer event.
+        self.heat_windows: list[tuple[int, int]] = []
+        # Demand multiplier per category set by laws (sugar tax: softdrinks down, water up).
+        self.law_shift: dict[str, float] = {}
+        # Seasonal and law multiplier of today's demand per category (refreshed every day in fulfill).
+        self.category_mult: dict[str, float] = {}
         self.retail_weight: dict[str, dict[str, float]] = {}
         self.export_units = 0
         # Phase 6: fear after a poisoning scandal lowers consumption of that category.
@@ -154,6 +164,54 @@ class BrandBook:
     def category_value(self, category: str) -> float:
         return self.value.get(category, 1.0) if self.value else 1.0
 
+    def is_alcoholic(self, category: str) -> bool:
+        cat = self.cat_by_name.get(category)
+        return True if cat is None else cat.alcoholic
+
+    def handling_weight(self, brand_id: str) -> float:
+        """Handling and freight cost of one unit of this brand relative to beer."""
+        return self.handling.get(self.brands[brand_id].category, 1.0) if self.handling else 1.0
+
+    def parcel_handling(self, parcel: dict[str, int]) -> float:
+        """Units of a mixed parcel weighted by the handling weight of each brand's category."""
+        return sum(units * self.handling_weight(b) for b, units in parcel.items())
+
+    def season_factor(self, category: str, day: int, heat: bool | None = None) -> float:
+        """Extra seasonal demand factor of a category (1 = no extra season), day of the year or global day.
+
+        Summer (peak at the same time as the general season) raises the demand of softdrinks and, less,
+        of water; during a heat summer the extra swing doubles.
+        """
+        cat = self.cat_by_name.get(category)
+        if cat is None or not cat.season_amplitude:
+            return 1.0
+        days = self.config.simulation.days_per_year
+        wave = sin(2 * pi * ((day % days) - self.config.demand.seasonal_phase_days) / days)
+        if heat is None:
+            heat = any(first <= day <= last for first, last in self.heat_windows)
+        if heat:
+            wave += max(0.0, wave)
+        return max(0.05, 1 + cat.season_amplitude * wave)
+
+    def refresh_category_mult(self, day: int) -> None:
+        """Today's multiplier per category: season x law shift (only entries that differ from 1)."""
+        mult = {}
+        for name in self.base_share:
+            value = self.season_factor(name, day) * self.law_shift.get(name, 1.0)
+            if abs(value - 1.0) > 1e-9:
+                mult[name] = value
+        self.category_mult = mult
+
+    def season_gain(self, cls) -> float:
+        """Today's units of a class relative to the unseasoned base (category season and laws)."""
+        if not self.category_mult:
+            return 1.0
+        plain = self.class_shares(cls, {}, seasonal=False, raw_only=True)
+        total = sum(plain.values())
+        if total <= 0:
+            return 1.0
+        return sum(v * self.category_mult.get(c, 1.0) for c, v in plain.items()) / total
+
     def markup(self, firm: Firm) -> float:
         """Restaurants charge for service on top of the store price."""
         cfg = self.config.restaurants
@@ -196,12 +254,23 @@ class BrandBook:
         return sum(units * price * self.value_factor(b) for b, units in parcel.items())
 
     # -- category weights ----------------------------------------------
-    def class_shares(self, cls, boosts: dict[str, float]) -> dict[str, float]:
-        """Category split of a class: base share, income tilt and trends (fixed total need)."""
+    def class_shares(self, cls, boosts: dict[str, float], seasonal: bool = True,
+                     raw_only: bool = False) -> dict[str, float]:
+        """Category split of a class: base share, income tilt, age tilt and trends (fixed total need).
+
+        Today's season and laws (category_mult) apply when ``seasonal`` is set. The units of the class
+        grow with season_gain, so the season adds softdrinks and water demand without taking alcohol away.
+        """
         level = (cls.income_level or 3) - 3
+        age = cls.age_group or ""
         raw = {}
         for c in self.cat_cfg.categories:
-            raw[c.name] = self.base_share[c.name] * c.income_tilt ** level * (1 + boosts.get(c.name, 0.0))
+            raw[c.name] = (self.base_share[c.name] * c.income_tilt ** level * c.age_tilt.get(age, 1.0)
+                           * (1 + boosts.get(c.name, 0.0)))
+            if seasonal:
+                raw[c.name] *= self.category_mult.get(c.name, 1.0)
+        if raw_only:
+            return raw
         total = sum(raw.values()) or 1.0
         return {k: v / total for k, v in raw.items()}
 
@@ -328,6 +397,13 @@ class BrandBook:
             (f for f in env.network.firms_in("retailer") if env.runtimes[f.id].active), key=lambda f: f.id
         )
         demand_by_class = largest_remainder(total_demand, self.class_volume)
+        if self.categories_on:
+            # Summer and laws change how much softdrinks and water are drunk, on top of the fixed alcohol need.
+            self.refresh_category_mult(env.period)
+            if self.category_mult:
+                for name in demand_by_class:
+                    demand_by_class[name] = round(demand_by_class[name] * self.season_gain(self.classes[name]))
+                total_demand = sum(demand_by_class.values())
         if self.fear:
             for name in demand_by_class:
                 cls = self.classes[name]
@@ -542,7 +618,7 @@ class BrandBook:
                 runtime.record_items(runtime.sold_items, "konsumenten", {
                     brand.category if self.categories_on else "alle": {"chf": value, "units": units}
                 })
-                runtime.handling_cost += units * env.config.costs.handling_cost_per_unit * self.value_factor(key[1])
+                runtime.handling_cost += units * env.config.costs.handling_cost_per_unit * self.handling_weight(key[1])
                 if restaurant:
                     # Service, rent and kitchen grow with what the guests pay.
                     runtime.handling_cost += value * self.config.restaurants.service_cost_share

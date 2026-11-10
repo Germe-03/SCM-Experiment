@@ -87,7 +87,7 @@ function renderStockExplorer(){
  const uniq=k=>[...new Set(items.filter(x=>x.type==='s'&&x[k]).map(x=>x[k]))];
  const fillSel=(id,label,vals,cur,nameOf)=>{const el=card.querySelector(id);el.innerHTML='<option value="">'+label+': alle</option>'+vals.map(v=>'<option value="'+esc(v)+'"'+(v===cur?' selected':'')+'>'+esc(nameOf(v))+'</option>').join('')};
  fillSel('#ex-f-region','Region',uniq('region').sort(),fl.region,v=>(typeof REGION!=='undefined'&&REGION[v])||v);
- fillSel('#ex-f-cat','Kategorie',uniq('category').sort(),fl.category,v=>({beer:'Bier',wine:'Wein',spirits:'Spirituosen'})[v]||v);
+ fillSel('#ex-f-cat','Kategorie',uniq('category').sort(),fl.category,v=>({beer:'Bier',wine:'Wein',spirits:'Spirituosen',softdrinks:'Softdrinks',water:'Wasser'})[v]||v);
  fillSel('#ex-f-stage','Stufe',uniq('stage').filter(v=>v!=='bank'&&v!=='courier'),fl.stage,v=>(typeof STAGE!=='undefined'&&STAGE[v])||v);
  card.querySelector('#ex-search').value=fl.q;card.querySelector('#ex-sort').value=fl.sort;
  card.querySelector('#ex-res').value=res;card.querySelector('#ex-norm').checked=norm;card.querySelector('#ex-index').checked=withIndex;

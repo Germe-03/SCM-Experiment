@@ -29,7 +29,9 @@ def test_switched_off_means_no_carrier_market():
     assert result.carriers == []
 
 
-def test_post_with_old_numbers_gives_identical_results():
+def test_post_with_old_numbers_gives_identical_results(monkeypatch):
+    from market_sim.carriers import CarrierMarket
+    monkeypatch.setattr(CarrierMarket, "LONG_HAUL_SURCHARGE", 0.0)  # old numbers: flat tariff per km
     _, a = _run(_config(enabled=False), years=2, days=30, seed=3)
     _, b = _run(
         _config(enabled=True, max_tariff_step=0.0, capacity_per_day=0.0),
@@ -183,3 +185,13 @@ def test_carrier_report_csv_is_written(tmp_path):
     first_line = report.read_text().splitlines()[0]
     assert "bundesbeitrag" in first_line
     assert "tariff" in first_line
+
+
+def test_long_hauls_cost_more_per_km():
+    from market_sim.carriers import CarrierMarket
+    runner, _ = _run(_config(), years=1, days=5)
+    market = runner.env.geography.carriers
+    assert market.km_multiplier(CarrierMarket.LONG_HAUL_KM) == 1.0
+    assert market.km_multiplier(60) == 1.0
+    assert 1.0 < market.km_multiplier(300) <= CarrierMarket.LONG_HAUL_MAX
+    assert market.km_multiplier(1e6) == CarrierMarket.LONG_HAUL_MAX

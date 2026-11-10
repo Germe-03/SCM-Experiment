@@ -14,7 +14,7 @@ from market_sim.texts import (KEY_EVENTS, YEAR_EVENTS, _follow_ups_for, _Picker,
                               generate_texts, template_chronicle)
 
 KNOWN = {"firma", "jahr", "details", "stufe", "ereignis", "gewinn", "firmen", "frueher", "bestjahr", "schlechtjahr",
-         "zeit", "ziel", "liste", "anzahl"}
+         "zeit", "ziel", "liste", "anzahl", "nachfolger"}
 WHEN = {"profit", "loss", "loss_streak3", "largest_in_stage", "first_in_stage", "last_in_stage"}
 
 
@@ -136,3 +136,26 @@ def test_no_two_sentences_of_same_kind_per_year_chronicle(data):
     events = [{"year": year, "day": 5 + i, "firm": f, "event": "recession", "details": ""} for i, f in enumerate(firms)]
     text = template_chronicle(dict(data, events=events), year, _Picker(0), {})
     assert text.count("Rezession") <= 1
+
+
+def test_new_event_kinds_have_templates_and_render_chronicle():
+    from market_sim.texts import _event_sentence
+    for name in ("delisted", "lease_started", "lease_ended", "lease_default"):
+        assert any(e["when"] is None for e in ct.EVENT_TEMPLATES[name]), name
+        assert name in ct.EVENT_IMPORTANCE
+    for reason in ("holding", "merger", "takeover", "bankruptcy", "exit"):
+        assert len(ct.EVENT_TEMPLATES[f"delisted_{reason}"]) >= 2
+    assert ct.EVENT_IMPORTANCE["lease_default"] > ct.EVENT_IMPORTANCE["lease_started"]
+    data = {"firms": {"a": {"name": "Alpha AG"}, "b": {"name": "Beta AG"}}}
+    for reason in ("holding", "merger", "takeover", "bankruptcy", "exit", None):
+        for successor in ("b", None):
+            event = {"year": 3, "day": 1, "firm": "a", "event": "delisted", "details": "",
+                     "reason": reason, "successor": successor}
+            for seed in range(6):
+                text = _event_sentence(data, event, _Picker(seed), zeit="Im Jahr 3")
+                assert "Alpha AG" in text and "{" not in text and "  " not in text
+                if successor is None:
+                    assert "Beta AG" not in text
+    for name in ("lease_started", "lease_ended", "lease_default"):
+        text = _event_sentence(data, {"year": 2, "firm": "a", "event": name, "details": ""}, _Picker(1), zeit="Im Jahr 2")
+        assert "Alpha AG" in text

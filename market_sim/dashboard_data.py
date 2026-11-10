@@ -198,5 +198,7 @@ def build_dashboard_data(
         "region_reports": result.region_reports,
         "firm_locations": result.firm_locations,
         "personas": result.personas,
+        "leasing": dict(getattr(result, "leasing", {}) or {}),
+        "profit_distribution": dict(getattr(result, "profit_distribution", {}) or {}),
 
     }

@@ -13,7 +13,7 @@ const context = {D, S, range, $, store:{get:(k,d)=>d,set(){}}, actorLabel:id=>D.
   sys: () => D.system.filter(x => x.year >= range.from && x.year <= range.to),
   firm: id => D.firms[id], fname: id => D.firms[id]?.name || id,
   esc: v => String(v ?? '').replaceAll('<', '&lt;'),
-  pretty:String, EVENT:{}, REGION:{}, ARCH:{},
+  pretty:String, EVENT:{}, REGION:{}, ARCH:{}, eventExtra:()=>'',
   FM_GROUPS:['retailer','restaurant','wholesaler','distributor','factory','bank'],
   fmGroup:f=>f?.channel==='restaurant'?'restaurant':f?.stage, fmGroupLabel:g=>g==='bank'?'Banken':g, catLabel:()=> '–',
   stageColor:()=>({}), kpi:(label,value)=>label+': '+value, sumBy:(a,k)=>a.reduce((n,r)=>n+(r[k]||0),0),

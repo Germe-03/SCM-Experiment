@@ -318,10 +318,15 @@ class MarketEnvironment:
         # Phase 10: marketing hook and excise taxes per category (share of unit cost).
         self.marketing = None
         self.excise: dict[str, float] = {}
+        # Deposit law: real CHF per produced unit and category (at price level 1).
+        self.deposit: dict[str, float] = {}
         self._wine_rng = random.Random(f"wine-{self.seed}")
         self.domestic_daily_demand = float(self.config.demand.daily_demand_units)
         self.runtimes = {}
         self._commodity_rng = random.Random(f"commodities-{self.seed}")
+        # Raw materials with their own market behaviour (sugar, CO2, PET) draw from a separate stream.
+        self._commodity_special_rng = random.Random(f"commodities-special-{self.seed}")
+        self._commodity_shortage: dict[str, float] = {}
         names = self.config.commodities.all_names()
         self.commodity_log_index = {name: 0.0 for name in names}
         # Phase 38: market price level per commodity (share of base price), demand and history.
@@ -545,9 +550,10 @@ class MarketEnvironment:
                             add_to_stock(self.runtimes[downstream_id].incoming_brands[-1], parcel)
                         if self.brand_book.categories_on:
                             trade_value = self._trade_value(1, self.brand_book.parcel_value(parcel, price))
-                            # Wine and spirits cost more to handle, in line with their value.
+                            # Wine and spirits cost more to handle, in line with their value; water
+                            # is cheap but heavy (handling_weight).
                             runtime.handling_cost += self.config.costs.handling_cost_per_unit * (
-                                self.brand_book.parcel_value(parcel, 1.0) - sum(parcel.values()))
+                                self.brand_book.parcel_handling(parcel) - sum(parcel.values()))
                     runtime.revenue += trade_value
                     items = self.trade_items(parcel, trade_value)
                     self.runtimes[downstream_id].pay(supplier_id, trade_value, items)
@@ -796,6 +802,8 @@ class MarketEnvironment:
             cost *= imports.cost_factor * self.fx_rate * (1 + imports.tariff)
         # Phase 10: excise taxes raise the unit cost of a category.
         cost *= 1 + self.excise.get(firm.category, 0.0)
+        # Deposit law: a fixed cost per unit on top (growing with the price level).
+        cost += self.deposit.get(firm.category, 0.0) * self.price_index
         factor = self.firm_material_factor.get(firm.id, 1.0)
         if quantity:
             self.material_savings[firm.id] = self.material_savings.get(firm.id, 0.0) + quantity * cost * (1 - factor)
@@ -804,14 +812,22 @@ class MarketEnvironment:
     def _book_production(self, firm: Firm, runtime: FirmRuntime, amount: float) -> None:
         """Production cost split into excise tax, import duty and raw materials (see unit_production_cost)."""
         excise = self.excise.get(firm.category, 0.0)
-        tax = amount * excise / (1 + excise)
+        deposit = 0.0
+        if self.deposit.get(firm.category, 0.0) > 0 and amount > 0:
+            unit = self.unit_production_cost(firm)
+            deposit = amount * min(1.0, self.deposit[firm.category] * self.price_index / unit) if unit > 0 else 0.0
+        tax = (amount - deposit) * excise / (1 + excise)
         duty = 0.0
         if firm.importer and self.brand_book is not None and self.brand_book.categories_on:
             tariff = self.config.categories.imports.tariff
-            duty = (amount - tax) * tariff / (1 + tariff)
-        runtime.pay("staat:Alkoholsteuer", tax)
+            duty = (amount - deposit - tax) * tariff / (1 + tariff)
+        # Softdrinks pay a sugar tax, the alcohol categories an alcohol tax.
+        book = self.brand_book
+        sugar = book is not None and book.categories_on and not book.is_alcoholic(firm.category)
+        runtime.pay("staat:Zuckersteuer" if sugar else "staat:Alkoholsteuer", tax)
         runtime.pay("staat:Zoll", duty)
-        runtime.pay("rohstoffe", amount - tax - duty)
+        runtime.pay("pfandsystem", deposit)
+        runtime.pay("rohstoffe", amount - tax - duty - deposit)
 
     def _harvest_producer(self, firm: Firm) -> bool:
         """Wineries press grapes once a year; the wine matures before it can be sold."""
@@ -903,7 +919,7 @@ class MarketEnvironment:
                 runtime.revenue += self._trade_value(1, book.parcel_value(parcel, price))
                 runtime.record_items(runtime.sold_items, "export", self.trade_items(
                     parcel, self._trade_value(1, book.parcel_value(parcel, price))))
-                runtime.handling_cost += book.parcel_value(parcel, self.config.costs.handling_cost_per_unit)
+                runtime.handling_cost += book.parcel_handling(parcel) * self.config.costs.handling_cost_per_unit
                 book.export_units += sent
 
     def _cancel_stale_backlog(self, supplier_id: str) -> None:
@@ -1252,9 +1268,22 @@ class MarketEnvironment:
             reference = sum(row[name] for row in past) / len(past) if past else 0.0
             if reference > 0:
                 push = cfg.market_demand_strength * max(-1.0, min(1.0, self.commodity_bought[name] / reference - 1.0))
-            shock = self._commodity_rng.gauss(0.0, cfg.market_annual_volatility)
+            spec = cfg.market_specs.get(name)
+            if spec is None:
+                shock = self._commodity_rng.gauss(0.0, cfg.market_annual_volatility)
+                band_min, band_max = cfg.market_band_min, cfg.market_band_max
+            else:
+                rng = self._commodity_special_rng
+                shock = rng.gauss(0.0, cfg.market_annual_volatility if spec.volatility is None else spec.volatility)
+                # Shortage (e.g. CO2): a one-year price jump that is taken back the year after.
+                shock -= log_of(self._commodity_shortage.pop(name, 1.0))
+                if rng.random() < spec.shortage_probability:
+                    shock += log_of(spec.shortage_factor)
+                    self._commodity_shortage[name] = spec.shortage_factor
+                band_min = spec.band_min if spec.band_min is not None else cfg.market_band_min
+                band_max = spec.band_max if spec.band_max is not None else cfg.market_band_max
             level = self.commodity_price[name] * exp(shock + push)
-            self.commodity_price[name] = max(cfg.market_band_min, min(cfg.market_band_max, level))
+            self.commodity_price[name] = max(band_min, min(band_max, level))
         self.commodity_past_bought.append(dict(self.commodity_bought))
         self.commodity_bought = {name: 0.0 for name in self.commodity_bought}
         self.commodity_history.append(self._commodity_row())

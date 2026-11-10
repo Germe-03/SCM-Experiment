@@ -402,7 +402,7 @@ class ResearchTreeLab(ResearchLab):
                 firm.employees = max(1, firm.employees + before - after)
                 env.runtimes[firm.id].employees = firm.employees
                 firm.productivity_per_employee /= before / after
-        elif kind in ("new_brand", "alkoholfrei"):
+        elif kind in ("new_brand", "alkoholfrei", "new_category"):
             book = env.brand_book
             brand_id = record.get("brand_id")
             if book is not None and brand_id:

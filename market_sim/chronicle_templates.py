@@ -170,6 +170,50 @@ EVENT_TEMPLATES: dict[str, list[dict[str, str | None]]] = {
         {"text": "{zeit} nahm eine Börse ihre Tätigkeit auf.", "when": None},
         {"text": "{zeit} begann eine Börse ihren Betrieb.", "when": None},
     ],
+    "delisted": [
+        {"text": "{zeit} verschwand die Aktie von {firma} von der Börse.", "when": None},
+        {"text": "{zeit} wurde die Aktie von {firma} nicht mehr an der Börse gehandelt.", "when": None},
+    ],
+    "delisted_holding": [
+        {"text": "{zeit} verschwand die Aktie von {firma} von der Börse, nachdem {nachfolger} sie übernommen hatte.", "when": None},
+        {"text": "{zeit} ging {firma} in der Holding {nachfolger} auf und wurde nicht mehr an der Börse gehandelt.", "when": None},
+        {"text": "{zeit} wurde die Aktie von {firma} vom Handel genommen, weil eine Holding die Firma übernommen hatte.", "when": None},
+    ],
+    "delisted_merger": [
+        {"text": "{zeit} verschwand die Aktie von {firma} von der Börse, weil die Firma mit {nachfolger} fusionierte.", "when": None},
+        {"text": "{zeit} endete der Börsenhandel mit {firma} nach einer Fusion mit {nachfolger}.", "when": None},
+        {"text": "{zeit} wurde die Aktie von {firma} nach einer Fusion nicht mehr gehandelt.", "when": None},
+    ],
+    "delisted_takeover": [
+        {"text": "{zeit} verschwand die Aktie von {firma} von der Börse, nachdem {nachfolger} die Firma übernommen hatte.", "when": None},
+        {"text": "{zeit} endete der Börsenhandel mit {firma} nach der Übernahme durch {nachfolger}.", "when": None},
+        {"text": "{zeit} wurde die Aktie von {firma} nach einer Übernahme vom Handel genommen.", "when": None},
+    ],
+    "delisted_bankruptcy": [
+        {"text": "{zeit} verschwand die Aktie von {firma} nach dem Konkurs von der Börse.", "when": None},
+        {"text": "{zeit} wurde die Aktie von {firma} wegen des Konkurses wertlos und vom Handel genommen.", "when": None},
+        {"text": "{zeit} endete der Börsenhandel mit {firma} mit dem Konkurs der Firma.", "when": None},
+    ],
+    "delisted_exit": [
+        {"text": "{zeit} verschwand die Aktie von {firma} von der Börse, weil die Firma den Markt verliess.", "when": None},
+        {"text": "{zeit} zog sich {firma} vom Markt und von der Börse zurück.", "when": None},
+        {"text": "{zeit} wurde die Aktie von {firma} nach dem Marktaustritt der Firma nicht mehr gehandelt.", "when": None},
+    ],
+    "lease_started": [
+        {"text": "{zeit} schloss {firma} einen Leasingvertrag für einen Lastwagen ab.", "when": None},
+        {"text": "{zeit} mietete {firma} einen Lastwagen im Leasing.", "when": None},
+        {"text": "{zeit} nahm {firma} einen geleasten Lastwagen in Betrieb.", "when": None},
+    ],
+    "lease_ended": [
+        {"text": "{zeit} lief der Leasingvertrag von {firma} für einen Lastwagen aus.", "when": None},
+        {"text": "{zeit} gab {firma} einen geleasten Lastwagen zurück.", "when": None},
+        {"text": "{zeit} endete ein Lastwagen-Leasing von {firma}.", "when": None},
+    ],
+    "lease_default": [
+        {"text": "{zeit} konnte {firma} die Leasingraten für einen Lastwagen nicht bezahlen.", "when": None},
+        {"text": "{zeit} geriet {firma} mit dem Lastwagen-Leasing in Zahlungsverzug.", "when": None},
+        {"text": "{zeit} fiel bei {firma} ein Leasingvertrag für einen Lastwagen aus.", "when": None},
+    ],
     "market_entry": [
         {"text": "{zeit} trat {firma} in den Markt ein.", "when": None},
         {"text": "{zeit} nahm {firma} den Betrieb in der Stufe {stufe} auf.", "when": None},
@@ -427,6 +471,10 @@ EVENT_IMPORTANCE: dict[str, int] = {
     "bank_entry": 4,
     "exchange_opened": 6,
     "market_entry": 3,
+    "delisted": 6,
+    "lease_started": 2,
+    "lease_ended": 2,
+    "lease_default": 5,
 }
 
 DEFAULT_IMPORTANCE = 3

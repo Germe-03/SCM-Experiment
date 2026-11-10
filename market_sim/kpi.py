@@ -138,6 +138,8 @@ class SystemKPIs(BaseModel):
     share_beer: float = 0.0
     share_wine: float = 0.0
     share_spirits: float = 0.0
+    share_softdrinks: float = 0.0
+    share_water: float = 0.0
     transport_cost: float = 0.0
     damaged_units: int = 0
     expansions: int = 0
@@ -198,7 +200,8 @@ STAGE_DE = {"retailer": "Detailhandel", "wholesaler": "Grosshandel", "distributo
 ARCHETYPE_DE = {"low_cost": "Discount", "standard": "Standard", "premium": "Premium",
                 "reliable": "Zuverlässig", "growth": "Wachstum"}
 TREND_DE = {"craft_welle": "Craft-Welle", "alkoholfrei": "Alkoholfrei", "sparwelle": "Sparwelle",
-            "tradition": "Tradition", "wein_boom": "Wein-Boom"}
+            "tradition": "Tradition", "wein_boom": "Wein-Boom",
+            "gesundheitstrend": "Gesundheitstrend", "softdrink_welle": "Softdrink-Welle"}
 OFFENCE_DE = {"lohndumping": "Lohndumping", "pfusch": "Pfusch bei Rohstoffen",
               "steuerhinterziehung": "Steuerhinterziehung", "patentverletzung": "Patentverletzung"}
 REGION_DE = {"genfersee": "Genferseeregion", "bern": "Bern", "jura_freiburg": "Jura/Freiburg/Neuenburg",
@@ -218,6 +221,12 @@ PROJECT_DE.update({
     "dynamische_bestellung": "Dynamische Bestellung", "energieeffizientes_lager": "Energieeffizientes Lager",
     "digitale_regalplanung": "Digitale Regalplanung", "lokale_werbekampagne": "Lokale Werbekampagne",
     "gaestebindung": "Gästebindung", "digitale_speisekarte": "Digitale Speisekarte",
+    # Softdrinks und Wasser
+    "softdrinks_sortiment": "Softdrinks ins Sortiment", "zuckerreduziert": "Zuckerreduzierte Rezeptur",
+    "light_getraenke": "Light-Getränke", "natuerliche_suessstoffe": "Natürliche Süssstoffe",
+    "geschmacksrichtung_softdrink": "Neue Softdrink-Geschmacksrichtung", "energydrink": "Energydrink",
+    "abfuellanlage_getraenke": "Moderne Getränke-Abfüllanlage", "leichtere_pet": "Leichtere PET-Flaschen",
+    "quellenausbau": "Quellenausbau", "aromawasser": "Aromawasser",
 })
 _BASE_DE = dict(PROJECT_DE)
 for _name, _label in _BASE_DE.items():

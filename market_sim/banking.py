@@ -33,6 +33,10 @@ class CommercialBank:
     loan_write_offs: float = 0.0
     deposit_interest_paid: float = 0.0
     negative_interest_income: float = 0.0
+    # Leasing: receivables count like loans (added to `loans` by aggregate/spending_limit).
+    lease_receivables: float = 0.0
+    lease_income: float = 0.0
+    lease_losses: float = 0.0
 
     @property
     def balance_total(self) -> float:
@@ -159,7 +163,7 @@ class BankingSystem:
         if not self.accounts.get(firm_id):
             return max(0.0, balances[firm_id])
         for bank in self.banks.values():
-            bank.loans = self.bank_term_loans(bank.id) if bank.active else 0.0
+            bank.loans = (self.bank_term_loans(bank.id) + bank.lease_receivables) if bank.active else 0.0
         for fid, cash in balances.items():
             if runtimes[fid].active and self.accounts.get(fid) and fid not in self.called:
                 self.primary_bank(fid).loans += max(0.0, -cash)
@@ -285,6 +289,28 @@ class BankingSystem:
             if loan.outstanding < 1.0:
                 self._drop_loan(loan)
 
+    # -- leasing ---------------------------------------------------------------
+    def fund_lease(self, bank_id: str, amount: float) -> None:
+        """Receivable from a lease: positive amount = bank pays a truck, negative = repayment."""
+        bank = self.banks.get(bank_id)
+        if bank is None:
+            return
+        bank.lease_receivables = max(0.0, bank.lease_receivables + amount)
+        if bank.active:
+            bank.loans = self.bank_term_loans(bank.id) + bank.lease_receivables
+
+    def book_lease_income(self, bank_id: str, amount: float) -> None:
+        bank = self.banks.get(bank_id)
+        if bank is not None:
+            bank.interest_income += amount
+            bank.lease_income += amount
+
+    def book_lease_loss(self, bank_id: str, amount: float) -> None:
+        bank = self.banks.get(bank_id)
+        if bank is not None and amount > 0:
+            bank.write_offs += amount
+            bank.lease_losses += amount
+
     def reject(self, firm_id: str, bank: CommercialBank, line: float, year: int, day: int) -> None:
         if self.rejected_year.get(firm_id) == year:
             return
@@ -348,7 +374,7 @@ class BankingSystem:
     def aggregate(self, runtimes: dict) -> None:
         for bank in self.banks.values():
             if bank.active:
-                bank.loans = self.bank_term_loans(bank.id)
+                bank.loans = self.bank_term_loans(bank.id) + bank.lease_receivables
             bank.deposits = 0.0
         for firm_id in sorted(self.accounts):
             if not self.accounts[firm_id]:

@@ -21,6 +21,7 @@ class Truck:
     book_value: float = 0.0
     cost_basis: float = 0.0
     maint_daily: float = 0.0
+    leased: bool = False
 
 
 @dataclass
@@ -75,7 +76,21 @@ class Dealer:
 
 
 class TruckMarket:
+    # Truck capacity in the config is units per day on this reference trip; the real daily
+    # capacity is capacity x REF_KM unit-km, so a long trip uses up more of it.
+    REF_KM = 100.0
+    # Even a local trip uses at least this many km of capacity (loading, waiting, detours).
+    MIN_KM = 20.0
+    # A new truck must carry at least this share of its capacity as base load over the year.
+    TARGET_UTILIZATION = 0.45
+    # Below this many truck prices of cash a firm prefers leasing a new truck (if offered).
+    LEASE_CASH_MULTIPLE = 4.0
+    # An existing truck is kept while it still carries this share (a bit looser, no churn).
+    KEEP_UTILIZATION = 0.35
+
     def __init__(self, config, geography, seed: int) -> None:
+        self.leasing = None  # set by the runner when leasing is enabled
+        self.last_takeback_price = 0.0
         self.config = config
         self.cfg = config.trucks
         self.geography = geography
@@ -115,17 +130,61 @@ class TruckMarket:
 
     # -- fleet use ---------------------------------------------------------
     def capacity(self, firm_id: str) -> float:
-        return sum(self.types[t.type].capacity * (1 - t.downtime_days / self.days)
+        """Daily capacity of the fleet in unit-km."""
+        return sum(self.types[t.type].capacity * self.REF_KM * (1 - t.downtime_days / self.days)
                    for t in self.fleets.get(firm_id, []))
 
     def has_fleet(self, firm_id: str) -> bool:
         return bool(self.fleets.get(firm_id))
 
-    def try_ship(self, firm_id: str, units: float) -> bool:
-        if self.used_today.get(firm_id, 0.0) + units <= self.capacity(firm_id):
-            self.used_today[firm_id] = self.used_today.get(firm_id, 0.0) + units
+    def try_ship(self, firm_id: str, units: float, km: float | None = None) -> bool:
+        """Use up ``units x max(km, MIN_KM)`` unit-km of today's capacity (km default = REF_KM)."""
+        distance = units * max(self.REF_KM if km is None else km, self.MIN_KM)
+        if self.used_today.get(firm_id, 0.0) + distance <= self.capacity(firm_id):
+            self.used_today[firm_id] = self.used_today.get(firm_id, 0.0) + distance
             return True
         return False
+
+    def remove_truck(self, firm_id: str, truck_id: str):
+        """Take a truck out of a fleet (e.g. repossession at bankruptcy); returns it or None."""
+        fleet = self.fleets.get(firm_id, [])
+        for truck in fleet:
+            if truck.id == truck_id:
+                fleet.remove(truck)
+                return truck
+        return None
+
+    def take_back_leased(self, env, state, truck: Truck, dealer_id: str | None = None) -> bool:
+        """A dealer takes a returned leased truck as a used one (counts to the take-back limit).
+
+        The price (value x buyback_factor) goes to the lessor: see ``last_takeback_price``;
+        the lessor books the payment itself.
+        """
+        cfg = self.cfg
+        self.last_takeback_price = 0.0
+        price = self.value(env, truck) * cfg.buyback_factor
+        options = [d for d in self._active_dealers()
+                   if d.taken_back_year < math.floor(cfg.takeback_share * d.sold_prev_new)
+                   and d.cash >= price and d.stock_total() < cfg.dealer_max_stock + 4]
+        if dealer_id is not None:
+            options = [d for d in options if d.id == dealer_id] or options
+        if not options:
+            return False
+        dealer = options[0]
+        dealer.buy_stock(price)
+        dealer.taken_back_year += 1
+        old_owner = truck.owner
+        if old_owner in self.fleets and truck in self.fleets[old_owner]:
+            self.fleets[old_owner].remove(truck)
+        truck.owner, truck.cost_basis, truck.leased = dealer.id, price, False
+        dealer.stock_used.append(truck)
+        self.last_takeback_price = price
+        self.occasions.append({"year": state.year, "firm": old_owner, "dealer": dealer.id, "type": truck.type,
+                               "age": truck.age, "price": round(price, 2), "book_value": round(truck.book_value, 2)})
+        self._event(state, old_owner, "truck_returned",
+                    f"{self.types[truck.type].label} (Leasing, Alter {truck.age}) an {dealer.name} "
+                    f"zurückgenommen, {chf(price)}")
+        return True
 
     def damage_multiplier(self, firm_id: str) -> float:
         fleet = self.fleets.get(firm_id)
@@ -153,7 +212,9 @@ class TruckMarket:
             p = dealer.pending
             if any(p.values()):
                 rt.revenue += p["revenue"]
-                rt.purchase_cost += p["cogs"]
+                if p["revenue"]:
+                    rt.record_items(rt.sold_items, "kunden", {"lastwagen": {"chf": p["revenue"], "units": 0}})
+                rt.pay("rohstoffe", p["cogs"])  # trucks come from the commodity market
                 rt.fixed_cost += p["fixed"]
                 rt.adjust_cash(-p["purchases"] + p["cogs"], "lastwagenhandel:Lagerbestand")
                 dealer.pending = {"revenue": 0.0, "cogs": 0.0, "purchases": 0.0, "fixed": 0.0}
@@ -165,7 +226,7 @@ class TruckMarket:
             for truck in self.fleets[fid]:
                 dep = 0.0
                 floor = truck.purchase_price * res
-                if truck.book_value > floor:
+                if truck.book_value > floor and not truck.leased:  # a leased truck is the lessor's asset
                     dep = min(truck.book_value - floor,
                               truck.purchase_price * (1 - res) / (self.types[truck.type].life_years * self.days))
                     truck.book_value -= dep
@@ -362,42 +423,65 @@ class TruckMarket:
                 best = min(best, offer, key=lambda o: o[:3]) if best else offer
         return best
 
-    def decide(self, runner, state, firm, shipped: float, own_variable: float, service_cost: float) -> None:
+    def decide(self, runner, state, firm, shipped: float, own_variable: float, service_cost: float,
+               mean_km: float | None = None) -> None:
+        """Fleet size by base load: every truck must carry enough to beat the Post; the rest goes with the Post.
+
+        ``own_variable`` and ``service_cost`` are yearly costs of shipping everything own or with the Post.
+        """
         env = runner.env
         cfg = self.cfg
         runtime = env.runtimes[firm.id]
         fleet = self.fleets.setdefault(firm.id, [])
-        need = cfg.peak_factor * shipped / self.days
-        cap_now = sum(self.types[t.type].capacity for t in fleet)
-        existing = sum(self.annual_cost(env, t.type) for t in fleet)
-        plan: list[str] = []
-        remaining = need - cap_now
-        while remaining > 0 and len(plan) < cfg.max_new_trucks_per_firm_year:
-            fitting = [t for t in self.types.values() if t.capacity <= remaining]
-            if fitting:
-                pick = min(fitting, key=lambda t: self.annual_cost(env, t.name) / t.capacity)
+        mean_km = self.REF_KM if mean_km is None else max(mean_km, self.MIN_KM)
+        margin = cfg.switch_margin
+        base_load = shipped * mean_km / self.days  # unit-km per day, mean over the year
+        saving = max(0.0, service_cost - own_variable) / (shipped * mean_km) if shipped > 0 else 0.0
+
+        def cap_ukm(name: str) -> float:
+            return self.types[name].capacity * self.REF_KM
+
+        def worth(name: str, carried: float, factor: float) -> bool:
+            return carried > 0 and self.annual_cost(env, name) < saving * carried * self.days * factor
+
+        # Existing trucks stay while they still carry enough of the base load (leased ones: contract runs).
+        covered = sum(cap_ukm(t.type) for t in fleet if t.leased)
+        surplus: list[Truck] = []
+        for truck in sorted((t for t in fleet if not t.leased), key=lambda t: (t.age, t.id)):
+            c = cap_ukm(truck.type)
+            carried = min(c, base_load - covered)
+            if carried >= self.KEEP_UTILIZATION * c and worth(truck.type, carried, 1 + margin):
+                covered += c
             else:
-                pick = min(self.types.values(), key=lambda t: t.capacity)
-            plan.append(pick.name)
-            remaining -= pick.capacity
-        extra = sum(self.annual_cost(env, t) for t in plan)
-        threshold = service_cost * (1 + cfg.switch_margin) if fleet else service_cost * (1 - cfg.switch_margin)
-        want_own = shipped > 0 and own_variable + existing + extra < threshold
+                surplus.append(truck)
         carriers = getattr(runner.env.geography, "carriers", None)
-        if not fleet and carriers is not None and carriers.service_locked(firm.id, state.year):
-            # Phase 54: a running transport contract with the Post or a courier is respected.
-            want_own = False
+        locked = not fleet and carriers is not None and carriers.service_locked(firm.id, state.year)
+        # Phase 54: a running transport contract with the Post or a courier is respected (no first truck).
+        plan: list[str] = []
+        while shipped > 0 and not locked and len(plan) < cfg.max_new_trucks_per_firm_year:
+            remaining = base_load - covered
+            fitting = [t for t in self.types.values()
+                       if remaining >= self.TARGET_UTILIZATION * cap_ukm(t.name)
+                       and worth(t.name, min(cap_ukm(t.name), remaining), 1 - margin)]
+            if not fitting:
+                break
+            pick = min(fitting, key=lambda t: self.annual_cost(env, t.name) / t.capacity)
+            plan.append(pick.name)
+            covered += cap_ukm(pick.name)
+        want_own = bool(plan) or len(fleet) > len(surplus)
         for truck in fleet:
             t = self.types[truck.type]
             maint = t.maintenance_rate * self.list_price(env, truck.type)
             truck.maintained = runtime.cash > 0 and env.can_spend(firm.id, maint)
             truck.maint_daily = maint / self.days if truck.maintained else 0.0
         aged = lambda t: t.age >= cfg.sell_age_fraction * self.types[t.type].life_years
-        old = sorted((t for t in fleet if (not want_own) or aged(t)), key=lambda t: (-t.age, t.id))
+        surplus_ids = {t.id for t in surplus}
+        old = sorted((t for t in fleet if not t.leased and (t.id in surplus_ids or aged(t))),
+                     key=lambda t: (-t.age, t.id))
         for truck in old:
-            if self._sell_to_dealer(env, state, firm, truck) and want_own:
-                plan.insert(0, truck.type)
-        if want_own:
+            if self._sell_to_dealer(env, state, firm, truck) and truck.id not in surplus_ids:
+                plan.insert(0, truck.type)  # an aged truck of the base load is replaced
+        if plan:
             bought = 0
             for type_name in sorted(plan, key=lambda n: -self.types[n].capacity):
                 if bought >= cfg.max_new_trucks_per_firm_year:
@@ -406,8 +490,20 @@ class TruckMarket:
                 if offer is None:
                     continue
                 price, _, _, dealer, used, source = offer
-                if not env.arrange_funding(firm.id, price, "truck", cfg.cash_cover, state):
-                    break
+                lease = None
+                strategy = runner.strategies.get(firm.id) if hasattr(runner, "strategies") else None
+                risk = strategy.risk_tolerance if strategy is not None else 0.5
+                if self.leasing is not None and not used and runtime.cash < self.LEASE_CASH_MULTIPLE * price:
+                    # Phase 57: a firm with little cash leases a new truck instead of tying up its cash.
+                    lease = self.leasing.offer(env, firm.id, price, self.types[type_name].life_years,
+                                               env.policy_rate(), risk)
+                if lease is None and not env.arrange_funding(firm.id, price, "truck", cfg.cash_cover, state):
+                    if self.leasing is None:
+                        break
+                    lease = self.leasing.offer(env, firm.id, price, self.types[type_name].life_years,
+                                               env.policy_rate(), risk)
+                    if lease is None:
+                        break
                 if used:
                     dealer.stock_used.remove(source)
                     truck = source
@@ -416,18 +512,22 @@ class TruckMarket:
                     truck = dealer.stock_new[type_name].pop(0)
                     dealer.sold_new_year += 1
                     dealer.sold_by_type_year[type_name] = dealer.sold_by_type_year.get(type_name, 0) + 1
-                runtime.adjust_cash(-price, "lastwagen_kauf")
+                if lease is None:
+                    runtime.adjust_cash(-price, "lastwagen_kauf")
                 dealer.sell_stock(price, truck.cost_basis)
                 truck.owner, truck.purchase_price, truck.book_value = firm.id, price, price
                 truck.maintained, truck.downtime_days = True, 0
                 truck.maint_daily = self.types[type_name].maintenance_rate * self.list_price(env, type_name) / self.days
                 self.fleets[firm.id].append(truck)
+                if lease is not None:
+                    truck.leased = True
+                    self.leasing.start(env, state, firm.id, truck, dealer, lease)
                 bought += 1
                 self.purchases.append({"year": state.year, "firm": firm.id, "dealer": dealer.id, "type": type_name,
                                        "used": used, "price": round(price, 2), "age": truck.age})
                 self._event(state, firm.id, "truck_bought",
-                            f"{self.types[type_name].label} gekauft ({'Occasion' if used else 'neu'}) "
-                            f"bei {dealer.name}, {chf(price)}")
+                            f"{self.types[type_name].label} {'geleast' if lease is not None else 'gekauft'} "
+                            f"({'Occasion' if used else 'neu'}) bei {dealer.name}, {chf(price)}")
         mode = "own" if self.fleets[firm.id] else "service"
         if mode != firm.transport_mode:
             firm.transport_mode = mode

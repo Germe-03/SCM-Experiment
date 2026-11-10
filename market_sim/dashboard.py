@@ -197,7 +197,7 @@ body:has(dialog[open]){overflow:hidden}
    <label for="cp-search">Firmen suchen</label><input id="cp-search" type="search" placeholder="Name oder Kennung">
    <div id="cp-filters">
     <label for="cp-category">Kategorie<select id="cp-category"><option value="all">Alle</option><option value="retailer">Detailhandel</option><option value="restaurant">Gastronomie</option><option value="wholesaler">Grosshandel</option><option value="distributor">Verteilung</option><option value="factory">Hersteller</option><option value="truck_dealer">Lastwagenhandel</option><option value="bank">Banken</option><option value="courier">Kuriere</option></select></label>
-    <label for="cp-product" id="cp-product-label" hidden>Produktart<select id="cp-product"><option value="all">Alle</option><option value="beer">Bier</option><option value="wine">Wein</option><option value="spirits">Spirituosen</option></select></label>
+    <label for="cp-product" id="cp-product-label" hidden>Produktart<select id="cp-product"><option value="all">Alle</option><option value="beer">Bier</option><option value="wine">Wein</option><option value="spirits">Spirituosen</option><option value="softdrinks">Softdrinks</option><option value="water">Wasser</option></select></label>
     <label for="cp-status">Status<select id="cp-status"><option value="all">Alle</option><option value="active">Aktiv</option><option value="exited">Ausgeschieden</option></select></label>
     <label for="cp-years"><span id="cp-years-label">Mindestens 0 Jahre im Markt</span><input id="cp-years" type="range" min="0" value="0" step="1"></label>
    </div><p id="cp-count" class="hint" role="status"></p>
@@ -228,6 +228,7 @@ body:has(dialog[open]){overflow:hidden}
 <section role="tabpanel" id="tab-finance">
  <h2>Finanzen</h2><p class="lead">Schulden, Zinsen, Ein- und Austritte. Banken und Leitzins stehen im Reiter Banken.</p>
  <div class="grid">
+  <div class="card wide" id="fi-pd-card" hidden><h3>Gewinnverwendung (OR)</h3><p class="hint">Verwendung der Jahresgewinne aller Firmen, Summe pro Jahr: gesetzliche Reserve, Dividende netto, Verrechnungssteuer (35 %) und Gewinnvortrag.</p><div class="chart"><canvas id="fi-pd"></canvas></div></div>
   <div class="card"><h3>Cash aller Firmen (ohne Banken)</h3><p class="hint">Summe des Bargelds aller Hersteller, Händler und Kuriere am Jahresende.</p><div class="chart"><canvas id="fi-firm-cash"></canvas></div></div>
  </div>
  <div class="card"><h3>Negativzinsen pro Stufe</h3><div class="chart"><canvas id="fi-negative"></canvas></div></div>
@@ -255,6 +256,7 @@ body:has(dialog[open]){overflow:hidden}
   <div class="card"><h3>Zinsertrag aus Investitionskrediten</h3><div class="chart"><canvas id="ba-interest"></canvas></div></div>
   <div class="card wide"><h3>Einlagezins und Negativzins</h3><p class="hint">Einlagezins: Zins, den die Banken den Firmen auf Guthaben bis zur Schwelle bezahlen. Negativzins: was die Firmen auf Guthaben über der Schwelle bezahlen. Beide folgen dem Leitzins.</p><div class="chart"><canvas id="ba-deposit"></canvas></div></div>
   <div class="card wide"><h3>Banken im Vergleich</h3><p class="hint" id="fi-bank-year"></p><p class="hint">Eigenkapitalquote = Eigenkapital / Bilanzsumme. Bilanzsumme = grösserer Wert aus Krediten oder Einlagen + Eigenkapital.</p><div class="table-wrap"><table id="fi-banks"></table></div></div>
+  <div class="card wide" id="ba-leasing-card" hidden><h3>Leasing</h3><p class="hint">Leasingverträge von Banken und Händlern: laufende Verträge, Ertrag der Leasinggeber und Ausfälle.</p><div class="chart"><canvas id="ba-leasing"></canvas></div><div class="table-wrap"><table id="ba-leasing-table"></table></div></div>
   <div class="card wide"><h3>Bank-Ereignisse</h3><ul class="list" id="ba-events" style="max-height:260px;overflow:auto"></ul></div>
  </div>
 </section>
@@ -338,7 +340,7 @@ const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const STAGE={retailer:'Detailhandel',wholesaler:'Grosshandel',distributor:'Verteilung',factory:'Hersteller'};
 const STAGES=Object.keys(STAGE);
 STAGE.truck_dealer='Lastwagenhandel';
-const CAT={beer:'Bier',wine:'Wein',spirits:'Spirituosen'};
+const CAT={beer:'Bier',wine:'Wein',spirits:'Spirituosen',softdrinks:'Softdrinks',water:'Wasser'};
 const ARCH={low_cost:'Discount',standard:'Standard',premium:'Premium',reliable:'Zuverlässig',growth:'Wachstum'};
 const EVENT={account_opened:'Zweitkonto eröffnet',bank_payout:'Bankausschüttung',policy_rate_changed:'Leitzins geändert',law_enacted:'Neues Gesetz',stake_bought:'Beteiligung gekauft',stake_sold:'Beteiligung verkauft',stake_lost:'Beteiligung verloren',bankruptcy:'Konkurs',market_entry:'Markteintritt',strategy_change:'Strategiewechsel',price_increase:'Preiserhöhung',price_cut:'Preissenkung',supplier_switch:'Lieferantenwechsel',capacity_limit:'Kapazitätsgrenze',heat_summer:'Hitzesommer',harvest_failure:'Ernteausfall',recall:'Rückruf',recession:'Rezession',raw_material_shortage:'Rohstoffknappheit',cost_shock:'Kostenschock',wage_push:'Lohnschub',inflation:'Teuerung',trend_change:'Trendwechsel',restructuring:'Sanierung',transport_switch:'Transportwechsel',expand_started:'Ausbau begonnen',expand_finished:'Ausbau fertig',site_started:'Standort begonnen',site_finished:'Neuer Standort',offence_detected:'Straftat entdeckt',poisoning:'Vergiftung',takeover:'Übernahme',takeover_blocked:'Übernahme verboten',breakup:'Zerschlagung',spin_off:'Abspaltung',rnd_started:'F&E-Projekt gestartet',rnd_success:'F&E-Erfolg',rnd_implemented:'F&E umgesetzt',patent_granted:'Patent erteilt',patent_expired:'Patent beendet',rnd_failure:'F&E-Fehlschlag'};
 const TREND={none:'kein Trend',craft_welle:'Craft-Welle',alkoholfrei:'Alkoholfrei',sparwelle:'Sparwelle',tradition:'Tradition',wein_boom:'Wein-Boom'};
@@ -348,7 +350,9 @@ const REGION={genfersee:'Genferseeregion',bern:'Bern',jura_freiburg:'Jura/Freibu
 const pretty=t=>String(t??'').replace(/\b(?:B\d+|[a-z]+(?:_[a-z0-9]+)*)\b/g,m=>D.firms[m]?.name||bankActors()['bank:'+m]?.name||(typeof courierName==='function'?courierName(m):'')||REGION[m]||m).replace(/(-?\d{1,3}(?:['’]\d{3})+|-?\d{4,}) Mio\. CHF/g,(m,x)=>{const v=+x.replace(/['’]/g,'');return Math.abs(v)>=1000?mia(v/1000):m});
 const mia=x=>x.toFixed(2)+' Mia. CHF';
 Object.assign(EVENT,{post_tariff:'Posttarif geändert',post_capacity:'Post am Limit',carrier_switch:'Transporteur gewechselt',bundesbeitrag:'Bundesbeitrag an die Post',courier_entry:'Neuer Kurier',courier_bankrupt:'Kurier pleite',courier_takeover:'Kurier übernommen',courier_takeover_blocked:'Kurierübernahme verboten',courier_region_closed:'Kurier verlässt Region',courier_region_opened:'Kurier in neuer Region'});
-Object.assign(EVENT,{policy_rate_changed:'Leitzins geändert',credit_rejected:'Kredit abgelehnt',loan_granted:'Investitionskredit',account_opened:'Zweitkonto eröffnet',bank_switched:'Bankwechsel',bank_failed:'Bankpleite',bank_entry:'Neue Bank',bank_payout:'Bank schüttet aus',exchange_opened:'Börse eröffnet',listed:'Börsengang',delisted:'Dekotiert',stock_crash:'Börsencrash'});
+Object.assign(EVENT,{policy_rate_changed:'Leitzins geändert',credit_rejected:'Kredit abgelehnt',loan_granted:'Investitionskredit',account_opened:'Zweitkonto eröffnet',bank_switched:'Bankwechsel',bank_failed:'Bankpleite',bank_entry:'Neue Bank',bank_payout:'Bank schüttet aus',exchange_opened:'Börse eröffnet',listed:'Börsengang',delisted:'Dekotiert',stock_crash:'Börsencrash',lease_started:'Leasingvertrag abgeschlossen',lease_ended:'Leasingvertrag beendet',lease_default:'Leasingausfall'});
+const DELIST_REASON={holding:'Holding',merger:'Fusion',takeover:'Übernahme',bankruptcy:'Konkurs',exit:'Marktaustritt'};
+const eventExtra=e=>e.event==='delisted'&&(e.reason||e.successor)?(e.reason?` <span class="badge">${esc(DELIST_REASON[e.reason]||e.reason)}</span>`:'')+(e.successor&&D.firms[e.successor]?` → Nachfolger <a href="#firms" data-firm="${esc(e.successor)}">${esc(fname(e.successor))}</a>`:''):'';
 const KEY_EVENTS=new Set(['law_enacted','trend_change','recession','raw_material_shortage','cost_shock','poisoning','breakup','wage_push']);
 const firm=id=>D.firms[id],fname=id=>firm(id)?.name||bankActors()[id]?.name||bankActors()['bank:'+id]?.name||courierName(id)||id||'Markt';
 let _courierNames=null;const courierName=id=>{if(!id)return '';if(!_courierNames){_courierNames={};for(const r of D.carriers||[])if(r.kind==='courier'){_courierNames[r.carrier]=r.name;_courierNames['courier:'+r.carrier]=r.name}}return _courierNames[id]||''};
@@ -366,7 +370,7 @@ const FM_GROUPS=[...STAGES.slice(0,1),'restaurant',...STAGES.slice(1),'truck_dea
 // Only producers make one category; traders, stores and restaurants carry everything.
 const catLabel=f=>f.stage==='bank'||f.stage==='courier'||f.stage==='truck_dealer'?'–':f.stage==='factory'?CAT[f.category]||f.category:'alle Produkte';
 const fmGroupLabel=g=>g==='bank'?'Banken':g==='courier'?'Kuriere':g==='restaurant'?'Gastronomie':STAGE[g];
-const catColor=()=>({beer:pal()[3],wine:pal()[6],spirits:pal()[2]});
+const catColor=()=>({beer:pal()[3],wine:pal()[6],spirits:pal()[2],softdrinks:pal()[5],water:pal()[7]});
 
 // --- state ---------------------------------------------------------------
 const years=D.system.map(x=>x.year);
@@ -426,11 +430,35 @@ function chart(id,cfg){const el=document.getElementById(id);if(!el)return;const 
  Chart.defaults.color=css('--muted');Chart.defaults.borderColor=css('--line');Chart.defaults.font.family='system-ui,-apple-system,Segoe UI,sans-serif';
  const o=cfg.options||{};cfg.options={responsive:true,maintainAspectRatio:false,animation:matchMedia('(prefers-reduced-motion: reduce)').matches?false:{duration:250},interaction:{mode:'index',intersect:false},
   plugins:{legend:{display:cfg.data.datasets.length>1,labels:{boxWidth:12,usePointStyle:true}},tooltip:{itemSort:(a,b)=>b.parsed.y-a.parsed.y},...(o.plugins||{})},...o};
- charts.push(new Chart(el,cfg))}
+ applyUnits(id,cfg);charts.push(new Chart(el,cfg))}
 // Hover mode for side-by-side stacks: the bar nearest to the mouse decides which stack is shown.
 Chart.Interaction.modes.stack=(chart,e,opts,useFinal)=>{const near=Chart.Interaction.modes.nearest(chart,e,{axis:'x',intersect:false},useFinal);if(!near.length)return[];
  const i=near[0].index,key=d=>d.stack??'',st=key(chart.data.datasets[near[0].datasetIndex]);
  return chart.data.datasets.flatMap((d,di)=>key(d)===st&&chart.isDatasetVisible(di)?[{element:chart.getDatasetMeta(di).data[i],datasetIndex:di,index:i}]:[])};
+// Axis titles and tooltip units per chart. Spec 'Titel|Tooltip-Einheit'; '~' = plain number, CHF and (%) are formatted.
+const CHART_UNITS={'ov-profit':{y:'CHF',y2:'Service-Level (%)'},'ov-firms':{y:'Anzahl Firmen'},'ov-cats':{y:'Marktanteil (%)'},
+'mk-channel':{y:'Anteil (%)'},'mk-marketing':{y:'CHF',y2:'Bekanntheit (%)'},'mk-brand-share':{y:'Marktanteil (%)'},'mk-brand-rep':{y:'Reputation (%)'},
+'mk-index':{y:'Index (Jahr 1 = 1)|'},'mk-fx':{y:'CHF pro EUR|CHF',y2:'Export (Einheiten)|Einheiten'},'mk-price':{y:'CHF pro Einheit',x:'Einkommensstufe'},
+'cd-money':{y:'CHF'},'bd-equity':{y:'CHF'},'bd-share':{y:'Marktanteil (%)'},'bd-balances':{y:'CHF'},'bd-customers':{y:'Anzahl Kunden'},'bd-income':{y:'CHF'},
+'fd-cost':{y:'CHF'},'fd-cash':{y:'CHF'},'fd-stock':{y:'Einheiten'},'fd-rep':{y:'Reputation / Qualität (%)'},
+'ch-margin':{y:'Marge (%)'},'ch-util':{y:'Auslastung (%)'},'ch-lost':{y:'Verlorene Verkäufe (Einheiten)|Einheiten'},'ch-bull':{y:'Bullwhip-Faktor|'},
+'ch-transport':{y:'CHF',y2:'Treibstoffindex|'},'ch-service':{y:'Anzahl Firmen',y2:'Geschädigte Einheiten|Einheiten'},'ch-build':{y:'Anzahl Ausbauten / Standorte'},
+'fi-stakes':{y:'Anzahl Beteiligungen',y2:'Dividenden (CHF)'},'fi-policy':{y:'Zins, Teuerung, Lücke (%)'},'fi-bank-equity':{y:'CHF'},'fi-bank-balances':{y:'CHF'},'fi-firm-cash':{y:'CHF'},
+'fi-labor':{y:'Anzahl Stellen / Arbeitskräfte|',y2:'Lohnindex|'},'fi-negative':{y:'CHF'},'fi-debt':{y:'CHF'},'fi-interest':{y:'CHF'},'fi-churn':{y:'Anzahl Firmen / Wechsel|'},'fi-hhi':{y:'HHI-Index|'},
+'fi-rnd':{y:'CHF'},'rd-spend':{y:'CHF'},'rd-count':{y:'Anzahl Projekte'},'st-off':{y:'Anzahl Straftaten'},'st-money':{y:'CHF'},'st-fear':{y:'Anzahl Vergiftungen',y2:'Nachfrageminus (%)'},'st-tko':{y:'Anzahl Fälle'},
+'ba-loans':{y:'CHF'},'ba-new':{y:'CHF',y2:'Anzahl Neukredite'},'ba-defaults':{y:'CHF'},'ba-interest':{y:'CHF'},'ba-deposit':{y:'CHF'},'fi-pd':{y:'CHF'},'ba-leasing':{y:'CHF',y2:'Anzahl Leasingverträge'},
+'cm-chart':{y:'~Rohstoffpreisindex (%)'},'el-chart':{y:'~Strompreisindex (%)',y2:'CHF'},'tr-shares':{y:'~Anteil am Transport (%)'},'tr-delay':{y:'Verzögerung (Tage)'},
+'tr-fleet':{y:'Anzahl Lastwagen'},'tr-flow':{y:'Anzahl Lastwagen'},'tr-price':{y:'CHF'}};
+const unitFmt=spec=>{let [t,sfx]=String(spec).split('|');const raw=t[0]==='~';if(raw)t=t.slice(1);
+ if(!raw&&/^(Mio\. )?CHF|\(CHF\)$/.test(t))return chf;if(!raw&&/\(%\)$|^%$/.test(t))return pct;
+ if(sfx===undefined){const m=t.match(/\(([^)]+)\)$/);sfx=m?m[1]:/^Anzahl/.test(t)?'':t}
+ return v=>nf(v,Number.isInteger(v)?0:Math.abs(v)<10?2:1)+(sfx?' '+sfx:'')};
+function applyUnits(id,cfg){const u=cfg.units||CHART_UNITS[id],o=cfg.options,sc=o.scales=o.scales||{},lab=cfg.data.labels||[];
+ if(u)for(const [ax,spec] of Object.entries(u)){const title=String(spec).split('|')[0].replace(/^~/,'');sc[ax]={...(sc[ax]||{}),title:{display:true,text:title}};
+  if(ax!=='x'){const f=unitFmt(spec);if(!sc[ax].ticks?.callback&&(f===chf||f===pct))sc[ax].ticks={...(sc[ax].ticks||{}),callback:v=>f(v)}}}
+ if(!(u&&u.x)&&!sc.x?.title&&lab.length&&lab.every(l=>typeof l==='number'))sc.x={...(sc.x||{}),title:{display:true,text:'Jahr'}};
+ if(u&&!o.plugins?.tooltip?.callbacks?.label){const p=o.plugins=o.plugins||{};p.tooltip={itemSort:(a,b)=>b.parsed.y-a.parsed.y,...(p.tooltip||{})};
+  p.tooltip.callbacks={...(p.tooltip.callbacks||{}),label:c=>{const spec=u[c.dataset.yAxisID||'y'],v=c.parsed.y;return c.dataset.label+': '+(v==null?'–':spec?unitFmt(spec)(v):nf(v,2))}}}}
 const fmtAxis=f=>({ticks:{callback:v=>f==='chf'?chf(v):f==='pct'?pct(v):nf(v,2)}});
 function lines(id,series,{fmt,stacked,area}={}){const s=sys();chart(id,{type:'line',data:{labels:s.map(x=>x.year),datasets:series.map((d,i)=>({label:d.label,data:s.map(d.get),borderColor:d.color||pal()[i%8],backgroundColor:(d.color||pal()[i%8])+(area?'55':'22'),fill:area?'stack':false,pointRadius:0,borderWidth:2,tension:.2,yAxisID:d.axis||'y'}))},
  options:{...(fmt==='chf'?{plugins:{tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${chf(c.parsed.y)}`}}}}:{}),scales:{x:{grid:{display:false}},y:{stacked:!!stacked,...fmtAxis(fmt),...(fmt==='pct'&&!stacked?{}:{})},...(series.some(d=>d.axis==='y2')?{y2:{position:'right',grid:{display:false},...fmtAxis(series.find(d=>d.axis==='y2').fmt)}}:{})}}})}
@@ -453,7 +481,7 @@ const firmProfit=id=>firm(id).yearly.filter(y=>inRange(y.year)).reduce((a,y)=>a+
 const status=f=>f.exit_year?`<span class="badge off">Jahr ${f.entry_year||1}–${f.exit_year}, ausgeschieden</span>`:`<span class="badge ok">aktiv seit Jahr ${f.entry_year||1}</span>`;
 const empty=msg=>`<div class="empty">${esc(msg)}</div>`;
 function firmRows(ids,cols){return ids.map(id=>`<tr class="click" data-firm="${esc(id)}">${cols(firm(id))}</tr>`).join('')}
-function wireFirmLinks(root){root.querySelectorAll('[data-firm]').forEach(r=>{r.tabIndex=0;const go=e=>{e?.preventDefault();showActor(r.dataset.firm)};r.onclick=go;r.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();go()}}})}
+function wireFirmLinks(root){root.querySelectorAll('[data-firm]').forEach(r=>{r.tabIndex=0;const go=e=>{e?.preventDefault();e?.stopPropagation?.();showActor(r.dataset.firm)};r.onclick=go;r.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();go()}}})}
 
 // --- Überblick -----------------------------------------------------------
 function renderOverview(){const s=sys(),first=s[0],last=s.at(-1);const e=evs();
@@ -462,7 +490,7 @@ function renderOverview(){const s=sys(),first=s[0],last=s.at(-1);const e=evs();
  $('#ov-kpis').innerHTML=[kpi('Gewinn aller Firmen (Jahr '+last.year+')',chf(last.total_profit),pt,pc),kpi('Service-Level im Schnitt',pct(s.reduce((a,x)=>a+x.service_level,0)/s.length),'Anteil der bedienten Nachfrage'),
   kpi('Aktive Firmen am Ende',nf(active),STAGES.map(st=>STAGE[st][0]+': '+(last['active_firms_'+st]||0)).join(' · ')),kpi('Markteintritte',nf(sumBy(s,'market_entries')),'im Zeitraum'),
   kpi('Konkurse',nf(sumBy(s,'bankruptcies')),nf(sumBy(s,'takeovers'))+' Übernahmen'),kpi('Preisindex',nf(last.price_index,2),'Jahr 1 = 1.00')].join('');
- const ss=sys();chart('ov-profit',{type:'bar',data:{labels:ss.map(x=>x.year),datasets:[{label:'Gewinn',data:ss.map(x=>x.total_profit),backgroundColor:ss.map(x=>x.total_profit>=0?pal()[0]+'aa':css('--bad')+'aa'),yAxisID:'y',order:2},{type:'line',label:'Service-Level',data:ss.map(x=>x.service_level),borderColor:pal()[1],pointRadius:0,borderWidth:2,yAxisID:'y2',order:1}]},
+ const ss=sys();chart('ov-profit',{type:'bar',data:{labels:ss.map(x=>x.year),datasets:[{label:'Gewinn (CHF)',data:ss.map(x=>x.total_profit),backgroundColor:ss.map(x=>x.total_profit>=0?pal()[0]+'aa':css('--bad')+'aa'),yAxisID:'y',order:2},{type:'line',label:'Service-Level (%)',data:ss.map(x=>x.service_level),borderColor:pal()[1],pointRadius:0,borderWidth:2,yAxisID:'y2',order:1}]},
   options:{scales:{x:{grid:{display:false}},y:fmtAxis('chf'),y2:{position:'right',min:0,max:1,grid:{display:false},...fmtAxis('pct')}}}});
  lines('ov-firms',byGroup('active_firms_',()=>1,undefined,true),{});
  lines('ov-cats',Object.keys(CAT).map(c=>({label:CAT[c],get:x=>x['share_'+c],color:catColor()[c]})),{fmt:'pct',stacked:true,area:true});
@@ -479,7 +507,7 @@ function renderOverview(){const s=sys(),first=s[0],last=s.at(-1);const e=evs();
 function renderPhase10Market(){lines('mk-channel',[{label:'Anteil Menge',get:x=>x.restaurant_unit_share},{label:'Anteil Umsatz',get:x=>x.restaurant_revenue_share}],{fmt:'pct'});
  const rows=(D.brands||[]).filter(r=>inRange(r.year)&&r.awareness!=null);const s=sys();if(!rows.length)return;const last=Math.max(...rows.map(r=>r.year));
  const top=rows.filter(r=>r.year===last).sort((a,b)=>b.awareness-a.awareness).slice(0,4);const yrs=s.map(x=>x.year);
- chart('mk-marketing',{type:'bar',data:{labels:yrs,datasets:[{label:'Marketing',data:s.map(x=>x.marketing_spend),backgroundColor:pal()[3]+'88',yAxisID:'y',order:2},...top.map((t,i)=>({type:'line',label:t.name,data:yrs.map(y=>(rows.find(r=>r.year===y&&r.brand===t.brand)||{}).awareness??null),borderColor:pal()[i],pointRadius:0,yAxisID:'y2',order:1}))]},
+ chart('mk-marketing',{type:'bar',data:{labels:yrs,datasets:[{label:'Marketing (CHF)',data:s.map(x=>x.marketing_spend),backgroundColor:pal()[3]+'88',yAxisID:'y',order:2},...top.map((t,i)=>({type:'line',label:t.name,data:yrs.map(y=>(rows.find(r=>r.year===y&&r.brand===t.brand)||{}).awareness??null),borderColor:pal()[i],pointRadius:0,yAxisID:'y2',order:1}))]},
   options:{scales:{x:{grid:{display:false}},y:fmtAxis('chf'),y2:{position:'right',min:0,max:1,grid:{display:false},...fmtAxis('pct')}}}})}
 function renderMarket(){renderPhase10Market();const rows=(D.brands||[]).filter(r=>inRange(r.year));const yrs=[...new Set(rows.map(r=>r.year))];
  if(rows.length){const last=yrs.at(-1);const top=rows.filter(r=>r.year===last).sort((a,b)=>b.market_share-a.market_share).slice(0,8).map(r=>r.brand);const nm=id=>rows.find(r=>r.brand===id).name;
@@ -512,7 +540,7 @@ function bankRatio(b){const assets=Math.max(b.loans||0,(b.deposits||0)+(b.equity
 function bankLink(id,name){return `<a href="#firms" data-bank="${esc(id)}">${esc(name)}</a>`}
 function actorLabel(id){const bank=bankActors()[id]||bankActors()['bank:'+id];return bank?bankLink(bank.bank_id,bank.name):esc(fname(id))}
 function wireBankLinks(root){root.querySelectorAll('[data-bank]').forEach(r=>{r.tabIndex=0;const go=e=>{e?.preventDefault();e?.stopPropagation();showActor('bank:'+r.dataset.bank)};r.onclick=go;r.onkeydown=e=>{if(e.key==='Enter'||e.key===' ')go(e)}})}
-function eventList(rows){return rows.length?rows.slice().reverse().map(e=>`<li><span class="yr">Jahr ${e.year}</span><span><b>${esc(EVENT[e.event]||e.event)}</b> ${esc(pretty(e.details))}</span></li>`).join(''):'<li>Keine Ereignisse im Zeitraum.</li>'}
+function eventList(rows){return rows.length?rows.slice().reverse().map(e=>`<li><span class="yr">Jahr ${e.year}</span><span><b>${esc(EVENT[e.event]||e.event)}</b> ${esc(pretty(e.details))}${eventExtra(e)}</span></li>`).join(''):'<li>Keine Ereignisse im Zeitraum.</li>'}
 function renderFirms(){
  $('#fm-stage').innerHTML=FM_GROUPS.map(s=>`<button class="chip" data-s="${s}" aria-pressed="${S.fmStage.has(s)}"><span class="dot" style="background:${stageColor()[s]}"></span>${fmGroupLabel(s)}</button>`).join('');
  $('#fm-status').innerHTML=[['all','Alle'],['active','Aktiv'],['exited','Ausgeschieden']].map(([k,l])=>`<button class="chip" data-st="${k}" aria-pressed="${S.fmStatus===k}">${l}</button>`).join('');
@@ -605,6 +633,7 @@ function renderFirmDetail(){const root=$('#fm-detail');destroy();if(S.tab!=='fir
  ${firmBankLine(id)}<div class="grid"><div class="card wide"><h3>Umsatz und Kosten pro Jahr</h3><p class="hint">Fahre über eine Säule für die Kostenarten. Klicke auf ein Jahr, um zu sehen, wohin das Geld floss.</p><div class="chart"><canvas id="fd-cost"></canvas></div></div>
  <div class="card"><h3>Cash (Wochenschnitt)</h3><div class="chart"><canvas id="fd-cash"></canvas></div></div><div class="card"><h3>Lager und Rückstand (Wochenschnitt)</h3><div class="chart"><canvas id="fd-stock"></canvas></div></div>
  <div class="card"><h3>Reputation und Qualität</h3><div class="chart"><canvas id="fd-rep"></canvas></div></div><div class="card"><h3>Ereignisse dieser Firma</h3><ul class="list" id="fd-events" style="max-height:270px;overflow:auto"></ul></div>
+ <div class="card wide" id="fd-pd" hidden></div>
  <div class="card wide" id="fd-story" hidden></div>
  ${D.stocks?.prices?.[id]?'<div class="card wide"><h3>Börsenkurs</h3>'+etfMembership(id)+'<div id="fd-index-switch">'+stockIndexSwitch('fd',true)+'</div><p class="hint" id="fd-stock-empty"></p><div class="chart"><canvas id="fd-price"></canvas></div></div>':''}
  ${firmRndHtml(id)}
@@ -624,7 +653,7 @@ function renderFirmDetail(){const root=$('#fm-detail');destroy();if(S.tab!=='fir
  chart('fd-stock',{type:'line',data:{labels:wl,datasets:[{label:'Lager',data:w.inventory.slice(from,to),borderColor:pal()[0],pointRadius:0,borderWidth:1.5},{label:'Rückstand',data:w.backlog.slice(from,to),borderColor:pal()[1],pointRadius:0,borderWidth:1.5}]},options:{scales:{x:{ticks:{maxTicksLimit:10,callback:function(v){return'Jahr '+Math.floor(this.getLabelForValue(v))}}}}}});
  chart('fd-rep',{type:'line',data:{labels:lbl,datasets:[{label:'Reputation',data:y.map(r=>r.reputation),borderColor:pal()[4],pointRadius:0,borderWidth:2},{label:'Qualität',data:y.map(r=>r.average_quality),borderColor:pal()[5],pointRadius:0,borderWidth:2}]},options:{scales:{y:fmtAxis('pct')}}});
  const fe=f.events.filter(e=>inRange(e.year)&&e.event!=='inflation').slice().reverse();
- $('#fd-events').innerHTML=fe.length?fe.map(e=>`<li><span class="yr">Jahr ${e.year}</span><span><b>${esc(EVENT[e.event]||e.event)}</b> <span class="badge">${esc(pretty(e.details))}</span></span></li>`).join(''):'<li>Keine Ereignisse im Zeitraum.</li>';
+ $('#fd-events').innerHTML=fe.length?fe.map(e=>`<li><span class="yr">Jahr ${e.year}</span><span><b>${esc(EVENT[e.event]||e.event)}</b> <span class="badge">${esc(pretty(e.details))}</span>${eventExtra(e)}</span></li>`).join(''):'<li>Keine Ereignisse im Zeitraum.</li>';renderFirmProfitUse(id);
  if(D.stocks?.prices?.[id]){wireStockIndexSwitch($('#fd-index-switch'),'fd',renderFirmDetail);renderStockChart('fd-price',[id],stockIndexShown('fd',true),'week','fd-stock-empty')}
  renderExit(id);renderDecisions(id);
  const st=((D.texts||{}).stories||{})[id],sb=$('#fd-story');sb.hidden=!st;if(st)sb.innerHTML=`<h3>Geschichte ${st.checked?'<span class="badge ok">vom lokalen Modell, Zahlen geprüft</span>':'<span class="badge">Kurzfassung aus den Fakten</span>'}</h3><p style="margin:0">${esc(pretty(st.text))}</p>`}
@@ -659,7 +688,7 @@ function renderCompare(){const actors={...D.firms,...bankActors(),...courierActo
  const rawValue=(f,y)=>{if(!activeInYear(f,y))return null;const r=f.yearly.find(r=>r.year===y);if(!r)return null;if(f.stage==='courier'){return['profit','revenue','cash','market_share'].includes(key)?r[key]??null:null}if(f.stage==='bank'){if(!['profit','revenue','cash','market_share'].includes(key))return null;return r[{cash:'equity',market_share:'deposit_share'}[key]||key]??null}return r[key]??null};
  const value=(id,y)=>{const f=actor(id),v=rawValue(f,y);if(v==null||!relative)return v;const peers=Object.values(actors).filter(p=>fmGroup(p)===fmGroup(f)).map(p=>rawValue(p,y)).filter(v=>v!=null);return peers.length?v-peers.reduce((a,b)=>a+b,0)/peers.length:null};
  root.innerHTML=`<div class="card"><h3>${title}${key==='cash'?' / Eigenkapital':''}${relative?' relativ zum Stufenschnitt':''}</h3><div class="chart" style="height:400px"><canvas id="cp-metric"></canvas></div></div><div class="table-wrap"><table id="cp-summary"></table></div>`;
- chart('cp-metric',{type:'line',data:{labels,datasets:S.cmp.map(id=>({label:actorName(id),data:labels.map(y=>value(id,y)),borderColor:pal()[cmpColors[id]],pointRadius:0,borderWidth:2,spanGaps:false}))},options:{scales:{y:fmtAxis(fmt)}}});
+ chart('cp-metric',{type:'line',data:{labels,datasets:S.cmp.map(id=>({label:actorName(id),data:labels.map(y=>value(id,y)),borderColor:pal()[cmpColors[id]],pointRadius:0,borderWidth:2,spanGaps:false}))},units:{y:fmt==='chf'?'CHF':fmt==='pct'?'Anteil (%)':title},options:{scales:{y:fmtAxis(fmt)}}});
  const stats=S.cmp.map(id=>{const pairs=labels.map(y=>[y,value(id,y)]).filter(p=>p[1]!=null),v=pairs.map(p=>p[1]);return{id,pairs,values:v.length?[value(id,labels.at(-1)),v.reduce((a,b)=>a+b,0)/v.length,Math.max(...v),Math.min(...v)]:[null,null,null,null]}});
  const best=[0,1,2,3].map(i=>Math.max(...stats.map(r=>r.values[i]).filter(v=>v!=null)));
  $('#cp-summary').innerHTML='<thead><tr><th>Firma</th><th>Letztes Jahr</th><th>Durchschnitt</th><th>Bestes Jahr</th><th>Schlechtestes Jahr</th></tr></thead><tbody>'+stats.map(r=>`<tr><td><span class="dot" style="background:${pal()[cmpColors[r.id]]}"></span>${esc(actorName(r.id))}</td>${r.values.map((v,i)=>`<td class="num ${v!=null&&v===best[i]?'best':''}">${v!=null&&v===best[i]?'<strong>':''}${format(v)}${i>=2&&v!=null?' (Jahr '+r.pairs.find(p=>p[1]===v)[0]+')':''}${v!=null&&v===best[i]?'</strong>':''}</td>`).join('')}</tr>`).join('')+'</tbody>'}
@@ -668,7 +697,7 @@ function ledgerHtml(id){const rows=(D.offence_ledger||[]).filter(r=>inRange(r.ye
  return `<div class="card"><h3>Hat es sich gelohnt?</h3><div class="kpis">${kpi('lohnend:',nf(rows.filter(r=>r.paid_off).length)+' von '+nf(rows.length))}</div><p class="hint">Schaden ist eine Schätzung aus Reputationsverlust und Vorjahresumsatz.</p>${rows.length?`<div class="table-wrap"><table id="ledger-${id||'state'}"><thead><tr><th>Firma</th><th>Straftat</th><th>Jahr</th><th>Gewinn</th><th>Busse</th>${money.includes('compensation')?'<th>Schadenersatz</th>':''}<th>Schaden</th><th>Netto</th><th>Urteil</th></tr></thead><tbody>${rows.map(r=>`<tr data-paid-off="${r.paid_off}"><td>${actorLabel(r.firm)}</td><td>${esc(OFFENCE[r.offence]||r.offence)}</td><td>${r.year}</td>${money.map(k=>`<td class="num" data-value="${r[k]??0}">${chf(r[k]??0)}</td>`).join('')}<td><span class="badge ${r.paid_off?'ok':'off'}">${r.paid_off?'lohnend':'nicht lohnend'}</span></td></tr>`).join('')}</tbody></table></div>`:empty('Keine Straftaten im Zeitraum.')}</div>`}
 
 function renderStructure(){$('#ms-legend').innerHTML=['factory','distributor','wholesaler','retailer','truck_dealer','bank','courier'].map(st=>`<span class="dot" style="background:${stageColor()[st]}"></span>${st==='bank'?'Banken':st==='courier'?'Kuriere':STAGE[st]}`).join(' · ')+' · Austritte: × Konkurs · ◆ Übernahme · ▲ Vergiftung · ⇄ Fusion';const brands=new Map();for(const r of D.brands||[]){if(r.year>range.to)continue;const old=brands.get(r.brand);brands.set(r.brand,{...r,first:old?Math.min(old.first,r.year):r.year})}
- $('#ms-brands').innerHTML=Object.entries(CAT).map(([cat,name])=>`<details><summary>${name}</summary><ul class="list">${[...brands.values()].filter(b=>b.category===cat).map(b=>`<li><b>${esc(b.name)}</b> · ${actorLabel(b.owner)} · seit Jahr ${b.first} · ${esc(({cheap:'Discount',standard:'Standard',premium:'Premium'})[b.positioning]||b.positioning)} · ${esc((b.traits||[]).map(t=>({wine:'Wein',spirits:'Spirituosen',lager:'Lager',craft:'Craft',discount:'Discount',import:'Import',alkoholfrei:'Alkoholfrei'})[t]||t).join(', '))}</li>`).join('')||'<li>Keine Marken vorhanden.</li>'}</ul></details>`).join('');
+ $('#ms-brands').innerHTML=Object.entries(CAT).map(([cat,name])=>`<details><summary>${name}</summary><ul class="list">${[...brands.values()].filter(b=>b.category===cat).map(b=>`<li><b>${esc(b.name)}</b> · ${actorLabel(b.owner)} · seit Jahr ${b.first} · ${esc(({cheap:'Discount',standard:'Standard',premium:'Premium'})[b.positioning]||b.positioning)} · ${esc((b.traits||[]).map(t=>({wine:'Wein',spirits:'Spirituosen',softdrinks:'Softdrinks',water:'Wasser',lager:'Lager',craft:'Craft',discount:'Discount',import:'Import',alkoholfrei:'Alkoholfrei'})[t]||t).join(', '))}</li>`).join('')||'<li>Keine Marken vorhanden.</li>'}</ul></details>`).join('');
  const groups=[...Object.keys(CAT).map(c=>['Hersteller · '+CAT[c],f=>f.stage==='factory'&&!f.importer&&f.category===c]),['Hersteller · Import',f=>f.stage==='factory'&&f.importer],...['distributor','wholesaler','retailer','truck_dealer'].map(st=>[STAGE[st],f=>f.stage===st]),['Banken',f=>f.stage==='bank'],['Kuriere',f=>f.stage==='courier']];
  const x=y=>290+(y-range.from)*650/Math.max(1,range.to-range.from+1),end=y=>x(y+1);let top=35,svg='';
  for(const y of years.filter(inRange).filter((y,i)=>i%Math.max(1,Math.ceil((range.to-range.from+1)/15))===0))svg+=`<text x="${x(y)}" y="18" font-size="12">${y}</text>`;
@@ -707,7 +736,7 @@ function stockLabel(i,period){const s=D.stocks,day=(s.days[i]-1)%D.meta.days_per
  return `Jahr ${s.years[i]}, ${period==='month'?'Monat '+(Math.min(11,Math.floor(day*12/D.meta.days_per_year))+1):'Woche '+(Math.floor(day/7)+1)}`}
 function stockNormal(values,base){base=base??values.find(v=>v!=null&&v>0);return values.map(v=>v==null||!base?null:100*v/base)}
 function stockOptions(points,period,rate=false){return {plugins:{tooltip:{callbacks:{title:items=>items.length?stockLabel(points[items[0].dataIndex],period):'',label:c=>c.dataset.label+': '+(c.dataset.yAxisID==='y2'?pct(c.parsed.y):nf(c.parsed.y,2))}}},scales:{
- x:{grid:{display:false},ticks:{autoSkip:false,callback:(v,i)=>{const y=D.stocks.years[points[i]],step=Math.max(1,Math.ceil((range.to-range.from+1)/8));return (i===0||y!==D.stocks.years[points[i-1]])&&(y-range.from)%step===0?'Jahr '+y:null}}},
+ x:{grid:{display:false},title:{display:true,text:'Zeit (Jahr)'},ticks:{autoSkip:false,callback:(v,i)=>{const y=D.stocks.years[points[i]],step=Math.max(1,Math.ceil((range.to-range.from+1)/8));return (i===0||y!==D.stocks.years[points[i-1]])&&(y-range.from)%step===0?'Jahr '+y:null}}},
  y:{title:{display:true,text:rate?'Indexstand':'Start = 100'},...fmtAxis()},...(rate?{y2:{position:'right',grid:{display:false},title:{display:true,text:'SNB-Leitzins (%)'},...fmtAxis('pct')}}:{})}}}
 function stockLineName(fid){const g=(D.holding_groups||[]).find(g=>g.listing_id===fid&&g.status!=='active'&&g.successor&&g.successor!==fid&&firm(g.successor));return g?fname(g.successor)+' (vorher '+fname(fid)+')':fname(fid)}
 function stockDataset(label,data,color,width=2){return {label,data,borderColor:color,pointRadius:0,borderWidth:width,spanGaps:false}}
@@ -746,7 +775,7 @@ function renderStocks(){const s=D.stocks||{days:[],years:[],index:[],prices:{}},
  $('#sx-events').innerHTML=eventList((D.events||[]).filter(e=>inRange(e.year)&&['exchange_opened','listed','delisted'].includes(e.event)))
 }
 const CM_NAME={malt:'Gerste/Malz',hops:'Hopfen',packaging:'Glas',wheat:'Weizen',grapes:'Trauben',cork:'Korken',fruit:'Früchte',energy:'Strom'};
-function cmLabel(n){const use=Object.entries(D.commodity_by_category||{}).filter(([,a])=>n in a).map(([c])=>({beer:'Bier',wine:'Wein',spirits:'Spirituosen'})[c]||c);return (CM_NAME[n]||n)+(use.length?' ('+use.join(', ')+')':'')}
+function cmLabel(n){const use=Object.entries(D.commodity_by_category||{}).filter(([,a])=>n in a).map(([c])=>CAT[c]||c);return (CM_NAME[n]||n)+(use.length?' ('+use.join(', ')+')':'')}
 function firmCommodityHtml(id){const rows=(D.commodities||[]).filter(r=>inRange(r.year)&&r.firms?.[id]);if(!rows.length)return'';
  const own=D.firms?.[id]&&D.commodity_by_category?.[D.firms[id].category],names=Object.keys(rows[0].prices).filter(n=>!own||n in own),pc=v=>v==null?'–':nf(v*100,0)+' %';
  const body=rows.map(r=>{const f=r.firms[id];return `<tr><td class="num">${r.year}</td>`+names.map(n=>`<td class="num" data-value="${f.stock[n]??0}">${nf(f.stock[n]??0,0)}</td><td class="num">${pc(f.avg_price?.[n])}</td><td class="num">${pc(r.prices[n])}</td>`).join('')+'</tr>'}).join('');
@@ -761,18 +790,35 @@ function renderBankLoans(rows){
  const yrs=[...new Set(rows.map(b=>b.year))].sort((a,b)=>a-b),ids=[...new Set(rows.map(b=>b.bank_id))],name=id=>rows.find(b=>b.bank_id===id).name,
   cell=(id,y,k)=>rows.find(b=>b.bank_id===id&&b.year===y)?.[k]||0,total=(y,k)=>ids.reduce((a,id)=>a+cell(id,y,k),0),tick={callback:v=>chf(v)};
  chart('ba-loans',{type:'bar',data:{labels:yrs,datasets:ids.map((id,i)=>({label:name(id),data:yrs.map(y=>cell(id,y,'term_loans')),backgroundColor:pal()[i%pal().length]+'cc'}))},options:{scales:{x:{stacked:true,grid:{display:false}},y:{stacked:true,ticks:tick}}}});
- chart('ba-new',{type:'bar',data:{labels:yrs,datasets:[{label:'Neukredite (CHF)',data:yrs.map(y=>total(y,'new_loans')),backgroundColor:pal()[0]+'bb',yAxisID:'y'},{type:'line',label:'Anzahl',data:yrs.map(y=>total(y,'new_loan_count')),borderColor:pal()[3],pointRadius:2,yAxisID:'y2'}]},options:{scales:{x:{grid:{display:false}},y:{ticks:tick},y2:{position:'right',grid:{display:false}}}}});
+ chart('ba-new',{type:'bar',data:{labels:yrs,datasets:[{label:'Neukredite (CHF)',data:yrs.map(y=>total(y,'new_loans')),backgroundColor:pal()[0]+'bb',yAxisID:'y'},{type:'line',label:'Anzahl Neukredite',data:yrs.map(y=>total(y,'new_loan_count')),borderColor:pal()[3],pointRadius:2,yAxisID:'y2'}]},options:{scales:{x:{grid:{display:false}},y:{ticks:tick},y2:{position:'right',grid:{display:false}}}}});
  chart('ba-defaults',{type:'bar',data:{labels:yrs,datasets:[{label:'Ausgefallene Kredite (CHF)',data:yrs.map(y=>total(y,'loan_write_offs')),backgroundColor:css('--bad')+'bb'}]},options:{scales:{x:{grid:{display:false}},y:{ticks:tick}}}});
  chart('ba-interest',{type:'line',data:{labels:yrs,datasets:[{label:'Zinsertrag Kredite (CHF)',data:yrs.map(y=>total(y,'loan_interest')),borderColor:pal()[2],pointRadius:2,borderWidth:2,tension:.2}]},options:{scales:{y:{ticks:tick}}}});
  chart('ba-deposit',{type:'line',data:{labels:yrs,datasets:[{label:'Einlagezins erhalten (CHF)',data:yrs.map(y=>total(y,'deposit_interest_paid')),borderColor:pal()[0],pointRadius:2,borderWidth:2,tension:.2},{label:'Negativzins bezahlt (CHF)',data:yrs.map(y=>total(y,'negative_interest_income')),borderColor:css('--bad'),pointRadius:2,borderWidth:2,tension:.2}]},options:{scales:{y:{ticks:tick}}}})}
-function renderBankTab(){renderBanks();renderBankLoans((D.banks||[]).filter(b=>inRange(b.year)));
+function renderLeasing(){const L=D.leasing,card=$('#ba-leasing-card');if(!card)return;
+ const hist=((L&&L.history)||[]).filter(h=>inRange(h.year)),cons=((L&&L.contracts)||[]).filter(c=>c.start_year<=range.to);
+ card.hidden=!(hist.length||cons.length);if(card.hidden)return;
+ const yrs=hist.map(h=>h.year);
+ chart('ba-leasing',{type:'bar',data:{labels:yrs,datasets:[{label:'Ertrag (CHF)',data:hist.map(h=>h.income),backgroundColor:pal()[0]+'bb',yAxisID:'y',order:3},{label:'Verluste aus Ausfällen (CHF)',data:hist.map(h=>h.losses),backgroundColor:css('--bad')+'bb',yAxisID:'y',order:3},
+  {type:'line',label:'Laufende Leasingverträge (Anzahl)',data:hist.map(h=>h.active),borderColor:pal()[3],pointRadius:2,borderWidth:2,yAxisID:'y2',order:1},{type:'line',label:'Ausfälle (Anzahl)',data:hist.map(h=>h.defaults),borderColor:pal()[4],pointRadius:2,borderWidth:2,yAxisID:'y2',order:2}]},
+  units:{y:'CHF',y2:'Anzahl Leasingverträge'},options:{scales:{x:{stacked:true,grid:{display:false}},y:{stacked:true},y2:{position:'right',grid:{display:false}}}}});
+ const KIND={bank:'Bank',dealer:'Händler'},shown=cons.slice().sort((a,b)=>b.start_year-a.start_year).slice(0,50);
+ $('#ba-leasing-table').innerHTML='<thead><tr><th>Firma</th><th>Leasinggeber</th><th>Art</th><th>Typ</th><th class="num">Preis</th><th class="num">Start (Jahr)</th><th class="num">Laufzeit (Jahre)</th><th class="num">Zins</th><th>Status</th></tr></thead><tbody>'+(shown.length?shown.map(c=>`<tr class="click" data-firm="${esc(c.firm)}"><td>${actorLabel(c.firm)}</td><td>${esc(pretty(c.lessor))}</td><td>${esc(KIND[c.kind]||c.kind||'')}</td><td>${esc(c.type||'')}</td><td class="num" data-value="${c.price}">${chf(c.price)}</td><td class="num">${c.start_year}</td><td class="num">${c.years}</td><td class="num" data-value="${c.rate==null?'':c.rate*100}">${pct(c.rate)}</td><td>${esc(c.status||'')}</td></tr>`).join(''):`<tr><td colspan="9">${empty('Keine Leasingverträge im Zeitraum.')}</td></tr>`)+'</tbody>';
+ wireFirmLinks($('#ba-leasing-table'))}
+const pdRows=()=>((D.profit_distribution&&D.profit_distribution.rows)||[]);
+function renderProfitUse(){const card=$('#fi-pd-card');if(!card)return;const rows=pdRows().filter(r=>inRange(r.year));card.hidden=!rows.length;if(!rows.length)return;
+ const yrs=[...new Set(rows.map(r=>r.year))].sort((a,b)=>a-b),sum=(y,k)=>rows.filter(r=>r.year===y).reduce((a,r)=>a+(+r[k]||0),0);
+ chart('fi-pd',{type:'bar',data:{labels:yrs,datasets:[['legal_reserve_add','Gesetzliche Reserve (CHF)'],['net_dividend','Dividende netto (CHF)'],['withholding_tax','Verrechnungssteuer 35 % (CHF)'],['retained','Gewinnvortrag (CHF)']].map(([k,label],i)=>({label,data:yrs.map(y=>sum(y,k)),backgroundColor:pal()[i]+'cc',stack:'pd'}))},units:{y:'CHF'},options:{scales:{x:{stacked:true,grid:{display:false}},y:{stacked:true}}}})}
+function renderFirmProfitUse(id){const box=$('#fd-pd');if(!box)return;const rows=pdRows().filter(r=>r.firm===id&&inRange(r.year)),acc=((D.profit_distribution||{}).accounts||{})[id];box.hidden=!rows.length;if(!rows.length){box.innerHTML='';return}
+ const keys=['profit','loss_offset','legal_reserve_add','dividend','withholding_tax','net_dividend','retained','loss_carryforward'];
+ box.innerHTML='<h3>Gewinnverwendung (OR)</h3>'+(acc?'<p class="hint">Stand Konten: gesetzliche Reserve '+chf(acc.legal_reserve)+' · Gewinnvortrag '+chf(acc.retained)+' · Verlustvortrag '+chf(acc.loss_carryforward)+'</p>':'')+'<div class="table-wrap"><table id="fd-pd-table"><thead><tr><th class="num">Jahr</th><th class="num">Gewinn</th><th class="num">Verlustverrechnung</th><th class="num">Gesetzliche Reserve</th><th class="num">Dividende</th><th class="num">Verrechnungssteuer</th><th class="num">Dividende netto</th><th class="num">Gewinnvortrag</th><th class="num">Verlustvortrag</th></tr></thead><tbody>'+rows.map(r=>'<tr><td class="num">'+r.year+'</td>'+keys.map(k=>'<td class="num" data-value="'+(r[k]??'')+'">'+chf(r[k])+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>'}
+function renderBankTab(){renderBanks();renderLeasing();renderBankLoans((D.banks||[]).filter(b=>inRange(b.year)));
  const rows=(D.banks||[]).filter(b=>inRange(b.year)),year=sys().at(-1)?.year,last=rows.filter(b=>b.year===year),sum=k=>last.reduce((a,b)=>a+(+b[k]||0),0);
  const policy=sys().at(-1)?.policy_rate,infl=sys().at(-1)?.inflation;
  $('#ba-kpis').innerHTML=[kpi('Banken aktiv',nf(last.filter(b=>b.active!==false).length)),kpi('Einlagen total',chf(sum('deposits'))),kpi('Kredite total',chf(sum('loans'))),kpi('Leitzins aktuell',pct(policy)),kpi('Teuerung aktuell',pct(infl))].join('');
- $('#ba-events').innerHTML=eventList((D.events||[]).filter(e=>inRange(e.year)&&(/^bank_|^credit_|^account_|^loan_/.test(e.event)||e.event==='policy_rate_changed')))}
+ $('#ba-events').innerHTML=eventList((D.events||[]).filter(e=>inRange(e.year)&&(/^bank_|^credit_|^account_|^loan_|^lease_/.test(e.event)||e.event==='policy_rate_changed')))}
 function renderFirmCash(){const firms=Object.values(D.firms||{}).filter(f=>f.stage!=='bank');
  lines('fi-firm-cash',[{label:'Cash aller Firmen',get:x=>firms.filter(f=>inYear(f,x.year,true)).reduce((a,f)=>a+((f.yearly||[]).find(r=>r.year===x.year)?.cash||0),0)}],{fmt:'chf'})}
-function renderFinance(){renderFirmCash();renderHoldings();renderRndMoney('fi-rnd');lines('fi-labor',[{label:'Offene Stellen',get:x=>x.open_positions},{label:'Abgeworben',get:x=>x.poached_workers},{label:'Lohnniveau',get:x=>x.wage_index_mean,axis:'y2'}]);lines('fi-negative',byGroup('negative_interest_',r=>r.negative_interest_cost||0,'chf'),{fmt:'chf'});lines('fi-debt',byGroup('debt_',r=>Math.max(0,-(r.cash||0)),'chf',true),{fmt:'chf'});lines('fi-interest',byGroup('interest_cost_',r=>r.interest_cost||0,'chf'),{fmt:'chf'});
+function renderFinance(){renderProfitUse();renderFirmCash();renderHoldings();renderRndMoney('fi-rnd');lines('fi-labor',[{label:'Offene Stellen',get:x=>x.open_positions},{label:'Abgeworben',get:x=>x.poached_workers},{label:'Lohnniveau',get:x=>x.wage_index_mean,axis:'y2'}]);lines('fi-negative',byGroup('negative_interest_',r=>r.negative_interest_cost||0,'chf'),{fmt:'chf'});lines('fi-debt',byGroup('debt_',r=>Math.max(0,-(r.cash||0)),'chf',true),{fmt:'chf'});lines('fi-interest',byGroup('interest_cost_',r=>r.interest_cost||0,'chf'),{fmt:'chf'});
  const s=sys(),restr=y=>D.events.filter(e=>e.year===y&&e.event==='restructuring').length;
  chart('fi-churn',{type:'bar',data:{labels:s.map(x=>x.year),datasets:[{label:'Eintritte',data:s.map(x=>x.market_entries),backgroundColor:pal()[0]+'bb'},{label:'Konkurse',data:s.map(x=>x.bankruptcies),backgroundColor:css('--bad')+'bb'},{label:'Sanierungen',data:s.map(x=>restr(x.year)),backgroundColor:pal()[3]+'bb'},{type:'line',label:'Strategiewechsel',data:s.map(x=>x.strategy_changes),borderColor:pal()[4],pointRadius:0}]},options:{scales:{x:{grid:{display:false}}}}});
  lines('fi-hhi',[{label:'HHI',get:x=>x.market_concentration}])}
@@ -802,7 +848,7 @@ function renderEvents(){const all=evs();const counts={};all.forEach(e=>counts[e.
  $('#ev-all').onclick=()=>{S.evTypes=new Set(types);renderEvents()};$('#ev-none').onclick=()=>{S.evTypes=new Set();renderEvents()};
  const q=$('#ev-search').value.trim().toLowerCase();
  const rows=all.filter(e=>S.evTypes.has(e.event)&&(!q||fname(e.firm).toLowerCase().includes(q)||String(e.details).toLowerCase().includes(q))).reverse();
- $('#ev-table').innerHTML='<thead><tr><th class="num">Jahr</th><th class="num">Tag</th><th>Art</th><th>Firma</th><th>Details</th></tr></thead><tbody>'+(rows.length?rows.map(e=>`<tr${e.firm?` class="click" data-firm="${esc(e.firm)}"`:''}><td class="num">${e.year}</td><td class="num">${e.day}</td><td>${esc(EVENT[e.event]||e.event)}</td><td>${actorLabel(e.firm)}</td><td>${esc(pretty(e.details))}</td></tr>`).join(''):`<tr><td colspan="5">${empty('Keine Ereignisse für diese Auswahl. Wähle mehr Arten oder ändere die Suche.')}</td></tr>`)+'</tbody>';
+ $('#ev-table').innerHTML='<thead><tr><th class="num">Jahr</th><th class="num">Tag</th><th>Art</th><th>Firma</th><th>Details</th></tr></thead><tbody>'+(rows.length?rows.map(e=>`<tr${e.firm?` class="click" data-firm="${esc(e.firm)}"`:''}><td class="num">${e.year}</td><td class="num">${e.day}</td><td>${esc(EVENT[e.event]||e.event)}</td><td>${actorLabel(e.firm)}</td><td>${esc(pretty(e.details))}${eventExtra(e)}</td></tr>`).join(''):`<tr><td colspan="5">${empty('Keine Ereignisse für diese Auswahl. Wähle mehr Arten oder ändere die Suche.')}</td></tr>`)+'</tbody>';
  $('#ev-more').hidden=rows.length<=S.evLimit;$('#ev-more').textContent=`Weitere anzeigen (${nf(rows.length-S.evLimit)} übrig)`;$('#ev-more').onclick=()=>{S.evLimit+=200;renderEvents()};wireFirmLinks($('#ev-table'))}
 $('#ev-search').oninput=()=>{S.evLimit=200;renderEvents()};$('#fm-search').oninput=()=>renderFirms();
 
@@ -858,7 +904,7 @@ function renderPeople(){const rows=(D.classes||[]).filter(r=>r.year<=range.to);i
 function renderChronicle(){const c=(D.texts||{}).chronicle||{};const yrs=Object.keys(c).map(Number).filter(inRange).sort((a,b)=>b-a);
  $('#ch-list').innerHTML=yrs.length?yrs.map(y=>`<div class="card" style="margin-bottom:12px"><h3>Jahr ${y} ${c[y].checked?'<span class="badge ok">Zahlen geprüft</span>':'<span class="badge">Kurzfassung aus den Fakten</span>'}</h3><p style="margin:0">${esc(pretty(c[y].text))}</p></div>`).join(''):empty('Noch keine Chronik. Erzeuge sie mit: python -m market_sim.dashboard --texts (dauert je nach Rechner eine halbe Stunde oder länger).')}
 // Money flow of one firm in one year as a circular flow: the firm in the middle, its partners around it.
-const FLOW_REASON={Gewinnsteuer:'Gewinnsteuer auf den Jahresgewinn',Alkoholsteuer:'Alkoholsteuer, steckt im Rohstoffpreis',Zoll:'Zoll auf importierte Ware',Schuldenschnitt:'Die Bank erlässt Schulden, damit die letzte Firma der Stufe bleibt',Patentgebühr:'Gebühr für ein Patent (einmalig)'};
+const FLOW_REASON={Zuckersteuer:'Zuckersteuer auf Softdrinks, steckt im Stückpreis',Pfandsystem:'Pfand auf Flaschen und Dosen',Gewinnsteuer:'Gewinnsteuer auf den Jahresgewinn',Alkoholsteuer:'Alkoholsteuer, steckt im Rohstoffpreis',Zoll:'Zoll auf importierte Ware',Schuldenschnitt:'Die Bank erlässt Schulden, damit die letzte Firma der Stufe bleibt',Patentgebühr:'Gebühr für ein Patent (einmalig)',Verrechnungssteuer:'Verrechnungssteuer (35 %) auf die Dividende, geht an den Bund'};
 const FLOW_CF={dividende_an:'Anteil am Gewinn für Beteiligte',dividende_von:'Anteil am Gewinn einer Beteiligung',kapital_von:'neues Eigenkapital',beteiligung:'Kauf eines Anteils',beteiligung_verkauft:'Verkauf eines Anteils',uebernahme:'Kaufpreis samt übernommenen Schulden',uebernommen:'Kasse geht an den Käufer'};
 const flowName=k=>{const [g,r]=k.split(':');if(k==='rohstoffe')return'Rohstoffe & Produktion';if(r===undefined)return D.firms[k]?fname(k):k;if(g==='staat')return r.startsWith('Busse')?'Busse: '+(OFFENCE[r.slice(6)]||r.slice(6)):r;
  return({uebernahme:'Übernahme von ',uebernommen:'Kasse an ',dividende_an:'Dividende an ',dividende_von:'Dividende von ',beteiligung:'Beteiligung an ',beteiligung_verkauft:'Beteiligung verkauft: ',kapital_von:'Kapital von ',bank:''}[g]??'')+(D.firms[r]?fname(r):r)};
