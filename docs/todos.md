@@ -47,9 +47,6 @@ Heute ist das Ausland eine Blackbox (`CategoriesConfig.exports` mit share/fx_ela
 
 ## 5. Bekannte offene Punkte aus den letzten Phasen
 
-- **Softdrinks und Wasser:** 47 bis 55 % der verkauften Einheiten (etwa 30 % des Umsatzes). Ziel war 25 bis 35 %; nach Menge zu hoch.
-- **Brauereien mit Softdrinks:** Bekommt eine Brauerei per F&E «Softdrinks ins Sortiment», bleibt sie in der Kategorie Bier. Zuckersteuer und Pfand treffen ihre Softdrinks nicht.
+- **Brauereien und Softdrinks:** Eine Brauerei kann keine Softdrinks selbst herstellen. Die F&E-Stufe «Softdrinks ins Sortiment» fällt weg. Stattdessen darf eine Brauerei eine Softdrink-Firma kaufen (Übernahme oder Tochter in einer Holding); die Softdrink-Firma bleibt in ihrer Kategorie, Zuckersteuer und Pfand gelten weiter.
 - **Eigene Lastwagen:** Nur 9 bis 14 Firmen haben eigene Lastwagen; der Eigenflottenanteil springt weiter.
-- **Banken:** Kredite sind am Ende nur 1.6 % der Einlagen; der Negativzins kostet 9.65 Mia. und ist höher als der Einlagezins von 6.1 Mia.
-- **Lastwagenhändler:** Lager und Beteiligungen sind nicht kreditfinanziert (siehe Punkt 1).
 - **Leasing:** Übergabe an eine Nachfolgefirma bei Fusion oder Übernahme ist nur im Test geprüft, im Lauf mit Seed 0 kam sie nicht vor.
