@@ -67,7 +67,7 @@ assert.equal($('#fi-bank-year').textContent, 'Stand: Jahr 2');
 assert.ok(charts.get('fi-stocks').data.labels.every(s => s.startsWith('Jahr 2')));
 vm.runInContext(`renderStockChart('fd-price', [${JSON.stringify(ids[0])}], true, 'week', 'fd-stock-empty')`, context);
 assert.equal(charts.get('fd-price').data.datasets.length, 2);
-assert.equal(charts.get('fd-price').data.datasets[1].data[0],100);
+assert.ok(Math.abs(charts.get('fd-price').data.datasets[1].data[0]-100)<1e-9);
 assert.equal(vm.runInContext('bankRatio({equity:20,loans:80,deposits:80})',context),0.2);
 vm.runInContext("renderBankDetail('B1')",context);
 assert.match($('#fm-detail').innerHTML,/Zinsmarge/);

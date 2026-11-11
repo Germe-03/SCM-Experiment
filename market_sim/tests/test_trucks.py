@@ -14,7 +14,7 @@ def test_everyone_starts_with_the_post_and_a_dealer_exists():
     runner, state, trucks = make()
     assert trucks is not None
     assert all(f.transport_mode == "service" for f in runner._firms() if f.stage != "retailer")
-    assert len(trucks.dealers) == 1
+    assert len(trucks.dealers) == trucks.DEALER_MIN_ACTIVE
 
 
 def test_price_and_value_decline_with_age():

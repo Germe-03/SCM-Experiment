@@ -214,6 +214,17 @@ class SimulationRunner:
         self.strategies: dict[str, AnnualStrategy] = {}
         self.applied_prices: list[tuple[str, float, float, float]] = []
         self.exits: dict[str, int] = {}
+        # Entrants: founding year and year of first sale (for firms with maturation time).
+        self._entry_year: dict[str, int] = {}
+        self._first_sale_year: dict[str, int] = {}
+        self._last_failure: dict[tuple[str, str], int] = {}
+
+    def _in_maturation(self, firm_id: str, year: int) -> bool:
+        """True for a wine entrant still within its grace period and without a first sale."""
+        cfg = self.config.market_entry
+        if firm_id in self._first_sale_year or firm_id not in self._entry_year:
+            return False
+        return year - self._entry_year[firm_id] < cfg.maturation_grace_years
 
     def run(self, years: int) -> RunResult:
         if years < 0:
@@ -226,6 +237,7 @@ class SimulationRunner:
         self.env.research = self.lab
         self.env.marketing = self.marketing
         self.exits = {}
+        self._entry_year, self._first_sale_year, self._last_failure = {}, {}, {}
         state = RunState(
             daily_series={
                 firm.id: {
@@ -690,8 +702,15 @@ class SimulationRunner:
                 continue
             summary = summaries[-1][firm.id]
             runtime.last_year_revenue = summary.revenue
-            runtime.consecutive_loss_years = runtime.consecutive_loss_years + 1 if summary.profit < 0 else 0
-            bank = self.config.bank
+            if summary.revenue > 0:
+                self._first_sale_year.setdefault(firm.id, year + 1)
+            # Loss years count only from the first sale on for firms with maturation time.
+            ageing = firm.category == "wine" and not firm.importer and firm.id in self._entry_year
+            if ageing and firm.id not in self._first_sale_year:
+                runtime.consecutive_loss_years = 0
+            else:
+                runtime.consecutive_loss_years = runtime.consecutive_loss_years + 1 if summary.profit < 0 else 0
+            bank =self.config.bank
             if bank.enabled:
                 runtime.credit_limit = max(bank.credit_limit_min,
                     bank.credit_limit_revenue_fraction * summary.revenue
@@ -915,15 +934,21 @@ class SimulationRunner:
             if stage == "retailer" and self.config.restaurants.enabled:
                 # Stores serve the demand at home; restaurant seats do not count for it.
                 needed *= 1 - self.config.restaurants.out_of_home_share
-            if cfg.shortage_capacity_ratio and stage_capacity < cfg.shortage_capacity_ratio * needed:
+            def cooling(category: str) -> bool:
+                last = self._last_failure.get((stage, category))
+                return last is not None and state.year - last < cfg.forced_entry_cooldown_years
+
+            if (cfg.shortage_capacity_ratio and stage_capacity < cfg.shortage_capacity_ratio * needed
+                    and not cooling("")):
                 # A starved stage attracts a full-size newcomer.
                 probability, capacity_share, forced = 1.0, 1.0, True
             book = self.env.brand_book
             if stage == "factory" and cfg.shortage_capacity_ratio and book.categories_on:
                 # Producers are checked per category: plenty of wine does not replace missing beer.
+                # After a failed entry the category waits a few years before the next forced one.
                 for c, share_c in book.base_share.items():
                     cap_c = sum(self.env._effective_capacity(f.id) for f in active if f.category == c)
-                    if cap_c < cfg.shortage_capacity_ratio * self.demand.mean * share_c:
+                    if cap_c < cfg.shortage_capacity_ratio * self.demand.mean * share_c and not cooling(c):
                         probability, capacity_share, forced = 1.0, 1.0, True
             want_restaurant = False
             if stage == "retailer" and self.config.restaurants.enabled:
@@ -985,6 +1010,14 @@ class SimulationRunner:
                 "extra_regions": [], "transport_mode": "service" if self.config.trucks.enabled else "own",
             })
             self.add_firm(firm, state)
+            self._entry_year[firm.id] = state.year
+            if stage == "factory" and firm.category == "wine" and not firm.importer and self.env.brand_book is not None:
+                # Start cash covers the maturation period: no income before the first release.
+                days = self.config.simulation.days_per_year
+                years = 1.0  # own wine matures 365 days (see brands.py)
+                extra = (cfg.maturation_start_cash_factor * years * days * self.env._effective_capacity(firm.id)
+                         * self.env.unit_production_cost(firm))
+                self.env.runtimes[firm.id].adjust_cash(extra, "Startkapital Reifezeit")
             # add_firm also supports external registration before the next year.
             state.market_entries[state.year + 1] -= 1
             state.market_entries[state.year] = state.market_entries.get(state.year, 0) + 1
@@ -1257,6 +1290,10 @@ class SimulationRunner:
             )
             if self.config.bank.enabled:
                 insolvent = runtime.cash < -runtime.credit_limit
+            firm_obj = self.network.firm(firm_id)
+            if (insolvent and firm_obj.category == "wine" and not firm_obj.importer
+                    and self._in_maturation(firm_id, completed_years)):
+                insolvent = False
             if insolvent:
                 candidates.append((runtime.cash, firm_id))
         # The weakest firm leaves first; a stage keeps its minimum number of firms.
@@ -1294,6 +1331,7 @@ class SimulationRunner:
             self.env.runtimes[firm_id].active = False
             self.env.close_firm(firm_id)
             self.exits[firm_id] = completed_years
+            self._last_failure[(stage, firm.category if stage == "factory" else "")] = completed_years
             if events is not None:
                 events.append({
                     "year": completed_years, "day": self.config.simulation.days_per_year,

@@ -37,7 +37,7 @@ def test_rnd_trees_export(dashboard_data):
 
     assert set(data["rnd_trees"]) == set(config.research.trees)
     expected_keys = {"name", "label", "requires", "complexity", "patentable", "branch", "categories"}
-    assert all(set(entry) == expected_keys for entries in data["rnd_trees"].values() for entry in entries)
+    assert all(expected_keys <= set(entry) for entries in data["rnd_trees"].values() for entry in entries)
     smart_factory = next(entry for entry in data["rnd_trees"]["factory"] if entry["name"] == "smart_factory")
     assert smart_factory["label"] == "Smart Factory"
     assert smart_factory["patentable"] is True

@@ -440,8 +440,24 @@ GROUP_TEMPLATES: dict[str, dict[str, list[str]]] = {
     },
 }
 
+EVENT_TEMPLATES["truck_serviced"] = [
+    {"text": "{zeit} liess {firma} einen Lastwagen warten.", "when": None},
+    {"text": "{zeit} kam ein Lastwagen von {firma} in die Werkstatt.", "when": None},
+]
+EVENT_TEMPLATES["service_contract_free"] = [
+    {"text": "{zeit} wurde ein Servicevertrag von {firma} frei, weil der Händler aufgegeben hatte.", "when": None},
+    {"text": "{zeit} stand {firma} ohne Servicepartner da, da der Händler den Betrieb einstellte.", "when": None},
+]
+EVENT_TEMPLATES["carrier_truck_bought"] = [
+    {"text": "{zeit} kaufte {firma} einen neuen Lastwagen.", "when": None},
+    {"text": "{zeit} erweiterte {firma} die Flotte um einen Lastwagen.", "when": None},
+]
+
 
 EVENT_IMPORTANCE: dict[str, int] = {
+    "truck_serviced": 1,
+    "service_contract_free": 2,
+    "carrier_truck_bought": 2,
     "takeover": 8,
     "merger_formed": 8,
     "merger_blocked": 5,

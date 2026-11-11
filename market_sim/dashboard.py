@@ -201,7 +201,7 @@ body:has(dialog[open]){overflow:hidden}
     <label for="cp-status">Status<select id="cp-status"><option value="all">Alle</option><option value="active">Aktiv</option><option value="exited">Ausgeschieden</option></select></label>
     <label for="cp-years"><span id="cp-years-label">Mindestens 0 Jahre im Markt</span><input id="cp-years" type="range" min="0" value="0" step="1"></label>
    </div><p id="cp-count" class="hint" role="status"></p>
-   <div class="filters"><button class="btn" id="cp-top">Top 5 nach Gewinn</button><button class="btn" id="cp-clear">Leeren</button></div>
+   <div class="filters"><button class="btn" id="cp-top">Top 5 nach Gewinn</button><button class="btn" id="cp-all">Alle anzeigen (Treffer)</button><button class="btn" id="cp-clear">Leeren</button></div>
    <p class="hint" id="cp-limit" aria-live="polite"></p><div id="cp-firms"></div>
   </aside>
   <div><div class="chips" id="cp-metrics" role="group" aria-label="Kennzahl"></div>
@@ -307,6 +307,7 @@ body:has(dialog[open]){overflow:hidden}
   <div class="card"><h3>Marktanteile (Einheiten x km)</h3><div class="chart"><canvas id="tr-shares"></canvas></div></div>
   <div class="card"><h3>Posttarif und Bundesbeitrag</h3><div class="chart"><canvas id="tr-post"></canvas></div></div>
   <div class="card"><h3>Mittlere Verspätung (Tage)</h3><div class="chart"><canvas id="tr-delay"></canvas></div></div>
+  <div class="card" id="tr-fleet-card"><h3>Lastwagen der Post und Kuriere</h3><p class="hint">Anzahl Lastwagen (Säulen) und Kosten dafür (Linie, CHF).</p><div class="chart"><canvas id="tr-carrier-fleet"></canvas></div></div>
   <div class="card"><h3>Kuriere pro Region</h3><svg id="tr-map" viewBox="0 0 400 260" role="img" aria-label="Kuriere pro Region"></svg></div>
   <div id="trucks-box" class="wide"></div>
   <div class="card wide"><h3>Alle Transportanbieter</h3><div class="table-wrap"><table id="tr-table"></table></div></div>
@@ -342,7 +343,7 @@ const STAGES=Object.keys(STAGE);
 STAGE.truck_dealer='Lastwagenhandel';
 const CAT={beer:'Bier',wine:'Wein',spirits:'Spirituosen',softdrinks:'Softdrinks',water:'Wasser'};
 const ARCH={low_cost:'Discount',standard:'Standard',premium:'Premium',reliable:'Zuverlässig',growth:'Wachstum'};
-const EVENT={account_opened:'Zweitkonto eröffnet',bank_payout:'Bankausschüttung',policy_rate_changed:'Leitzins geändert',law_enacted:'Neues Gesetz',stake_bought:'Beteiligung gekauft',stake_sold:'Beteiligung verkauft',stake_lost:'Beteiligung verloren',bankruptcy:'Konkurs',market_entry:'Markteintritt',strategy_change:'Strategiewechsel',price_increase:'Preiserhöhung',price_cut:'Preissenkung',supplier_switch:'Lieferantenwechsel',capacity_limit:'Kapazitätsgrenze',heat_summer:'Hitzesommer',harvest_failure:'Ernteausfall',recall:'Rückruf',recession:'Rezession',raw_material_shortage:'Rohstoffknappheit',cost_shock:'Kostenschock',wage_push:'Lohnschub',inflation:'Teuerung',trend_change:'Trendwechsel',restructuring:'Sanierung',transport_switch:'Transportwechsel',expand_started:'Ausbau begonnen',expand_finished:'Ausbau fertig',site_started:'Standort begonnen',site_finished:'Neuer Standort',offence_detected:'Straftat entdeckt',poisoning:'Vergiftung',takeover:'Übernahme',takeover_blocked:'Übernahme verboten',breakup:'Zerschlagung',spin_off:'Abspaltung',rnd_started:'F&E-Projekt gestartet',rnd_success:'F&E-Erfolg',rnd_implemented:'F&E umgesetzt',patent_granted:'Patent erteilt',patent_expired:'Patent beendet',rnd_failure:'F&E-Fehlschlag'};
+const EVENT={account_opened:'Zweitkonto eröffnet',bank_payout:'Bankausschüttung',policy_rate_changed:'Leitzins geändert',law_enacted:'Neues Gesetz',stake_bought:'Beteiligung gekauft',stake_sold:'Beteiligung verkauft',stake_lost:'Beteiligung verloren',bankruptcy:'Konkurs',market_entry:'Markteintritt',strategy_change:'Strategiewechsel',price_increase:'Preiserhöhung',price_cut:'Preissenkung',supplier_switch:'Lieferantenwechsel',capacity_limit:'Kapazitätsgrenze',heat_summer:'Hitzesommer',harvest_failure:'Ernteausfall',recall:'Rückruf',recession:'Rezession',raw_material_shortage:'Rohstoffknappheit',cost_shock:'Kostenschock',wage_push:'Lohnschub',inflation:'Teuerung',trend_change:'Trendwechsel',restructuring:'Sanierung',transport_switch:'Transportwechsel',expand_started:'Ausbau begonnen',expand_finished:'Ausbau fertig',site_started:'Standort begonnen',site_finished:'Neuer Standort',offence_detected:'Straftat entdeckt',poisoning:'Vergiftung',takeover:'Übernahme',takeover_blocked:'Übernahme verboten',breakup:'Zerschlagung',spin_off:'Abspaltung',rnd_started:'F&E-Projekt gestartet',rnd_success:'F&E-Erfolg',rnd_implemented:'F&E umgesetzt',patent_granted:'Patent erteilt',patent_expired:'Patent beendet',rnd_failure:'F&E-Fehlschlag',truck_serviced:'Lastwagen gewartet',service_contract_free:'Servicevertrag frei',carrier_truck_bought:'Lastwagen von Post/Kurier gekauft'};
 const TREND={none:'kein Trend',craft_welle:'Craft-Welle',alkoholfrei:'Alkoholfrei',sparwelle:'Sparwelle',tradition:'Tradition',wein_boom:'Wein-Boom'};
 const trendText=d=>String(d).split(/->|→/).map(x=>TREND[x.trim()]||x.trim()).join(' → ');
 const REGION={genfersee:'Genferseeregion',bern:'Bern',jura_freiburg:'Jura/Freiburg/Neuenburg',nordwestschweiz:'Nordwestschweiz',zuerich:'Zürich',ostschweiz:'Ostschweiz',zentralschweiz:'Zentralschweiz',tessin:'Tessin'};
@@ -376,7 +377,7 @@ const catColor=()=>({beer:pal()[3],wine:pal()[6],spirits:pal()[2],softdrinks:pal
 const years=D.system.map(x=>x.year);
 let range={from:years[0],to:years.at(-1)};
 const S={tab:'overview',fmStage:new Set(FM_GROUPS),fmStatus:'all',fmSort:['profit',-1],fmFirm:null,cmp:store.get('cmp',null),evTypes:null,evLimit:200};
-S.cmp=[...new Set(Array.isArray(S.cmp)?S.cmp:[])].filter(id=>firm(id)||bankActors()[id]||courierActors()[id]).slice(0,6);
+S.cmp=[...new Set(Array.isArray(S.cmp)?S.cmp:[])].filter(id=>firm(id)||bankActors()[id]||courierActors()[id]).slice(0,40);
 const inRange=y=>y>=range.from&&y<=range.to;
 const sys=()=>D.system.filter(x=>inRange(x.year));
 
@@ -448,7 +449,7 @@ const CHART_UNITS={'ov-profit':{y:'CHF',y2:'Service-Level (%)'},'ov-firms':{y:'A
 'fi-rnd':{y:'CHF'},'rd-spend':{y:'CHF'},'rd-count':{y:'Anzahl Projekte'},'st-off':{y:'Anzahl Straftaten'},'st-money':{y:'CHF'},'st-fear':{y:'Anzahl Vergiftungen',y2:'Nachfrageminus (%)'},'st-tko':{y:'Anzahl Fälle'},
 'ba-loans':{y:'CHF'},'ba-new':{y:'CHF',y2:'Anzahl Neukredite'},'ba-defaults':{y:'CHF'},'ba-interest':{y:'CHF'},'ba-deposit':{y:'CHF'},'fi-pd':{y:'CHF'},'ba-leasing':{y:'CHF',y2:'Anzahl Leasingverträge'},
 'cm-chart':{y:'~Rohstoffpreisindex (%)'},'el-chart':{y:'~Strompreisindex (%)',y2:'CHF'},'tr-shares':{y:'~Anteil am Transport (%)'},'tr-delay':{y:'Verzögerung (Tage)'},
-'tr-fleet':{y:'Anzahl Lastwagen'},'tr-flow':{y:'Anzahl Lastwagen'},'tr-price':{y:'CHF'}};
+'tr-fleet':{y:'Anzahl Lastwagen'},'tr-dealer-rev':{y:'CHF'},'tr-dealer-jobs':{y:'Anzahl Aufträge / Verträge'},'tr-carrier-fleet':{y:'Anzahl Lastwagen'},'tr-carrier-cost':{y:'CHF'},'tr-flow':{y:'Anzahl Lastwagen'},'tr-price':{y:'CHF'}};
 const unitFmt=spec=>{let [t,sfx]=String(spec).split('|');const raw=t[0]==='~';if(raw)t=t.slice(1);
  if(!raw&&/^(Mio\. )?CHF|\(CHF\)$/.test(t))return chf;if(!raw&&/\(%\)$|^%$/.test(t))return pct;
  if(sfx===undefined){const m=t.match(/\(([^)]+)\)$/);sfx=m?m[1]:/^Anzahl/.test(t)?'':t}
@@ -662,27 +663,28 @@ function renderFirmDetail(){const root=$('#fm-detail');destroy();if(S.tab!=='fir
 const CMP_METRICS=[['profit','Gewinn','chf'],['revenue','Umsatz','chf'],['cash','Cash','chf'],['market_share','Marktanteil','pct'],['reputation','Reputation','pct'],['average_quality','Qualität','pct'],['average_sell_price','Preis',null],['capacity_utilization','Auslastung','pct'],['service_level','Lieferquote','pct']];
 const savedCmpColors=store.get('cmp-colors',{});
 const cmpColors=savedCmpColors&&typeof savedCmpColors==='object'&&!Array.isArray(savedCmpColors)?savedCmpColors:{};
-function assignCompareColors(){for(const id of Object.keys(cmpColors)){if(!S.cmp.includes(id))delete cmpColors[id]}for(const id of S.cmp){if(cmpColors[id]==null||S.cmp.some(other=>other!==id&&cmpColors[other]===cmpColors[id])){const used=S.cmp.filter(x=>x!==id).map(x=>cmpColors[x]);cmpColors[id]=[0,1,2,3,4,5].find(c=>!used.includes(c))??0}}store.set('cmp-colors',cmpColors)}
-function activeInYear(f,y){return y>=f.entry_year&&(!f.exit_year||y<=f.exit_year)}
-function renderCompare(){const actors={...D.firms,...bankActors(),...courierActors()},actor=id=>actors[id],actorName=id=>actor(id)?.name||id;S.cmp=[...new Set(Array.isArray(S.cmp)?S.cmp:[])].filter(id=>actors[id]).slice(0,6);assignCompareColors();
+function assignCompareColors(){for(const id of Object.keys(cmpColors)){if(!S.cmp.includes(id))delete cmpColors[id]}for(const id of S.cmp){if(cmpColors[id]==null||(S.cmp.length<=8&&S.cmp.some(other=>other!==id&&cmpColors[other]===cmpColors[id]))){const used=S.cmp.filter(x=>x!==id).map(x=>cmpColors[x]);cmpColors[id]=[0,1,2,3,4,5,6,7].find(c=>!used.includes(c))??(S.cmp.indexOf(id)%8)}}store.set('cmp-colors',cmpColors)}
+function activeInYear(f,y){const first=f.entry_year||f.yearly?.[0]?.year||1;return y>=first&&(!f.exit_year||y<=f.exit_year)}
+function renderCompare(){const actors={...D.firms,...bankActors(),...courierActors()},actor=id=>actors[id],actorName=id=>actor(id)?.name||id;S.cmp=[...new Set(Array.isArray(S.cmp)?S.cmp:[])].filter(id=>actors[id]).slice(0,40);assignCompareColors();
  const save=change=>navigateView(()=>{change();store.set('cmp',S.cmp);renderCompare()});
  const q=$('#cp-search').value.toLowerCase().trim(),category=$('#cp-category').value,status=$('#cp-status').value,minYears=+$('#cp-years').value,product=$('#cp-product').value;
  $('#cp-years').max=D.meta.years;$('#cp-years-label').textContent=`Mindestens ${minYears} Jahre im Markt`;
  $('#cp-product-label').hidden=category!=='factory';
  const matches=Object.values(actors).filter(f=>{const end=f.exit_year||D.meta.years;return(category==='all'||fmGroup(f)===category)&&(category!=='factory'||product==='all'||f.category===product)&&(status==='all'||(status==='active')===!f.exit_year)&&end-(f.entry_year||1)+1>=minYears&&(!q||(f.name+' '+f.id).toLowerCase().includes(q))});
  $('#cp-count').textContent=matches.length+' Treffer';
- $('#cp-limit').textContent=S.cmp.length===6?'6 von 6 gewählt. Entferne eine Firma, um eine andere zu wählen.':S.cmp.length+' von höchstens 6 Firmen gewählt.';
- $('#cp-firms').innerHTML=FM_GROUPS.map(st=>{const rows=matches.filter(f=>fmGroup(f)===st);return rows.length?`<h3>${fmGroupLabel(st)}</h3>`+rows.map(f=>`<label class="firm-choice"><input type="checkbox" data-id="${esc(f.id)}" ${S.cmp.includes(f.id)?'checked':S.cmp.length>=6?'disabled':''}>${S.cmp.includes(f.id)?`<span class="dot" style="background:${pal()[cmpColors[f.id]]}"></span>`:''}${esc(f.name)} <small class="hint">${f.exit_year?'Jahr '+(f.entry_year||1)+'–'+f.exit_year:'seit Jahr '+(f.entry_year||1)}</small></label>`).join(''):''}).join('')||empty('Keine Firma passt zu Suche und Filter.');
+ $('#cp-limit').textContent=S.cmp.length>=40?`40 von 40 gewählt. Entferne eine Firma, um eine andere zu wählen.`:S.cmp.length+` von höchstens 40 Firmen gewählt.`;
+ $('#cp-firms').innerHTML=FM_GROUPS.map(st=>{const rows=matches.filter(f=>fmGroup(f)===st);return rows.length?`<h3>${fmGroupLabel(st)}</h3>`+rows.map(f=>`<label class="firm-choice"><input type="checkbox" data-id="${esc(f.id)}" ${S.cmp.includes(f.id)?'checked':S.cmp.length>=40?'disabled':''}>${S.cmp.includes(f.id)?`<span class="dot" style="background:${pal()[cmpColors[f.id]]}"></span>`:''}${esc(f.name)} <small class="hint">${f.exit_year?'Jahr '+(f.entry_year||1)+'–'+f.exit_year:'seit Jahr '+(f.entry_year||1)}</small></label>`).join(''):''}).join('')||empty('Keine Firma passt zu Suche und Filter.');
  $$('#cp-firms input').forEach(c=>c.onchange=()=>save(()=>{S.cmp=c.checked?[...S.cmp,c.dataset.id]:S.cmp.filter(id=>id!==c.dataset.id)}));
  $('#cp-search').oninput=renderCompare;
  ['cp-category','cp-product','cp-status'].forEach(id=>$('#'+id).onchange=renderCompare);$('#cp-years').oninput=renderCompare;
  $('#cp-top').onclick=()=>save(()=>{S.cmp=matches.sort((a,b)=>sumBy(b.yearly.filter(r=>inRange(r.year)),'profit')-sumBy(a.yearly.filter(r=>inRange(r.year)),'profit')).slice(0,5).map(f=>f.id)});
+ $('#cp-all').onclick=()=>save(()=>{S.cmp=matches.slice(0,40).map(f=>f.id)});
  $('#cp-clear').onclick=()=>save(()=>{S.cmp=[]});
  const metrics=[...(S.cmp.length&&S.cmp.every(id=>['bank','courier'].includes(actor(id).stage))?CMP_METRICS.slice(0,4):CMP_METRICS),...(S.cmp.some(hasStockPrices)?[['stock_price','Aktienkurs','stock']]:[])];if(!metrics.some(m=>m[0]===S.cmpMetric))S.cmpMetric='profit';const key=S.cmpMetric,relative=!!S.cmpRelative;
  $('#cp-metrics').innerHTML=metrics.map(([k,t])=>`<button class="chip" data-metric="${k}" aria-pressed="${k===key}">${t}</button>`).join('');
  $$('#cp-metrics button').forEach(b=>b.onclick=()=>{S.cmpMetric=b.dataset.metric;renderCompare()});
  $('#cp-relative-label').hidden=key==='stock_price';$('#cp-relative').checked=relative;$('#cp-relative').onchange=e=>{S.cmpRelative=e.target.checked;renderCompare()};
- destroy();const root=$('#cp-charts');if(!S.cmp.length){root.innerHTML=empty('Wähle links bis zu sechs Firmen oder nutze «Top 5 nach Gewinn».');return}
+ destroy();const root=$('#cp-charts');if(!S.cmp.length){root.innerHTML=empty('Wähle links Firmen oder nutze «Top 5 nach Gewinn» bzw. «Alle anzeigen».');return}
  if(key==='stock_price'){renderCompareStock(root,S.cmp,actorName,id=>pal()[cmpColors[id]]);return}
  const [,title,fmt]=CMP_METRICS.find(x=>x[0]===key),labels=years.filter(inRange),format=v=>v==null?'–':fmt==='chf'?chf(v):fmt==='pct'?pct(v):nf(v,2);
  const rawValue=(f,y)=>{if(!activeInYear(f,y))return null;const r=f.yearly.find(r=>r.year===y);if(!r)return null;if(f.stage==='courier'){return['profit','revenue','cash','market_share'].includes(key)?r[key]??null:null}if(f.stage==='bank'){if(!['profit','revenue','cash','market_share'].includes(key))return null;return r[{cash:'equity',market_share:'deposit_share'}[key]||key]??null}return r[key]??null};

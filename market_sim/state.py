@@ -6,6 +6,7 @@ import math
 import random
 from typing import TYPE_CHECKING
 
+from market_sim.holding_groups import category_allows_buy
 from market_sim.kpi import OFFENCE_DE, chf
 from market_sim.models import EXTRA_STAGES, STAGES
 
@@ -257,13 +258,17 @@ class StateActor:
                                 * env._effective_capacity(target.id))
                 buyers = sorted(
                     (f for f in active if f.id != target.id and summaries[f.id].profit > 0
-                     and f.category == target.category and f.channel == target.channel
+                     and (f.category == target.category
+                          or (groups is not None and stage == "factory"
+                              and category_allows_buy(f.category, target.category)))
+                     and f.channel == target.channel
                      and (env.runtimes[f.id].cash >= cfg.cash_cover * price
                           or env.arrange_funding(f.id, price, "takeover", cfg.cash_cover, commit=False))),
                     key=lambda f: (-env.runtimes[f.id].cash, f.id),
                 )
                 for buyer in buyers:
-                    combined = share[buyer.id] + share[target.id]
+                    # Across categories (brewery buys soft drinks) the markets do not overlap.
+                    combined = share[buyer.id] + (share[target.id] if buyer.category == target.category else 0.0)
                     holdings = getattr(runner, "holdings", None)
                     if holdings is not None:
                         # Phase 10: big stakes count like own market share.

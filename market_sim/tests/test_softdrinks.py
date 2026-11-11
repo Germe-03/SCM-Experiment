@@ -142,10 +142,7 @@ def test_research_stages_exist():
     trees = runner.config.research.trees["factory"]
     by_name = {stage.name: stage for stage in trees}
 
-    softdrinks = by_name["softdrinks_sortiment"]
-    assert softdrinks.kind == "new_category"
-    assert softdrinks.adds_category == "softdrinks"
-    assert softdrinks.categories == ["beer"]
+    assert "softdrinks_sortiment" not in by_name
     assert by_name["energydrink"].patentable is True
     assert "zuckerreduziert" in by_name
     assert "light_getraenke" in by_name
@@ -155,24 +152,6 @@ def test_research_stages_exist():
     assert "aromawasser" in by_name
     assert "leichtere_pet" in by_name
     assert "abfuellanlage_getraenke" in by_name
-
-
-def test_brewery_adds_softdrink_brand_via_research():
-    runner, _ = _runner()
-    book = runner.env.brand_book
-    trees = runner.config.research.trees["factory"]
-    by_name = {stage.name: stage for stage in trees}
-    firm = runner.network.firm("factory_01")
-
-    detail = runner.lab._apply(runner, firm, by_name["softdrinks_sortiment"])
-
-    softdrink_brands = [
-        brand_id for brand_id in book.brands_of("factory_01")
-        if book.brands[brand_id].category == "softdrinks"
-    ]
-    assert softdrink_brands
-    assert isinstance(detail, str)
-    assert detail
 
 
 def test_short_run_sells_softdrinks_and_water():

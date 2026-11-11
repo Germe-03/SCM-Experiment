@@ -66,6 +66,18 @@ function renderCouriers(){
   {label:'Kuriere',data:years.map(courierDelay),borderColor:pal()[1],pointRadius:0,borderWidth:2}
  ]},options:{scales:{x:{grid:{display:false}},y:{beginAtZero:true,ticks:{callback:value=>nf(value,1)}}}}});
 
+ const cfleet=((D.trucks&&D.trucks.fleet)||[]).filter(r=>r.kind==='carrier');
+ const hasTrucks=rows.some(r=>r.trucks!=null)||cfleet.length;
+ const fcard=$('#tr-fleet-card');
+ if(fcard)fcard.hidden=!hasTrucks;
+ if(hasTrucks&&$('#tr-carrier-fleet')){
+  const cnt=(y,pred)=>rows.filter(r=>r.year===y&&pred(r)).reduce((a,r)=>a+(+r.trucks||0),0)||cfleet.filter(r=>r.year===y&&pred({carrier:r.owner,kind:r.owner==='post'?'post':'courier'})).reduce((a,r)=>a+(+r.count||0),0);
+  chart('tr-carrier-fleet',{type:'bar',data:{labels:years,datasets:[
+   {label:'Lastwagen der Post',data:years.map(y=>cnt(y,r=>r.carrier==='post')),backgroundColor:pal()[0]+'cc'},
+   {label:'Lastwagen der Kuriere',data:years.map(y=>cnt(y,r=>r.carrier!=='post')),backgroundColor:pal()[1]+'cc'},
+   {type:'line',label:'Kosten Lastwagen (CHF)',data:years.map(y=>rows.filter(r=>r.year===y).reduce((a,r)=>a+(+r.truck_cost||0),0)),borderColor:pal()[2],pointRadius:0,borderWidth:2,yAxisID:'y1'}]},
+   options:{scales:{x:{stacked:true,grid:{display:false}},y:{stacked:true,title:{display:true,text:'Anzahl Lastwagen'}},y1:{position:'right',grid:{display:false},title:{display:true,text:'CHF'},ticks:{callback:v=>chf(v)}}}}})
+ }
  const regions=D.regions||[],counts=couriersByRegion(lastYear);
  const map=$('#tr-map');
  const SIDE={jura_freiburg:'top',nordwestschweiz:'top',zuerich:'top',bern:'bottom',zentralschweiz:'bottom',genfersee:'bottom',tessin:'bottom',ostschweiz:'left'};

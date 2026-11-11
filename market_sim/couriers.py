@@ -44,6 +44,8 @@ class CourierMarket(CarrierMarket):
         # Phase 54: (firm, region) -> first year without contract; the carrier cannot be changed before.
         self.contracts: dict[tuple[str, str], int] = {}
         self._counter = 0
+        # Mean yearly truck cost of a courier per region (smoothed estimate, key "mean").
+        self.truck_cost_per_region: dict[str, float] = {}
         self.mean_share = (
             1 / len(geography.population) if geography.population else 0.0
         )
@@ -155,13 +157,13 @@ class CourierMarket(CarrierMarket):
             else 0.0
         )
         shared = self.ccfg.expected_share * unit_km if volume is None else volume
-        return (
-            self.variable_rate(price_index) * density * fuel
-            + self.ccfg.fixed_cost_per_day_per_region
-            * self.days_per_year
-            * price_index
-            / max(1.0, shared)
-        )
+        fixed = self.ccfg.fixed_cost_per_day_per_region * self.days_per_year * price_index
+        if self._trucks(runner.env) is not None:
+            # Vehicle part of the fixed costs is replaced by (estimated) real truck costs.
+            fixed = fixed * (1 - self.VEHICLE_SHARE) + self.truck_cost_per_region.get(
+                "mean", fixed * self.VEHICLE_SHARE
+            )
+        return self.variable_rate(price_index) * density * fuel + fixed / max(1.0, shared)
 
     def margin(self, region: str, runner, unit_km: float) -> float:
         cost = self.region_cost(region, runner, unit_km)
@@ -259,12 +261,28 @@ class CourierMarket(CarrierMarket):
                 * len(courier.regions)
                 * price_index
             )
-            interest = max(0.0, -courier.cash) * (
+            fleet = self._fleet_year(
+                runner.env, state, cid, courier.unit_km, courier.days,
+                large=False, cash=courier.cash,
+            )
+            truck_cost = 0.0
+            cash_adjust = 0.0
+            if fleet is not None:
+                if fleet["had_fleet"]:
+                    fixed = fixed * (1 - self.VEHICLE_SHARE) + fleet["truck_cost"]
+                    truck_cost = fleet["truck_cost"]
+                    cash_adjust += fleet["depreciation"]
+                    if courier.regions:
+                        per_region = fleet["truck_cost"] / len(courier.regions)
+                        old = self.truck_cost_per_region.get("mean", per_region)
+                        self.truck_cost_per_region["mean"] = old + 0.3 * (per_region - old)
+                cash_adjust -= fleet["outlay"]
+            interest =max(0.0, -courier.cash) * (
                 policy_rate + self.ccfg.interest_spread
             )
             info["debt_interest"] = interest
             profit = courier.revenue - variable - fixed - interest
-            courier.cash += profit
+            courier.cash += profit + cash_adjust
             profits[cid] = profit
             revenues[cid] = courier.revenue
 
@@ -318,6 +336,8 @@ class CourierMarket(CarrierMarket):
                 "revenue": round(courier.revenue, 2),
                 "variable_cost": round(variable, 2),
                 "fixed_cost": round(fixed, 2),
+                "trucks": fleet["count"] if fleet is not None else 0,
+                "truck_cost": round(truck_cost, 2),
                 "profit": round(profit, 2),
                 "bundesbeitrag": 0.0,
                 "cash": round(courier.cash, 2),

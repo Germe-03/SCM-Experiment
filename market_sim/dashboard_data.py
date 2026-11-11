@@ -84,7 +84,12 @@ def _rnd_trees(config: MarketConfig) -> dict[str, list[dict[str, Any]]]:
     return {
         tree: [{"name": s.name, "label": PROJECT_DE.get(s.name, s.name), "requires": list(s.requires),
                 "complexity": s.complexity, "patentable": s.patentable, "branch": s.branch,
-                "categories": list(s.categories)} for s in stages]
+                "categories": list(s.categories),
+                "kind": s.kind, "component": s.component, "adds_category": s.adds_category,
+                "effect": s.effect, "cost": s.cost, "duration_days": s.duration_days,
+                "success_probability": s.success_probability,
+                "implementation_cost": s.implementation_cost,
+                "implementation_days": s.implementation_days} for s in stages]
         for tree, stages in config.research.trees.items()
     }
 

@@ -371,6 +371,13 @@ class MarketEntryConfig(ConfigModel):
     start_reputation: tuple[float, float] = (0.4, 0.5)
     start_quality_fraction: float = Field(default=0.9, ge=0, le=1)
     names: dict[str, list[str]] = Field(default_factory=dict)
+    # After a firm of a stage/category failed, no forced (shortage) entry for this many years.
+    forced_entry_cooldown_years: int = Field(default=3, ge=0)
+    # Producers with ageing time (wine) get this share of one maturation period's full-capacity
+    # production cost as extra start cash, so the time before the first sale is paid for.
+    maturation_start_cash_factor: float = Field(default=0.6, ge=0)
+    # Years without a first sale in which such a firm is not closed for lack of cash.
+    maturation_grace_years: int = Field(default=2, ge=0)
 
     @model_validator(mode="after")
     def _entry_bounds(self) -> Self:

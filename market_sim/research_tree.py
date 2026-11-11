@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import random
 from typing import TYPE_CHECKING
 
 from market_sim.models import behaviour_of
@@ -31,6 +32,8 @@ class ResearchTreeLab(ResearchLab):
         self.first_success: dict[tuple[str, str], int] = {}
         self.running: dict[str, tuple[str, int, int, float, int, str, str]] = {}
         self.inherited_stages = 0
+        self.seed = seed
+        self._estimates: dict[tuple[str, str], float] = {}
 
     def daily(self, env) -> None:
         for firm_id, (_, _, end, daily_cost, _, _, _) in self.running.items():
@@ -75,6 +78,29 @@ class ResearchTreeLab(ResearchLab):
             and progress.get(stage.name) not in ("researched", "implemented")
             and self.requirements_met(firm, tree, stage)
         ]
+
+    def estimate_factor(self, firm_id: str, stage_name: str) -> float:
+        """Return the firm's fixed, noisy belief factor (0.6-1.4) about a stage's effect."""
+        key = (firm_id, stage_name)
+        if key not in self._estimates:
+            self._estimates[key] = random.Random(f"estimate-{self.seed}-{firm_id}-{stage_name}").uniform(0.6, 1.4)
+        return self._estimates[key]
+
+    def perceived_effect(self, firm, stage: ResearchStageConfig) -> float:
+        """Return the effect a firm believes a stage has: exact only for stages it knows itself."""
+        if self.progress.get(firm.id, {}).get(stage.name) in ("researched", "implemented"):
+            return stage.effect
+        return stage.effect * self.estimate_factor(firm.id, stage.name)
+
+    def perceived_weights(self, firm, pool: list[ResearchStageConfig]) -> dict[str, float]:
+        """Return selection weights scaled by the perceived effect relative to the pool mean."""
+        effects = {s.name: self.perceived_effect(firm, s) for s in pool}
+        mean = sum(effects.values()) / len(effects) if effects else 0.0
+        weights = {}
+        for s in pool:
+            scale = 1.0 if mean <= 0 or s.effect <= 0 else min(1.5, max(0.5, effects[s.name] / mean))
+            weights[s.name] = s.selection_weight * scale
+        return weights
 
     def transfer(self, seller_id: str, buyer_id: str) -> None:
         """Transfer researched knowledge from a seller to a buyer."""
@@ -297,12 +323,11 @@ class ResearchTreeLab(ResearchLab):
             if not pool or choice_roll >= self.cfg.start_probability:
                 continue
 
-            target = choice_roll / self.cfg.start_probability * sum(
-                stage.selection_weight for stage in pool
-            )
+            weights = self.perceived_weights(firm, pool)
+            target = choice_roll / self.cfg.start_probability * sum(weights.values())
             stage = pool[-1]
             for candidate in pool:
-                target -= candidate.selection_weight
+                target -= weights[candidate.name]
                 if target < 0:
                     stage = candidate
                     break

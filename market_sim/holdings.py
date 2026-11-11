@@ -58,6 +58,12 @@ class Holdings:
         summaries = state.summaries[-1]
         # Draws in a fixed order: one per firm, always.
         rolls = {f.id: (self.rng.random(), self.rng.random(), self.rng.random()) for f in runner._firms()}
+        # Dealers get their own draws after all firm draws, so runs without dealers stay unchanged.
+        dealers = list(getattr(runner, "_dealers", lambda: [])())
+        rolls.update({d.id: (self.rng.random(), self.rng.random(), self.rng.random()) for d in dealers})
+        dealer_ids = {d.id for d in dealers}
+        trucks = getattr(getattr(env, "geography", None), "trucks", None)
+        fleets = getattr(trucks, "fleets", None) or {}
         if not cfg.enabled:
             return
         # Dividends from profitable targets, sales of stakes in loss-making or closed targets.
@@ -102,7 +108,7 @@ class Holdings:
                 state.events.append({"year": year, "day": day, "firm": owner, "event": "stake_sold",
                                      "details": details})
         # New stakes: rich, profitable firms buy into profitable firms they do not own yet.
-        candidates = [f for f in runner._firms() if env.runtimes[f.id].active and f.id in summaries
+        candidates = [f for f in list(runner._firms()) + dealers if env.runtimes[f.id].active and f.id in summaries
                       and summaries[f.id].profit > 0]
         for owner in sorted(candidates, key=lambda f: f.id):
             buy_roll, target_roll, size_roll = rolls[owner.id]
@@ -113,6 +119,10 @@ class Holdings:
                        and (f.id, owner.id) not in self.stakes]
             if not targets:
                 continue
+            if owner.id in dealer_ids:
+                # Dealers prefer the transport branch: other dealers and firms with their own fleet.
+                transport = [f for f in targets if f.id in dealer_ids or fleets.get(f.id)]
+                targets = transport or targets
             target = targets[min(len(targets) - 1, int(target_roll * len(targets)))]
             share = round(cfg.min_stake + size_roll * (cfg.max_stake - cfg.min_stake), 2)
             owned = sum(s for (o, t), s in self.stakes.items() if t == target.id)

@@ -90,12 +90,96 @@ class CarrierMarket:
         self.realization = 1.0
         self.reports: list[dict] = []
         self.lost_units = 0
+        self._book_after: dict[str, float] = {}
 
     # Long hauls cost more per km (detours, empty return trips, sorting): above LONG_HAUL_KM the
     # per-km tariff rises by LONG_HAUL_SURCHARGE for every further LONG_HAUL_KM, at most +60 %.
     LONG_HAUL_KM = 120.0
     LONG_HAUL_SURCHARGE = 0.3
     LONG_HAUL_MAX = 1.6
+
+    # Vehicles: share of the old flat fixed costs now replaced by real truck costs.
+    VEHICLE_SHARE = 0.3
+    TARGET_UTILIZATION = 0.75
+    KM_PER_DAY = 100.0
+    MAX_BUYS_PER_YEAR = 50
+
+    def _trucks(self, env):
+        return getattr(getattr(env, "geography", None), "trucks", None)
+
+    def _fleet_year(
+        self,
+        env,
+        state,
+        owner_id: str,
+        unit_km: float,
+        days: int,
+        *,
+        large: bool,
+        cash: float | None = None,
+    ) -> dict | None:
+        """Adjust the fleet of ``owner_id`` to demand. None without a TruckMarket.
+
+        Returns count, truck_cost (depreciation + maintenance), depreciation, maintenance,
+        outlay (purchases), next_cost (expected yearly cost) and had_fleet.
+        """
+        trucks = self._trucks(env)
+        if trucks is None:
+            return None
+        owners = getattr(trucks, "carrier_owners", None)
+        if owners is not None:
+            owners.add(owner_id)
+        fleet = trucks.fleets.get(owner_id, [])
+        had_fleet = len(fleet) > 0
+        book_now = sum(t.book_value for t in fleet)
+        previous = self._book_after.get(owner_id)
+        depreciation = max(0.0, previous - book_now) if previous is not None else 0.0
+
+        maintenance = 0.0
+        if had_fleet:
+            # Maintenance is part of the yearly profit; the callback only records.
+            maintenance = float(
+                trucks.carrier_maintenance(env, state, owner_id, lambda amount: None) or 0.0
+            )
+
+        names = sorted(trucks.types, key=lambda n: (trucks.types[n].capacity, n))
+        if not large:
+            names = names[: max(1, (len(names) + 1) // 2)]
+        per_truck = {
+            n: trucks.types[n].capacity * self.KM_PER_DAY * self.TARGET_UTILIZATION
+            for n in trucks.types
+        }
+        have = sum(per_truck.get(t.type, 0.0) for t in fleet)
+        need = unit_km / max(1, days)
+        outlay = [0.0]
+
+        def pay(price: float) -> None:
+            outlay[0] += price
+
+        for _ in range(self.MAX_BUYS_PER_YEAR):
+            deficit = need - have
+            if deficit <= 0 or not names:
+                break
+            fitting = [n for n in names if per_truck[n] <= deficit * 1.2]
+            type_name = fitting[-1] if fitting else names[0]
+            if cash is not None and trucks.list_price(env, type_name) > cash - outlay[0]:
+                break
+            if trucks.buy_for_carrier(env, state, owner_id, type_name, pay) is None:
+                break
+            have += per_truck[type_name]
+
+        fleet = trucks.fleets.get(owner_id, [])
+        self._book_after[owner_id] = sum(t.book_value for t in fleet)
+        next_cost = sum(trucks.annual_cost(env, t.type) for t in fleet)
+        return {
+            "count": len(fleet),
+            "truck_cost": depreciation + maintenance,
+            "depreciation": depreciation,
+            "maintenance": maintenance,
+            "outlay": outlay[0],
+            "next_cost": next_cost,
+            "had_fleet": had_fleet,
+        }
 
     def km_multiplier(self, km: float) -> float:
         """Factor on the per-km tariff for a trip of ``km`` (1.0 up to the threshold)."""
@@ -266,17 +350,29 @@ class CarrierMarket:
     def year_end(self, runner: SimulationRunner, state: RunState) -> None:
         year = state.year
         post = self.post
+        fleet = self._fleet_year(
+            runner.env, state, "post", post.unit_km, post.days, large=True
+        )
         fixed = self.fixed_cost_year(runner)
+        truck_cost = 0.0
+        cash_adjust = 0.0
+        if fleet is not None:
+            if fleet["had_fleet"]:
+                fixed = fixed * (1 - self.VEHICLE_SHARE) + fleet["truck_cost"]
+                truck_cost = fleet["truck_cost"]
+                cash_adjust += fleet["depreciation"]  # not a cash flow
+            cash_adjust -= fleet["outlay"]  # purchases are
         variable = self.variable_cost_rate(runner.long_run.price_index) * post.fuel_km
         profit = post.revenue - fixed - variable
+        cash_profit = profit + cash_adjust
         if self.cfg.post.reserve_enabled:
             covered = min(self.reserve, max(0.0, -profit))
-            self.reserve = max(0.0, self.reserve + profit)
+            self.reserve = max(0.0, self.reserve + cash_profit)
             bundesbeitrag = max(0.0, -profit - covered)
             post.cash = self.reserve
         else:
             bundesbeitrag = max(0.0, -profit)
-            post.cash += profit + bundesbeitrag
+            post.cash += cash_profit + bundesbeitrag
         self.bundesbeitrag_total += bundesbeitrag
         if bundesbeitrag > 0:
             state.events.append({
@@ -328,6 +424,8 @@ class CarrierMarket:
                 * self.days_per_year
                 * runner.long_run.price_index
             )
+            if fleet is not None and fleet["count"] > 0:
+                next_fixed = next_fixed * (1 - self.VEHICLE_SHARE) + fleet["next_cost"]
             # Cost-covering on the expected (smoothed) volume; the reserve gap is closed slowly.
             reserve_gap = 0.0
             if self.cfg.post.reserve_enabled:
@@ -366,6 +464,8 @@ class CarrierMarket:
             "revenue": round(post.revenue, 2),
             "variable_cost": round(variable, 2),
             "fixed_cost": round(fixed, 2),
+            "trucks": fleet["count"] if fleet is not None else 0,
+            "truck_cost": round(truck_cost, 2),
             "profit": round(profit, 2),
             "bundesbeitrag": round(bundesbeitrag, 2),
             "cash": round(post.cash, 2),

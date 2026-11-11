@@ -7,6 +7,14 @@ from typing import TYPE_CHECKING
 
 from market_sim.kpi import chf
 
+# A brewery may buy a soft drink or water firm (as a subsidiary); it cannot make them itself.
+CROSS_CATEGORY_BUYS = {"beer": ("softdrinks", "water")}
+
+
+def category_allows_buy(buyer_category: str, target_category: str) -> bool:
+    """Same category, or a brewery buying a soft drink / water firm."""
+    return buyer_category == target_category or target_category in CROSS_CATEGORY_BUYS.get(buyer_category, ())
+
 if TYPE_CHECKING:
     from market_sim.models import Firm
     from market_sim.runner import RunState, SimulationRunner
@@ -365,7 +373,7 @@ class HoldingGroups:
                         continue
                     if not any(
                         runner.network.firm(sub_id).stage == firm.stage
-                        and runner.network.firm(sub_id).category == firm.category
+                        and category_allows_buy(firm.category, runner.network.firm(sub_id).category)
                         and runner.network.firm(sub_id).channel == firm.channel
                         for sub_id in active_subs
                     ):
