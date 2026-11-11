@@ -37,8 +37,21 @@ class PlayerChoices:
     # Restaurants: markup factor relative to the standard markup (e.g. 1.1 = 10 % dearer). None = autopilot.
     markup_factor: float | None = None
     # Offences the player commits deliberately (names from config.state.offences). Player firms
-    # never commit offences on their own.
-    offences: list[str] = field(default_factory=list)
+    # never commit offences on their own. A list means full intensity; a dict maps name -> 0..1.
+    offences: list[str] | dict = field(default_factory=list)
+    # Marketing (Cockpit 2): share of the budget for the brand (rest for stores/restaurants), 0..1,
+    # and an age group to focus on ("18-34", "35-64", "65+"). None = as before.
+    marketing_focus: float | None = None
+    marketing_target: str | None = None
+    # Suppliers: a fixed supplier firm id, or a rule "price" | "quality" | "reliability" | "lead_time".
+    supplier_id: str | None = None
+    supplier_rule: str | None = None
+
+    def offence_intensity(self, name: str) -> float:
+        """Intensity 0..1 of an offence the player chose (0 = not committed)."""
+        if isinstance(self.offences, dict):
+            return max(0.0, min(1.0, float(self.offences.get(name, 0.0) or 0.0)))
+        return 1.0 if name in (self.offences or []) else 0.0
 
     def to_dict(self) -> dict:
         return asdict(self)

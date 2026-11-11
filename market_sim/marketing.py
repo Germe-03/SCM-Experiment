@@ -59,15 +59,24 @@ class Marketing:
         spend_by_brand: dict[str, float] = {}
         for firm_id, amount in self.spent.items():
             firm = runner.network.firm(firm_id)
+            choice = getattr(runner, "player_choices", {}).get(firm_id)
+            alpha = getattr(choice, "marketing_focus", None)
+            if alpha is None:
+                store_amount = amount if firm.stage == "retailer" else 0.0
+                brand_amount = 0.0 if firm.stage == "retailer" else amount
+            else:
+                alpha = max(0.0, min(1.0, float(alpha)))
+                brand_amount = alpha * amount
+                store_amount = (1 - alpha) * amount if firm.stage == "retailer" else 0.0
             if firm.stage == "retailer":
                 aware = book.store_awareness.get(firm_id, cfg.start_awareness)
-                gain = 1 - math.exp(-amount / index * cfg.effect_per_chf)
+                gain = 1 - math.exp(-store_amount / index * cfg.effect_per_chf)
                 book.store_awareness[firm_id] = aware * (1 - cfg.decay_per_year) + (1 - aware * (1 - cfg.decay_per_year)) * gain
-            else:
+            if brand_amount > 0:
                 own = book.brands_of(firm_id)
                 total = sum(book.production_share.get(b, 1.0) for b in own) or 1.0
                 for b in own:
-                    spend_by_brand[b] = spend_by_brand.get(b, 0.0) + amount * book.production_share.get(b, 1.0) / total
+                    spend_by_brand[b] = spend_by_brand.get(b, 0.0) + brand_amount * book.production_share.get(b, 1.0) / total
         for brand_id, brand in book.brands.items():
             aware = book.awareness.get(brand_id, cfg.start_awareness) * (1 - cfg.decay_per_year)
             spend = 0.0 if brand.category in self.banned_categories else spend_by_brand.get(brand_id, 0.0)

@@ -4,18 +4,31 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Firmen-Cockpit</title>
+  <script>
+    try {
+      const theme = localStorage.getItem('cockpit-theme');
+      if (theme === 'hell' || theme === 'dunkel') {
+        document.documentElement.dataset.theme = theme === 'hell' ? 'light' : 'dark';
+      }
+    } catch (error) {
+    }
+  </script>
   <link rel="stylesheet" href="cockpit.css">
   <script src="cockpit_choices.js"></script>
   <script src="cockpit_holding.js"></script>
   <script src="cockpit_berater.js"></script>
   <script src="cockpit_rueckblick.js"></script>
+  <script src="reiter_daten.js"></script>
+  <script src="reiter_spezial.js"></script>
   <script src="cockpit.js" defer></script>
 </head>
 <body>
   <header id="kopf">
     <h1 id="firmenname"></h1>
     <span id="branche-anzeige"></span>
+    <span id="einstufung-anzeige" class="badge" hidden></span>
     <span id="zeit-anzeige"></span>
+    <button type="button" id="theme-btn" aria-label="Hell/Dunkel umschalten">◐</button>
     <button type="button" id="speichern-btn">Speichern</button>
   </header>
 
@@ -60,303 +73,37 @@
     </section>
 
     <section id="ansicht-cockpit" hidden>
+      <nav id="reiterleiste" class="reiter-leiste" role="tablist" aria-label="Bereiche">
+        <button type="button" class="reiter-btn" role="tab" data-tab="uebersicht">Übersicht</button>
+        <button type="button" class="reiter-btn" role="tab" data-tab="firma">Firma</button>
+        <button type="button" class="reiter-btn" role="tab" data-tab="markt">Markt</button>
+        <button type="button" class="reiter-btn" role="tab" data-tab="forschung">Forschung</button>
+        <button type="button" class="reiter-btn" role="tab" data-tab="logistik">Logistik</button>
+        <button type="button" class="reiter-btn" role="tab" data-tab="finanzen">Finanzen</button>
+        <button type="button" class="reiter-btn" role="tab" data-tab="boerse">Börse</button>
+        <button type="button" class="reiter-btn" role="tab" data-tab="rohstoffe">Rohstoffe</button>
+        <button type="button" class="reiter-btn" role="tab" data-tab="bevoelkerung">Bevölkerung</button>
+        <button type="button" class="reiter-btn" role="tab" data-tab="holding">Holding</button>
+        <button type="button" class="reiter-btn" role="tab" data-tab="graubereich">Graubereich</button>
+        <button type="button" class="reiter-btn" role="tab" data-tab="hilfe">Hilfe</button>
+      </nav>
+
       <div class="cockpit-raster">
         <div class="haupt">
-          <section class="karte" id="uebersicht">
-            <h2>Übersicht</h2>
-            <div class="kpi-raster">
-              <div class="kpi">
-                <span class="kpi-label">Kasse</span>
-                <span class="kpi-wert" id="kpi-cash"></span>
-              </div>
-              <div class="kpi">
-                <span class="kpi-label">Gewinn</span>
-                <span class="kpi-wert" id="kpi-profit"></span>
-              </div>
-              <div class="kpi">
-                <span class="kpi-label">Lager</span>
-                <span class="kpi-wert" id="kpi-inventory"></span>
-              </div>
-              <div class="kpi">
-                <span class="kpi-label">Rückstand</span>
-                <span class="kpi-wert" id="kpi-backlog"></span>
-              </div>
-              <div class="kpi">
-                <span class="kpi-label">Mitarbeiter</span>
-                <span class="kpi-wert" id="kpi-employees"></span>
-              </div>
-              <div class="kpi">
-                <span class="kpi-label">Nachfrage</span>
-                <span class="kpi-wert" id="kpi-demand"></span>
-              </div>
-              <div class="kpi">
-                <span class="kpi-label">Verkauf</span>
-                <span class="kpi-wert" id="kpi-sales"></span>
-              </div>
-              <div class="kpi">
-                <span class="kpi-label">Preis: eigener gegen Konkurrenz</span>
-                <span class="kpi-wert" id="kpi-price"></span>
-              </div>
-            </div>
-            <figure>
-              <figcaption>Kassenverlauf</figcaption>
-              <svg id="kassenverlauf" viewBox="0 0 300 80" preserveAspectRatio="none" role="img" aria-label="Kassenverlauf"></svg>
-            </figure>
+          <section id="tab-uebersicht" class="reiter-inhalt" role="tabpanel" hidden></section>
+          <section id="tab-firma" class="reiter-inhalt" role="tabpanel" hidden></section>
+          <section id="tab-markt" class="reiter-inhalt" role="tabpanel" hidden></section>
+          <section id="tab-forschung" class="reiter-inhalt" role="tabpanel" hidden></section>
+          <section id="tab-logistik" class="reiter-inhalt" role="tabpanel" hidden></section>
+          <section id="tab-finanzen" class="reiter-inhalt" role="tabpanel" hidden></section>
+          <section id="tab-boerse" class="reiter-inhalt" role="tabpanel" hidden></section>
+          <section id="tab-rohstoffe" class="reiter-inhalt" role="tabpanel" hidden></section>
+          <section id="tab-bevoelkerung" class="reiter-inhalt" role="tabpanel" hidden></section>
+          <section id="tab-holding" class="reiter-inhalt" role="tabpanel" hidden>
+            <section id="holding-bereich" class="karte" aria-label="Holding"></section>
           </section>
-
-          <form novalidate id="einstellungen-form">
-            <section class="karte">
-              <h2>Verkauf</h2>
-              <label class="feld">
-                <span class="feld-name">Preis</span>
-                <input id="f-base_price" name="base_price" data-key="base_price" data-typ="zahl" type="number" step="any" min="0">
-                <small class="hinweis" id="preisband-hinweis"></small>
-              </label>
-            </section>
-
-            <section class="karte">
-              <h2>Einkauf und Produktion</h2>
-              <label class="feld">
-                <span class="feld-name">Lagerziel in Tagen</span>
-                <input id="f-target_safety_stock_days" name="target_safety_stock_days" data-key="target_safety_stock_days" data-typ="zahl" type="number" min="0" step="1">
-                <small class="hinweis">Lagerziel in Tagen</small>
-              </label>
-              <label class="feld">
-                <span class="feld-name">Feste Menge pro Tag</span>
-                <input id="f-order_qty" name="order_qty" data-key="order_qty" data-typ="zahl" type="number" min="0" step="1" placeholder="automatisch">
-                <small class="hinweis">leer = automatisch</small>
-              </label>
-              <label class="feld">
-                <span class="feld-name">Überstunden</span>
-                <input id="f-overtime_level" name="overtime_level" data-key="overtime_level" data-typ="prozent" type="number" min="0" max="100" step="1">
-                <small class="hinweis">Überstunden in %</small>
-              </label>
-              <p class="hinweis" data-branchen="hersteller">Rohstoffe: siehe Karte <a href="#karte-rohstoffe">«Rohstoffe»</a>.</p>
-            </section>
-
-            <section class="karte">
-              <h2>Mitarbeiter</h2>
-              <label class="feld">
-                <span class="feld-name">Überstunden</span>
-                <input id="f-overtime_level-2" name="overtime_level-2" data-key="overtime_level" data-typ="prozent" type="number" min="0" max="100" step="1">
-                <small class="hinweis">Überstunden in %</small>
-              </label>
-              <label class="feld">
-                <span class="feld-name">Lohnniveau</span>
-                <input id="f-wage_level" name="wage_level" data-key="wage_level" data-typ="zahl" type="number" step="any" min="0">
-                <small class="hinweis">Lohn pro Person; wirkt sofort</small>
-              </label>
-              <label class="feld">
-                <span class="feld-name">Einstellungen pro Jahr</span>
-                <input id="f-hiring_plan" name="hiring_plan" data-key="hiring_plan" data-typ="zahl" type="number" step="1">
-                <small class="hinweis jahr">Einstellungen pro Jahr; wirkt ab nächstem Jahr</small>
-              </label>
-            </section>
-
-            <section class="karte">
-              <h2>Produkt</h2>
-              <label class="feld">
-                <span class="feld-name">Zielqualität</span>
-                <input id="f-target_quality" name="target_quality" data-key="target_quality" data-typ="prozent" type="number" min="0" max="100" step="1">
-                <small class="hinweis">Zielqualität in %</small>
-              </label>
-              <label class="feld">
-                <span class="feld-name">Forschungsbudget</span>
-                <input id="f-r_and_d_budget" name="r_and_d_budget" data-key="r_and_d_budget" data-typ="zahl" type="number" min="0" step="1">
-                <small class="hinweis jahr">wirkt ab nächstem Jahr</small>
-              </label>
-              <label class="feld">
-                <span class="feld-name">Positionierung</span>
-                <select id="f-positioning" name="positioning" data-key="positioning" data-typ="text">
-                  <option value="premium">Premium</option>
-                  <option value="standard">Standard</option>
-                  <option value="low_cost">Günstig</option>
-                </select>
-                <small class="hinweis jahr">wirkt ab nächstem Jahr</small>
-              </label>
-            </section>
-
-            <section class="karte">
-              <h2>Lieferanten</h2>
-              <label class="feld">
-                <span class="feld-name">Priorität</span>
-                <select id="f-supplier_priority" name="supplier_priority" data-key="supplier_priority" data-typ="text">
-                  <option value="price">Preis</option>
-                  <option value="reliability">Zuverlässigkeit</option>
-                  <option value="quality">Qualität</option>
-                  <option value="capacity">Kapazität</option>
-                </select>
-                <small class="hinweis jahr">wirkt ab nächstem Jahr</small>
-              </label>
-            </section>
-
-            <section class="karte" data-branchen="hersteller detailhaendler gastro">
-              <h2>Marketing</h2>
-              <label class="feld">
-                <span class="feld-name">Marketingbudget</span>
-                <input id="c-marketing_budget" data-choice="marketing_budget" data-typ="zahl" type="number" min="0" step="100">
-                <small class="hinweis">CHF pro Jahr</small>
-              </label>
-              <label class="autopilot" for="a-marketing_budget">
-                <input type="checkbox" id="a-marketing_budget" data-auto="marketing_budget" checked>
-                Autopilot
-              </label>
-            </section>
-
-            <section class="karte" data-branchen="hersteller">
-              <h2>Forschung</h2>
-              <label class="feld">
-                <span class="feld-name">Forschungsziel</span>
-                <select id="c-research_target" data-choice="research_target" data-typ="text">
-                  <option value="">keine Forschung</option>
-                </select>
-                <small class="hinweis">Nur Stufen, die jetzt möglich sind</small>
-              </label>
-              <label class="autopilot" for="a-research_target">
-                <input type="checkbox" id="a-research_target" data-auto="research_target" checked>
-                Autopilot
-              </label>
-            </section>
-
-            <section class="karte">
-              <h2>Geld</h2>
-              <label class="feld">
-                <span class="feld-name">Kredit</span>
-                <select id="c-credit_mode" data-choice="credit_mode" data-typ="text">
-                  <option value="auto">Autopilot</option>
-                  <option value="never">Nie Kredit</option>
-                  <option value="prefer">Kredit, wenn möglich</option>
-                </select>
-              </label>
-              <label class="feld">
-                <span class="feld-name">Bank</span>
-                <select id="c-bank_id" data-choice="bank_id" data-typ="text"></select>
-              </label>
-              <label class="autopilot" for="a-bank_id">
-                <input type="checkbox" id="a-bank_id" data-auto="bank_id" checked>
-                Autopilot
-              </label>
-              <label class="feld">
-                <span class="feld-name">Dividende</span>
-                <input id="c-payout_ratio" data-choice="payout_ratio" data-typ="prozent" type="number" min="0" max="100" step="1">
-                <small class="hinweis">Dividende in % vom freien Gewinn</small>
-              </label>
-              <label class="autopilot" for="a-payout_ratio">
-                <input type="checkbox" id="a-payout_ratio" data-auto="payout_ratio" checked>
-                Autopilot
-              </label>
-              <label class="feld">
-                <span class="feld-name">Börse</span>
-                <select id="c-listing" data-choice="listing" data-typ="dreifach">
-                  <option value="auto">Autopilot</option>
-                  <option value="ja">Ja, an die Börse</option>
-                  <option value="nein">Nein</option>
-                </select>
-              </label>
-            </section>
-
-            <section class="karte" data-branchen="hersteller grosshaendler verteiler">
-              <h2>Transport</h2>
-              <label class="feld">
-                <span class="feld-name">Transport</span>
-                <select id="c-transport_mode" data-choice="transport_mode" data-typ="text">
-                  <option value="own">Eigene Lastwagen</option>
-                  <option value="service">Post und Kurier</option>
-                </select>
-              </label>
-              <label class="autopilot" for="a-transport_mode">
-                <input type="checkbox" id="a-transport_mode" data-auto="transport_mode" checked>
-                Autopilot
-              </label>
-            </section>
-
-            <section class="karte">
-              <h2>Wachstum</h2>
-              <label class="feld">
-                <span class="feld-name">Automatisch ausbauen</span>
-                <select id="c-auto_invest" data-choice="auto_invest" data-typ="dreifach">
-                  <option value="auto">Autopilot</option>
-                  <option value="ja">Automatisch ausbauen: an</option>
-                  <option value="nein">Automatisch ausbauen: aus</option>
-                </select>
-              </label>
-              <div class="feld">
-                <label for="c-expand_order">
-                  <span class="feld-name">Kapazität ausbauen</span>
-                  <input id="c-expand_order" data-choice="expand_order" data-typ="zahl" type="number" min="1" step="1">
-                </label>
-                <button type="button" id="expand-btn">Kapazität ausbauen</button>
-                <small id="expand-geplant" class="geplant" hidden></small>
-              </div>
-              <div data-branchen="detailhaendler gastro">
-                <div class="feld">
-                  <label for="c-site_order">
-                    <span class="feld-name">Region</span>
-                    <select id="c-site_order" data-choice="site_order" data-typ="text">
-                      <option value="">Region wählen</option>
-                    </select>
-                  </label>
-                  <button type="button" id="site-btn">Standort eröffnen</button>
-                  <small id="site-geplant" class="geplant" hidden></small>
-                </div>
-              </div>
-            </section>
-
-            <section class="karte" id="karte-rohstoffe" data-branchen="hersteller">
-              <h2>Rohstoffe</h2>
-              <label class="feld">
-                <span class="feld-name">Vorkauf-Mut</span>
-                <input id="c-commodity_courage" data-choice="commodity_courage" data-typ="prozent" type="number" min="0" max="100" step="1">
-                <small class="hinweis">Vorkauf-Mut: 0 % = nur kaufen, was gebraucht wird</small>
-              </label>
-              <label class="autopilot" for="a-commodity_courage">
-                <input type="checkbox" id="a-commodity_courage" data-auto="commodity_courage" checked>
-                Autopilot
-              </label>
-            </section>
-
-            <section class="karte" data-branchen="gastro">
-              <h2>Gastro</h2>
-              <label class="feld">
-                <span class="feld-name">Aufschlag</span>
-                <input id="c-markup_factor" data-choice="markup_factor" data-typ="faktor" type="number" step="1">
-                <small class="hinweis">Aufschlag gegenüber dem normalen, z.B. 10 = 10 % teurer</small>
-              </label>
-              <label class="autopilot" for="a-markup_factor">
-                <input type="checkbox" id="a-markup_factor" data-auto="markup_factor" checked>
-                Autopilot
-              </label>
-            </section>
-
-            <section class="karte">
-              <h2>Regeln brechen</h2>
-              <p class="warnung">Verstösse bringen Vorteile, werden aber manchmal entdeckt und kosten dann eine Busse.</p>
-              <div id="offences-liste"></div>
-            </section>
-
-            <section class="karte">
-              <h2>Risiko</h2>
-              <label class="feld">
-                <span class="feld-name">Risikobereitschaft</span>
-                <input id="f-risk_tolerance" name="risk_tolerance" data-key="risk_tolerance" data-typ="prozent" type="number" min="0" max="100" step="1">
-                <small class="hinweis">Risikobereitschaft in %</small>
-              </label>
-            </section>
-          </form>
-
-          <section id="holding-bereich" class="karte" aria-label="Holding"></section>
-
-          <div class="aktionen karte">
-            <button type="submit" form="einstellungen-form" id="runde-btn" class="primaer">Runde beenden</button>
-            <button type="button" id="weiter-btn">Wie bisher weiter</button>
-            <button type="button" id="verkaufen-btn" class="gefahr">Firma verkaufen</button>
-          </div>
-
-          <div id="spielende" class="karte" hidden>
-            <h2 id="spielende-titel"></h2>
-            <p id="spielende-text"></p>
-            <button type="button" id="neu-btn" class="primaer">Neues Spiel</button>
-          </div>
+          <section id="tab-graubereich" class="reiter-inhalt" role="tabpanel" hidden></section>
+          <section id="tab-hilfe" class="reiter-inhalt" role="tabpanel" hidden></section>
         </div>
 
         <aside id="meldungen" class="karte">
@@ -376,6 +123,21 @@
           </section>
         </aside>
       </div>
+
+      <div id="spielende" class="karte" hidden>
+        <h2 id="spielende-titel"></h2>
+        <p id="spielende-text"></p>
+        <button type="button" id="neu-btn" class="primaer">Neues Spiel</button>
+      </div>
+
+      <footer id="fussleiste" class="fussleiste">
+        <span id="geplant-zaehler" class="geplant-zaehler" hidden></span>
+        <div class="aktionen">
+          <button type="button" id="runde-btn" class="primaer">Runde beenden</button>
+          <button type="button" id="weiter-btn">Wie bisher weiter</button>
+          <button type="button" id="verkaufen-btn" class="gefahr">Firma verkaufen</button>
+        </div>
+      </footer>
     </section>
   </main>
 

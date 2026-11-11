@@ -30,7 +30,7 @@ function rueckblickLinien(curves) {
         const linie = document.createElementNS(ns, 'polyline');
         linie.setAttribute('points', curves[key].map((v, i) => `${x(i)},${y(v)}`).join(' '));
         linie.setAttribute('fill', 'none');
-        linie.setAttribute('stroke', farbe);
+        linie.style.stroke = farbe;
         linie.setAttribute('stroke-width', key === 'player_revenue' ? '3' : '2');
         svg.appendChild(linie);
         const eintrag = document.createElement('span');

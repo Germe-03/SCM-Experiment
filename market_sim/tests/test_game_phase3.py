@@ -41,6 +41,10 @@ def test_player_choices_update_unknown_key_and_to_dict_fields():
         "commodity_courage",
         "markup_factor",
         "offences",
+        "marketing_focus",
+        "marketing_target",
+        "supplier_id",
+        "supplier_rule",
     }
 
     with pytest.raises(ValueError):

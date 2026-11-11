@@ -1,32 +1,175 @@
-// Spielmodus Phase 3: Entscheide mit Autopilot (choices). Wird von cockpit.js aufgerufen.
 'use strict';
 
 let spielOptionen = {};
-let basisEntscheide = {};
+let entwurfEinstellungen = {};
+let entwurfEntscheide = {};
 let geplanteAuftraege = {};
+let basisEinstellungen = {};
+let basisEntscheide = {};
+
+const FELD_HILFE = {
+    base_price: {
+        wofuer: 'Der Preis, zu dem du verkaufst.',
+        wenn: 'Höher: mehr Gewinn pro Stück, aber meist weniger Kunden. Tiefer: mehr Kunden, aber weniger Gewinn pro Stück.'
+    },
+    target_safety_stock_days: {
+        wofuer: 'Wie viele Tage Vorrat du als Ziel hast.',
+        wenn: 'Mehr Vorrat: weniger Risiko, nichts liefern zu können, aber mehr Geld liegt im Lager.'
+    },
+    order_qty: {
+        wofuer: 'Wie viele Stück du pro Tag fest herstellen lässt.',
+        wenn: 'Mehr Stück: mehr Vorrat, aber auch mehr Lagerkosten. Leer: die Menge wird automatisch gewählt.'
+    },
+    overtime_level: {
+        wofuer: 'Wie viele Überstunden dein Team macht.',
+        wenn: 'Mehr Überstunden: mehr Arbeit ist möglich, aber die Kosten steigen.'
+    },
+    wage_level: {
+        wofuer: 'Das Lohnniveau deiner Firma.',
+        wenn: 'Höher: die Arbeit kostet mehr, aber Stellen lassen sich meist leichter besetzen.'
+    },
+    hiring_plan: {
+        wofuer: 'Wie viele Mitarbeitende du einstellen möchtest.',
+        wenn: 'Mehr Einstellungen: mehr Mitarbeitende ab dem nächsten Jahr, aber höhere Lohnkosten.'
+    },
+    target_quality: {
+        wofuer: 'Welche Qualität du für deine Produkte anstrebst.',
+        wenn: 'Höher: die Produkte werden besser, aber die Kosten können steigen.'
+    },
+    marketing_budget: {
+        wofuer: 'Wie viel Geld du pro Jahr für Marketing einsetzt.',
+        wenn: 'Mehr Geld: mehr Menschen erfahren von deiner Firma, aber die Kosten steigen.'
+    },
+    marketing_focus: {
+        wofuer: 'Wie du dein Marketing zwischen Laden und Marke aufteilst.',
+        wenn: 'Mehr Marke: mehr Werbung für deine Marke. Mehr Laden: mehr Werbung vor Ort.'
+    },
+    marketing_target: {
+        wofuer: 'Welche Altersgruppe du mit deinem Marketing ansprichst.',
+        wenn: 'Eine gewählte Gruppe reagiert stärker auf dein Marketing.'
+    },
+    auto_invest: {
+        wofuer: 'Ob die Firma automatisch investiert.',
+        wenn: 'Ja: die Firma investiert selbst, wenn es passt. Nein: es gibt keine automatischen Investitionen.'
+    },
+    expand_order: {
+        wofuer: 'Wie viel zusätzliche Kapazität du planst.',
+        wenn: 'Mehr Kapazität: du kannst mehr herstellen oder bearbeiten, aber der Ausbau kostet Geld.'
+    },
+    site_order: {
+        wofuer: 'In welcher Region du einen neuen Standort planst.',
+        wenn: 'Ein neuer Standort kann mehr Kunden erreichen, kostet aber Geld.'
+    },
+    credit_mode: {
+        wofuer: 'Wann die Firma einen Kredit aufnehmen darf.',
+        wenn: 'Kredit kann helfen, wenn Geld fehlt, muss aber mit Zinsen zurückgezahlt werden.'
+    },
+    bank_id: {
+        wofuer: 'Bei welcher Bank die Firma ihr Geld verwahrt.',
+        wenn: 'Die gewählte Bank bestimmt, wo dein Geld liegt.'
+    },
+    payout_ratio: {
+        wofuer: 'Welcher Anteil des Gewinns ausgeschüttet wird.',
+        wenn: 'Mehr Ausschüttung: mehr Geld wird ausgezahlt, aber weniger bleibt in der Firma.'
+    },
+    listing: {
+        wofuer: 'Ob die Firma an der Börse gelistet wird.',
+        wenn: 'Ein Börsengang macht es möglich, Anteile an der Firma zu handeln.'
+    },
+    transport_mode: {
+        wofuer: 'Wie deine Firma Waren transportiert.',
+        wenn: 'Eigener Transport kostet Geld, kann aber mehr Kontrolle geben. Ein Dienst nutzt fremde Fahrzeuge.'
+    },
+    commodity_courage: {
+        wofuer: 'Wie stark du auf Rohstoffe setzt.',
+        wenn: 'Mehr Einsatz kann sich lohnen, bringt aber auch mehr Risiko.'
+    },
+    markup_factor: {
+        wofuer: 'Wie viel Aufschlag du auf deine Kosten rechnest.',
+        wenn: 'Mehr Aufschlag: mehr Gewinn pro Verkauf, aber meist weniger Kunden.'
+    },
+    risk_tolerance: {
+        wofuer: 'Wie viel Risiko deine Firma eingeht.',
+        wenn: 'Mehr Risiko: grössere Chancen, aber auch grössere mögliche Verluste.'
+    }
+};
 
 function merkeOptionen(daten) {
     spielOptionen = daten || {};
 }
 
-function fuelleListe(id, eintraege, leerText) {
-    const auswahl = document.getElementById(id);
-    if (!auswahl) return;
-    const behalten = leerText !== undefined ? `<option value="">${leerText}</option>` : '';
-    auswahl.innerHTML = behalten;
-    (eintraege || []).forEach((e) => {
-        const option = document.createElement('option');
-        option.value = typeof e === 'string' ? e : (e.id || e.name);
-        option.textContent = typeof e === 'string' ? e : (e.label || e.name || e.id);
-        auswahl.appendChild(option);
+function baue(tag, klasse, text) {
+    const knoten = document.createElement(tag);
+    if (klasse) knoten.className = klasse;
+    if (text !== undefined && text !== null) knoten.textContent = String(text);
+    return knoten;
+}
+
+function registriereInfoListener() {
+    if (document.documentElement.dataset.infoListener === 'aktiv') return;
+    document.documentElement.dataset.infoListener = 'aktiv';
+
+    document.addEventListener('click', (ereignis) => {
+        const knopf = ereignis.target.closest('.info-btn');
+        if (!knopf) {
+            document.querySelectorAll('.info-btn[aria-expanded="true"]').forEach((offen) => {
+                offen.setAttribute('aria-expanded', 'false');
+                const info = offen.parentElement.querySelector('.info-pop');
+                if (info) info.hidden = true;
+            });
+            return;
+        }
+
+        const wrap = knopf.closest('.info-wrap');
+        const info = wrap && wrap.querySelector('.info-pop');
+        const wirdGeoeffnet = knopf.getAttribute('aria-expanded') !== 'true';
+
+        document.querySelectorAll('.info-btn[aria-expanded="true"]').forEach((offen) => {
+            offen.setAttribute('aria-expanded', 'false');
+            const andereInfo = offen.parentElement.querySelector('.info-pop');
+            if (andereInfo) andereInfo.hidden = true;
+        });
+
+        if (info && wirdGeoeffnet) {
+            knopf.setAttribute('aria-expanded', 'true');
+            info.hidden = false;
+        }
+    });
+
+    document.addEventListener('keydown', (ereignis) => {
+        if (ereignis.key !== 'Escape') return;
+        document.querySelectorAll('.info-btn[aria-expanded="true"]').forEach((knopf) => {
+            knopf.setAttribute('aria-expanded', 'false');
+            const info = knopf.parentElement.querySelector('.info-pop');
+            if (info) info.hidden = true;
+        });
     });
 }
 
-function zeigeBranchenKarten(branche) {
-    document.querySelectorAll('[data-branchen]').forEach((knoten) => {
-        const liste = knoten.dataset.branchen.split(/\s+/);
-        knoten.hidden = !liste.includes(branche);
-    });
+function infoKnopf(wofuer, wenn) {
+    registriereInfoListener();
+
+    const wrap = baue('span', 'info-wrap');
+    const knopf = baue('button', 'info-btn', 'ⓘ');
+    knopf.type = 'button';
+    knopf.setAttribute('aria-label', 'Erklärung');
+    knopf.setAttribute('aria-expanded', 'false');
+
+    const info = baue('div', 'info-pop');
+    info.setAttribute('role', 'note');
+    info.hidden = true;
+
+    const absatzWofuer = baue('p');
+    const fettWofuer = baue('strong', '', 'Wofür:');
+    absatzWofuer.append(fettWofuer, document.createTextNode(` ${wofuer || ''}`));
+
+    const absatzWenn = baue('p');
+    const fettWenn = baue('strong', '', 'Was passiert, wenn …:');
+    absatzWenn.append(fettWenn, document.createTextNode(` ${wenn || ''}`));
+
+    info.append(absatzWofuer, absatzWenn);
+    wrap.append(knopf, info);
+    return wrap;
 }
 
 function dreifachNachText(wert) {
@@ -45,8 +188,9 @@ function feldWert(feld, wert) {
     const typ = feld.dataset.typ;
     if (typ === 'dreifach') return dreifachNachText(wert);
     if (wert === null || wert === undefined) return '';
-    if (typ === 'prozent') return String(Math.round(Number(wert) * 100));
-    if (typ === 'faktor') return String(Math.round((Number(wert) - 1) * 100));
+    const zahl = Number(wert);
+    if (typ === 'prozent') return Number.isFinite(zahl) ? String(Math.round(zahl * 100)) : '';
+    if (typ === 'faktor') return Number.isFinite(zahl) ? String(Math.round((zahl - 1) * 100)) : '';
     return String(wert);
 }
 
@@ -54,128 +198,687 @@ function leseFeld(feld) {
     const typ = feld.dataset.typ;
     const text = feld.value.trim();
     if (typ === 'dreifach') return textNachDreifach(text);
-    if (typ === 'prozent') return text === '' ? null : Math.min(100, Math.max(0, Number(text))) / 100;
-    if (typ === 'faktor') return text === '' ? null : 1 + Number(text) / 100;
-    if (typ === 'zahl') return text === '' ? null : Number(text);
+    if (typ === 'prozent') {
+        if (text === '') return null;
+        const zahl = Number(text);
+        return Number.isFinite(zahl) ? Math.min(100, Math.max(0, zahl)) / 100 : NaN;
+    }
+    if (typ === 'faktor') {
+        if (text === '') return null;
+        const zahl = Number(text);
+        return Number.isFinite(zahl) ? 1 + zahl / 100 : NaN;
+    }
+    if (typ === 'zahl') {
+        if (text === '') return null;
+        const zahl = Number(text);
+        return Number.isFinite(zahl) ? zahl : NaN;
+    }
     return text;
 }
 
-function fuelleEntscheide(state) {
-    const entscheide = state.choices || {};
-    basisEntscheide = { ...entscheide };
-    const firma = state.firm || {};
-    zeigeBranchenKarten(firma.branch || '');
-
-    fuelleListe('c-research_target', spielOptionen.research, 'keine Forschung');
-    fuelleListe('c-bank_id', spielOptionen.banks);
-    const besetzt = new Set();
-    fuelleListe('c-site_order', (spielOptionen.regions || []).filter((r) => !besetzt.has(r)), 'Region wählen');
-
-    document.querySelectorAll('[data-choice]').forEach((feld) => {
-        const key = feld.dataset.choice;
-        if (key === 'expand_order' || key === 'site_order') return;
-        const wert = entscheide[key];
-        const auto = document.querySelector(`[data-auto="${key}"]`);
-        if (auto) {
-            auto.checked = wert === null || wert === undefined;
-            feld.disabled = auto.checked;
-        }
-        feld.value = feldWert(feld, wert);
-    });
-
-    zeigeGeplant('expand-geplant', entscheide.expand_order, (v) => `Geplant: +${v} Einheiten`);
-    zeigeGeplant('site-geplant', entscheide.site_order, (v) => `Geplant: Standort in ${v}`);
-    if (!entscheide.expand_order) delete geplanteAuftraege.expand_order;
-    if (!entscheide.site_order) delete geplanteAuftraege.site_order;
-    zeichneVerstoesse(entscheide.offences || []);
-    if (state.running && !state.game_over) aktualisiereForschung(entscheide.research_target);
+function rundeProzent(wert) {
+    return Math.round(wert * 10000) / 10000;
 }
 
-// Die möglichen Forschungsstufen ändern sich im Spiel: nach jeder Runde neu holen.
-async function aktualisiereForschung(ziel) {
-    try {
-        const antwort = await fetch('/api/options', { cache: 'no-store' });
-        const daten = await antwort.json();
-        spielOptionen.research = daten.research || [];
-        fuelleListe('c-research_target', spielOptionen.research, 'keine Forschung');
-        const feld = document.getElementById('c-research_target');
-        if (feld && ziel) feld.value = ziel;
-    } catch (fehler) {
-        // Ohne Verbindung bleibt die alte Liste stehen.
+function gleichWert(a, b) {
+    if (a === b) return true;
+    if (typeof a === 'number' && typeof b === 'number') return Math.abs(a - b) < 1e-9;
+    return false;
+}
+
+function holeHilfe(key) {
+    return FELD_HILFE[key] || {
+        wofuer: 'Diese Einstellung beeinflusst deine Firma.',
+        wenn: 'Eine Änderung kann Kosten, Verkäufe oder die Arbeit deiner Firma verändern.'
+    };
+}
+
+function macheFeldKopf(label, id, key) {
+    const kopf = baue('div', 'feld-kopf');
+    const name = baue('label', 'feld-name', label);
+    name.htmlFor = id;
+    const hilfe = holeHilfe(key);
+    kopf.append(name, infoKnopf(hilfe.wofuer, hilfe.wenn));
+    return kopf;
+}
+
+function macheAutopilotZeile(key, feld, autopilot, format) {
+    const zeile = baue('label', 'autopilot-zeile');
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    box.dataset.auto = key;
+    box.checked = false;
+    zeile.append(box, document.createTextNode(' Autopilot'));
+
+    const eintrag = autopilot && autopilot[key];
+    if (!eintrag || !eintrag.text) return { zeile, text: null };
+
+    let text = `Wenn an: ${eintrag.text}`;
+    if (eintrag.value !== null && eintrag.value !== undefined) {
+        text += ` (aktuell: ${format ? format(eintrag.value) : String(eintrag.value)})`;
+    }
+
+    return { zeile, text: baue('small', 'autopilot-text', text) };
+}
+
+function formatiereAutopilotWert(wert, typ) {
+    const zahl = Number(wert);
+    if (!Number.isFinite(zahl)) return String(wert);
+    if (typ === 'prozent') return `${Math.round(zahl * 100)} %`;
+    if (typ === 'faktor') return `${Math.round((zahl - 1) * 100)} %`;
+    if (typ === 'zahl') return new Intl.NumberFormat('de-CH', { maximumFractionDigits: 2 }).format(zahl);
+    return String(wert);
+}
+
+function waehleQuelle(feld, key, istEinstellung) {
+    const entwurf = istEinstellung ? entwurfEinstellungen : entwurfEntscheide;
+    if (Object.prototype.hasOwnProperty.call(entwurf, key)) return entwurf[key];
+    const basis = istEinstellung ? basisEinstellungen : basisEntscheide;
+    return basis[key] === undefined ? null : basis[key];
+}
+
+function baueEingabefeld(form, optionen) {
+    const {
+        key,
+        label,
+        istEinstellung = false,
+        typ = 'text',
+        eingabeTyp = 'number',
+        hinweis,
+        jahr = false,
+        autopilot = null,
+        autopilotWert,
+        optionen: listenOptionen,
+        leerText,
+        min,
+        max,
+        schritt
+    } = optionen;
+
+    const praefix = istEinstellung ? 'f-' : 'c-';
+    const id = `${praefix}${key}`;
+    const feld = baue('div', 'feld');
+    feld.appendChild(macheFeldKopf(label, id, key));
+
+    const eingabe = document.createElement(listenOptionen ? 'select' : 'input');
+    eingabe.id = id;
+    eingabe.dataset[istEinstellung ? 'key' : 'choice'] = key;
+    eingabe.dataset.typ = typ;
+
+    if (!listenOptionen) {
+        eingabe.type = eingabeTyp;
+        if (min !== undefined) eingabe.min = String(min);
+        if (max !== undefined) eingabe.max = String(max);
+        if (schritt !== undefined) eingabe.step = String(schritt);
+    } else {
+        if (leerText !== undefined) {
+            const leer = baue('option', '', leerText);
+            leer.value = '';
+            eingabe.appendChild(leer);
+        }
+        listenOptionen.forEach((eintrag) => {
+            const option = baue('option');
+            option.value = String(eintrag.value);
+            option.textContent = eintrag.label;
+            eingabe.appendChild(option);
+        });
+    }
+
+    const wert = waehleQuelle(eingabe, key, istEinstellung);
+    eingabe.value = feldWert(eingabe, wert);
+    if (autopilot) {
+        const automatisch = wert === null || wert === undefined;
+        eingabe.disabled = automatisch;
+        const teile = macheAutopilotZeile(key, eingabe, autopilot, () => {
+            return formatiereAutopilotWert(autopilotWert, typ);
+        });
+        teile.zeile.querySelector('input').checked = automatisch;
+        feld.append(eingabe, teile.zeile);
+        if (teile.text) feld.appendChild(teile.text);
+    } else {
+        feld.appendChild(eingabe);
+    }
+
+    if (hinweis) feld.appendChild(baue('small', `hinweis${jahr ? ' jahr' : ''}`, hinweis));
+    form.appendChild(feld);
+    return eingabe;
+}
+
+function firmaKarte(form, titel) {
+    const karte = baue('section', 'karte');
+    karte.appendChild(baue('h2', '', titel));
+    form.appendChild(karte);
+    return karte;
+}
+
+function bauePlanungsFeld(form, key, label, buttonText) {
+    const feld = baue('div', 'feld');
+    const id = `c-${key}`;
+    feld.appendChild(macheFeldKopf(label, id, key));
+
+    const eingabe = document.createElement('input');
+    eingabe.type = key === 'expand_order' ? 'number' : 'text';
+    eingabe.id = id;
+    eingabe.dataset.choice = key;
+    eingabe.dataset.typ = key === 'expand_order' ? 'zahl' : 'text';
+    if (key === 'expand_order') {
+        eingabe.min = '1';
+        eingabe.step = '1';
+    }
+    feld.appendChild(eingabe);
+
+    const knopf = baue('button', '', buttonText);
+    knopf.type = 'button';
+    knopf.dataset.plan = key;
+    feld.appendChild(knopf);
+
+    const geplant = baue('small', 'geplant');
+    geplant.dataset.geplant = key;
+    geplant.hidden = true;
+    feld.appendChild(geplant);
+
+    const zurueck = baue('button', '', 'Zurücknehmen');
+    zurueck.type = 'button';
+    zurueck.dataset.zurueck = key;
+    zurueck.hidden = true;
+    feld.appendChild(zurueck);
+
+    form.appendChild(feld);
+}
+
+function firmaGeld(wert) {
+    const zahl = Number(wert);
+    return `${new Intl.NumberFormat('de-CH', { maximumFractionDigits: 2 }).format(zahl)} CHF`;
+}
+
+function setzeGeplant(form, key, wert) {
+    const knoten = form.querySelector(`[data-geplant="${key}"]`);
+    const zurueck = form.querySelector(`[data-zurueck="${key}"]`);
+    if (!knoten || !zurueck) return;
+
+    const aktiv = wert !== null && wert !== undefined && wert !== '';
+    knoten.hidden = !aktiv;
+    zurueck.hidden = !aktiv;
+    if (!aktiv) {
+        knoten.textContent = '';
+    } else if (key === 'expand_order') {
+        knoten.textContent = `Geplant: +${wert} Einheiten`;
+    } else {
+        knoten.textContent = `Geplant: Standort in ${wert}`;
     }
 }
 
-function zeigeGeplant(id, wert, text) {
-    const knoten = document.getElementById(id);
-    if (!knoten) return;
-    knoten.hidden = !wert;
-    knoten.textContent = wert ? text(wert) : '';
+function fuelleRegionen(auswahl) {
+    const leer = baue('option', '', 'Region wählen');
+    leer.value = '';
+    auswahl.appendChild(leer);
+
+    (spielOptionen.regions || []).forEach((eintrag) => {
+        const option = baue('option');
+        if (typeof eintrag === 'string') {
+            option.value = eintrag;
+            option.textContent = eintrag;
+        } else {
+            option.value = eintrag.id || eintrag.name || '';
+            option.textContent = eintrag.label || eintrag.name || eintrag.id || '';
+        }
+        auswahl.appendChild(option);
+    });
 }
 
-function zeichneVerstoesse(aktiv) {
-    const liste = document.getElementById('offences-liste');
-    if (!liste) return;
-    liste.innerHTML = '';
-    (spielOptionen.offences || []).forEach((v) => {
-        const zeile = document.createElement('label');
-        zeile.className = 'autopilot';
-        const box = document.createElement('input');
-        box.type = 'checkbox';
-        box.dataset.offence = v.name;
-        box.checked = aktiv.includes(v.name);
-        zeile.appendChild(box);
-        const nutzen = Math.round(Number(v.benefit) * 100);
-        const busse = Number(v.fine).toLocaleString('de-CH');
-        zeile.appendChild(document.createTextNode(` ${v.name} (Vorteil ${nutzen} %, Busse ab ${busse} CHF)`));
-        liste.appendChild(zeile);
+function formatiereEinstufung(form, einstufung, state) {
+    const karte = firmaKarte(form, 'Einstufung');
+    const daten = einstufung || {};
+    const label = daten.label || (state && state.classification) || 'Noch keine Einstufung';
+    karte.appendChild(baue('p', 'einstufung-label', label));
+    if (daten.explanation) karte.appendChild(baue('p', '', daten.explanation));
+
+    const verlauf = baue('ul', 'einstufung-verlauf');
+    (daten.history || []).forEach((eintrag) => {
+        verlauf.appendChild(baue('li', '', `Jahr ${eintrag.year}: ${eintrag.label}`));
     });
+    if (verlauf.childNodes.length) karte.appendChild(verlauf);
+
+    karte.appendChild(baue(
+        'small',
+        'hinweis',
+        'Die Simulation stuft deine Firma nach deinen Entscheiden ein, du wählst sie nicht.'
+    ));
+}
+
+function verbindeForm(form, state, spielBeendet) {
+    form.addEventListener('submit', (ereignis) => ereignis.preventDefault());
+
+    form.addEventListener('input', (ereignis) => {
+        const feld = ereignis.target;
+        if (!feld.matches('[data-key], [data-choice]')) return;
+
+        const key = feld.dataset.key || feld.dataset.choice;
+        const ziel = feld.dataset.key ? entwurfEinstellungen : entwurfEntscheide;
+        ziel[key] = leseFeld(feld);
+
+        if (key === 'overtime_level') {
+            form.querySelectorAll('[data-key="overtime_level"]').forEach((anderes) => {
+                if (anderes !== feld) anderes.value = feld.value;
+            });
+        }
+
+        if (key === 'marketing_focus') aktualisiereFokus(form);
+    });
+
+    form.addEventListener('change', (ereignis) => {
+        const feld = ereignis.target;
+        if (feld.matches('[data-auto]')) {
+            const ziel = entwurfEntscheide;
+            const key = feld.dataset.auto;
+            const eingabe = form.querySelector(`[data-choice="${key}"]`);
+            if (eingabe) eingabe.disabled = feld.checked || spielBeendet;
+            ziel[key] = feld.checked ? null : leseFeld(eingabe);
+            if (key === 'marketing_focus') aktualisiereFokus(form);
+            return;
+        }
+
+        if (!feld.matches('[data-key], [data-choice]')) return;
+        const key = feld.dataset.key || feld.dataset.choice;
+        const ziel = feld.dataset.key ? entwurfEinstellungen : entwurfEntscheide;
+        ziel[key] = leseFeld(feld);
+        if (key === 'marketing_target') ziel[key] = feld.value || null;
+        if (key === 'marketing_focus') aktualisiereFokus(form);
+    });
+
+    form.querySelectorAll('[data-plan]').forEach((knopf) => {
+        knopf.addEventListener('click', () => {
+            if (spielBeendet) return;
+            const key = knopf.dataset.plan;
+            const feld = form.querySelector(`[data-choice="${key}"]`);
+            const wert = feld && leseFeld(feld);
+            if (key === 'expand_order') {
+                if (!Number.isFinite(wert) || wert < 1) return;
+                geplanteAuftraege[key] = Math.round(wert);
+            } else {
+                if (!feld || !feld.value) return;
+                geplanteAuftraege[key] = feld.value;
+            }
+            setzeGeplant(form, key, geplanteAuftraege[key]);
+        });
+    });
+
+    form.querySelectorAll('[data-zurueck]').forEach((knopf) => {
+        knopf.addEventListener('click', () => {
+            if (spielBeendet) return;
+            const key = knopf.dataset.zurueck;
+            delete geplanteAuftraege[key];
+            setzeGeplant(form, key, null);
+        });
+    });
+}
+
+function aktualisiereFokus(form) {
+    const feld = form.querySelector('[data-choice="marketing_focus"]');
+    const anzeige = form.querySelector('[data-fokus-anzeige]');
+    if (!feld || !anzeige) return;
+    if (feld.value === '') {
+        anzeige.textContent = 'Automatisch';
+        return;
+    }
+    const marke = Math.min(100, Math.max(0, Number(feld.value)));
+    anzeige.textContent = `${marke} % Marke, ${100 - marke} % Laden`;
+}
+
+function zeichneFirma(el, state, autopilot, einstufung) {
+    if (!el) return;
+
+    state = state || {};
+    const settings = state.settings || {};
+    const choices = state.choices || {};
+    const firma = state.firm || {};
+    const kpis = state.kpis || {};
+    const branch = firma.branch || '';
+    const spielBeendet = Boolean(state.game_over);
+
+    basisEinstellungen = { ...settings };
+    basisEntscheide = { ...choices };
+
+    const form = document.createElement('form');
+    form.id = 'einstellungen-form';
+    form.noValidate = true;
+
+    formatiereEinstufung(form, einstufung, state);
+
+    const verkauf = firmaKarte(form, 'Verkauf');
+    baueEingabefeld(verkauf, {
+        key: 'base_price',
+        label: 'Preis',
+        istEinstellung: true,
+        typ: 'zahl',
+        min: 0,
+        schritt: '0.01',
+        hinweis: `Erlaubt: ${state.price_band ? state.price_band.min : ''} bis ${state.price_band ? state.price_band.max : ''} CHF`
+    });
+    const konkurrenz = kpis.rival_price === null || kpis.rival_price === undefined
+        ? 'kein Konkurrenzpreis'
+        : `${firmaGeld(kpis.rival_price)}`;
+    verkauf.appendChild(baue('small', 'hinweis', `Konkurrenzpreis: ${konkurrenz}`));
+
+    const produktion = firmaKarte(form, 'Produktion');
+    baueEingabefeld(produktion, {
+        key: 'target_safety_stock_days',
+        label: 'Lagerziel in Tagen',
+        istEinstellung: true,
+        typ: 'zahl',
+        min: 0,
+        schritt: '1'
+    });
+    baueEingabefeld(produktion, {
+        key: 'order_qty',
+        label: 'Feste Menge pro Tag',
+        istEinstellung: true,
+        typ: 'zahl',
+        min: 0,
+        schritt: '1',
+        hinweis: 'Leer = automatisch'
+    });
+    baueEingabefeld(produktion, {
+        key: 'overtime_level',
+        label: 'Überstunden %',
+        istEinstellung: true,
+        typ: 'prozent',
+        min: 0,
+        max: 100,
+        schritt: '1'
+    });
+
+    const mitarbeiter = firmaKarte(form, 'Mitarbeiter');
+    baueEingabefeld(mitarbeiter, {
+        key: 'wage_level',
+        label: 'Lohnniveau',
+        istEinstellung: true,
+        typ: 'zahl',
+        hinweis: 'Wirkt sofort'
+    });
+    baueEingabefeld(mitarbeiter, {
+        key: 'hiring_plan',
+        label: 'Einstellungen pro Jahr',
+        istEinstellung: true,
+        typ: 'zahl',
+        min: 0,
+        schritt: '1',
+        hinweis: 'Wirkt ab nächstem Jahr',
+        jahr: true
+    });
+    baueEingabefeld(mitarbeiter, {
+        key: 'overtime_level',
+        label: 'Überstunden %',
+        istEinstellung: true,
+        typ: 'prozent',
+        min: 0,
+        max: 100,
+        schritt: '1'
+    });
+
+    const qualitaet = firmaKarte(form, 'Qualität');
+    baueEingabefeld(qualitaet, {
+        key: 'target_quality',
+        label: 'Zielqualität %',
+        istEinstellung: true,
+        typ: 'prozent',
+        min: 0,
+        max: 100,
+        schritt: '1'
+    });
+
+    if (['hersteller', 'detailhaendler', 'gastro'].includes(branch)) {
+        const marketing = firmaKarte(form, 'Marketing');
+        baueEingabefeld(marketing, {
+            key: 'marketing_budget',
+            label: 'Budget CHF/Jahr',
+            typ: 'zahl',
+            min: 0,
+            schritt: '1',
+            autopilot,
+            autopilotWert: autopilot && autopilot.marketing_budget
+                ? autopilot.marketing_budget.value
+                : null
+        });
+
+        const fokusFeld = baueEingabefeld(marketing, {
+            key: 'marketing_focus',
+            label: 'Fokus',
+            typ: 'prozent',
+            eingabeTyp: 'range',
+            min: 0,
+            max: 100,
+            schritt: '1',
+            autopilot
+        });
+        const fokusHinweis = baue('div', 'fokus-beschriftung');
+        fokusHinweis.append(
+            baue('span', '', 'Laden/Lokal'),
+            baue('span', '', 'Marke')
+        );
+        marketing.appendChild(fokusHinweis);
+        const fokusAnzeige = baue('small', 'hinweis');
+        fokusAnzeige.dataset.fokusAnzeige = '';
+        marketing.appendChild(fokusAnzeige);
+        aktualisiereFokus(form);
+        fokusFeld.addEventListener('input', () => aktualisiereFokus(form));
+
+        baueEingabefeld(marketing, {
+            key: 'marketing_target',
+            label: 'Zielgruppe',
+            typ: 'text',
+            optionen: [
+                { value: '18-34', label: '18–34' },
+                { value: '35-64', label: '35–64' },
+                { value: '65+', label: '65+' }
+            ],
+            leerText: 'Alle'
+        });
+    }
+
+    const wachstum = firmaKarte(form, 'Wachstum');
+    baueEingabefeld(wachstum, {
+        key: 'auto_invest',
+        label: 'Automatisch investieren',
+        typ: 'dreifach',
+        optionen: [
+            { value: 'auto', label: 'Autopilot' },
+            { value: 'ja', label: 'Ja' },
+            { value: 'nein', label: 'Nein' }
+        ],
+        autopilot
+    });
+    bauePlanungsFeld(form, 'expand_order', 'Kapazität ausbauen', 'Ausbau planen');
+
+    if (['detailhaendler', 'gastro'].includes(branch)) {
+        const feld = baue('div', 'feld');
+        feld.appendChild(macheFeldKopf('Standort planen', 'c-site_order', 'site_order'));
+        const auswahl = document.createElement('select');
+        auswahl.id = 'c-site_order';
+        auswahl.dataset.choice = 'site_order';
+        auswahl.dataset.typ = 'text';
+        fuelleRegionen(auswahl);
+        const wert = waehleQuelle(auswahl, 'site_order', false);
+        auswahl.value = wert || '';
+        feld.appendChild(auswahl);
+
+        const knopf = baue('button', '', 'Standort planen');
+        knopf.type = 'button';
+        knopf.dataset.plan = 'site_order';
+        feld.appendChild(knopf);
+        const geplant = baue('small', 'geplant');
+        geplant.dataset.geplant = 'site_order';
+        geplant.hidden = true;
+        feld.appendChild(geplant);
+        const zurueck = baue('button', '', 'Zurücknehmen');
+        zurueck.type = 'button';
+        zurueck.dataset.zurueck = 'site_order';
+        zurueck.hidden = true;
+        feld.appendChild(zurueck);
+        wachstum.appendChild(feld);
+    }
+
+    const geld = firmaKarte(form, 'Geld-Grundsätze');
+    baueEingabefeld(geld, {
+        key: 'credit_mode',
+        label: 'Kredite',
+        typ: 'text',
+        optionen: [
+            { value: 'auto', label: 'Autopilot' },
+            { value: 'never', label: 'Nie Kredit' },
+            { value: 'prefer', label: 'Kredit, wenn möglich' }
+        ],
+        autopilot
+    });
+
+    const bankOptionen = (spielOptionen.banks || []).map((eintrag) => {
+        if (typeof eintrag === 'string') return { value: eintrag, label: eintrag };
+        return {
+            value: eintrag.id || eintrag.name || '',
+            label: eintrag.label || eintrag.name || eintrag.id || ''
+        };
+    });
+    baueEingabefeld(geld, {
+        key: 'bank_id',
+        label: 'Bank',
+        typ: 'text',
+        optionen: bankOptionen,
+        leerText: 'Keine Auswahl',
+        autopilot
+    });
+    baueEingabefeld(geld, {
+        key: 'payout_ratio',
+        label: 'Ausschüttung %',
+        typ: 'prozent',
+        min: 0,
+        max: 100,
+        schritt: '1',
+        autopilot
+    });
+    baueEingabefeld(geld, {
+        key: 'listing',
+        label: 'Börsengang',
+        typ: 'dreifach',
+        optionen: [
+            { value: 'auto', label: 'Autopilot' },
+            { value: 'ja', label: 'Ja' },
+            { value: 'nein', label: 'Nein' }
+        ],
+        autopilot
+    });
+
+    if (['hersteller', 'grosshaendler', 'verteiler'].includes(branch)) {
+        const transport = firmaKarte(form, 'Transport');
+        baueEingabefeld(transport, {
+            key: 'transport_mode',
+            label: 'Transport',
+            typ: 'text',
+            optionen: [
+                { value: 'own', label: 'Eigener Transport' },
+                { value: 'service', label: 'Transportdienst' }
+            ],
+            autopilot
+        });
+    }
+
+    if (branch === 'hersteller') {
+        const rohstoffe = firmaKarte(form, 'Rohstoffe');
+        baueEingabefeld(rohstoffe, {
+            key: 'commodity_courage',
+            label: 'Einsatz für Rohstoffe %',
+            typ: 'prozent',
+            min: 0,
+            max: 100,
+            schritt: '1',
+            autopilot
+        });
+    }
+
+    if (branch === 'gastro') {
+        const gastro = firmaKarte(form, 'Gastro');
+        baueEingabefeld(gastro, {
+            key: 'markup_factor',
+            label: 'Aufschlag in %',
+            typ: 'faktor',
+            min: 0,
+            max: 500,
+            schritt: '1',
+            autopilot
+        });
+    }
+
+    const risiko = firmaKarte(form, 'Risiko');
+    baueEingabefeld(risiko, {
+        key: 'risk_tolerance',
+        label: 'Risikobereitschaft %',
+        istEinstellung: true,
+        typ: 'prozent',
+        min: 0,
+        max: 100,
+        schritt: '1'
+    });
+
+    form.querySelectorAll('[data-geplant]').forEach((knoten) => {
+        const key = knoten.dataset.geplant;
+        const aktuellerPlan = Object.prototype.hasOwnProperty.call(geplanteAuftraege, key)
+            ? geplanteAuftraege[key]
+            : choices[key];
+        setzeGeplant(form, key, aktuellerPlan);
+    });
+
+    verbindeForm(form, state, spielBeendet);
+    if (spielBeendet) {
+        form.querySelectorAll('input, select, button').forEach((feld) => {
+            feld.disabled = true;
+        });
+    }
+
+    el.replaceChildren(form);
+}
+
+function geaenderteEinstellungen() {
+    const geaendert = {};
+    Object.keys(entwurfEinstellungen).forEach((key) => {
+        let wert = entwurfEinstellungen[key];
+        if (typeof wert === 'number' && !Number.isFinite(wert)) return;
+        if (key === 'order_qty' && wert === '') wert = null;
+        if (['target_quality', 'risk_tolerance', 'overtime_level'].includes(key)
+            && typeof wert === 'number') {
+            wert = rundeProzent(wert);
+        }
+        const vorher = basisEinstellungen[key] === undefined ? null : basisEinstellungen[key];
+        if (!gleichWert(wert, vorher)) geaendert[key] = wert;
+    });
+    return geaendert;
 }
 
 function geaenderteEntscheide() {
     const geaendert = {};
-    document.querySelectorAll('[data-choice]').forEach((feld) => {
-        const key = feld.dataset.choice;
-        if (key === 'expand_order' || key === 'site_order') return;
-        const auto = document.querySelector(`[data-auto="${key}"]`);
-        const wert = auto && auto.checked ? null : leseFeld(feld);
-        if (wert !== null && typeof wert === 'number' && !Number.isFinite(wert)) return;
+    Object.keys(entwurfEntscheide).forEach((key) => {
+        let wert = entwurfEntscheide[key];
+        if (typeof wert === 'number' && !Number.isFinite(wert)) return;
+        if (['marketing_focus', 'payout_ratio', 'commodity_courage'].includes(key)
+            && typeof wert === 'number') {
+            wert = rundeProzent(wert);
+        }
         const vorher = basisEntscheide[key] === undefined ? null : basisEntscheide[key];
-        if (wert !== vorher) geaendert[key] = wert;
+        if (!gleichWert(wert, vorher)) geaendert[key] = wert;
     });
-    const verstoesse = [...document.querySelectorAll('[data-offence]')]
-        .filter((b) => b.checked).map((b) => b.dataset.offence);
-    const vorher = basisEntscheide.offences || [];
-    if (verstoesse.length !== vorher.length || verstoesse.some((n) => !vorher.includes(n))) {
-        geaendert.offences = verstoesse;
-    }
+
     Object.assign(geaendert, geplanteAuftraege);
+    Object.assign(geaendert, entwurfEntscheide);
     return geaendert;
 }
 
-function verbindeEntscheide() {
-    document.querySelectorAll('[data-auto]').forEach((box) => {
-        box.addEventListener('change', () => {
-            const feld = document.querySelector(`[data-choice="${box.dataset.auto}"]`);
-            if (feld) feld.disabled = box.checked;
-        });
+function entscheidePatch(patch) {
+    if (!patch || typeof patch !== 'object') return;
+    Object.keys(patch).forEach((key) => {
+        entwurfEntscheide[key] = patch[key] === undefined ? null : patch[key];
     });
-    const ausbau = document.getElementById('expand-btn');
-    if (ausbau) {
-        ausbau.addEventListener('click', () => {
-            const zahl = Number(document.getElementById('c-expand_order').value);
-            if (!Number.isFinite(zahl) || zahl < 1) return;
-            geplanteAuftraege.expand_order = Math.round(zahl);
-            zeigeGeplant('expand-geplant', geplanteAuftraege.expand_order,
-                (v) => `Wird mit der nächsten Runde geschickt: +${v} Einheiten`);
-        });
-    }
-    const standort = document.getElementById('site-btn');
-    if (standort) {
-        standort.addEventListener('click', () => {
-            const region = document.getElementById('c-site_order').value;
-            if (!region) return;
-            geplanteAuftraege.site_order = region;
-            zeigeGeplant('site-geplant', region, (v) => `Wird mit der nächsten Runde geschickt: Standort in ${v}`);
-        });
-    }
+}
+
+function leereEntwurf() {
+    entwurfEinstellungen = {};
+    entwurfEntscheide = {};
+    geplanteAuftraege = {};
 }

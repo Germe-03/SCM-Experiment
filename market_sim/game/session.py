@@ -83,6 +83,7 @@ class GameSession:
         self._last_year = 1
         self._last_day = 0
         self.ceo_book = CeoBook()
+        self.depot = None  # Aktien-Depot (Cockpit 2), angelegt beim ersten Kauf
         self.order_results: list[dict] = []
         self.extra_events: list[dict] = []
         self._pending_orders: dict = {}
@@ -322,6 +323,11 @@ class GameSession:
         self._last_year = year
         self._last_day = day
         self._holding_upkeep(year, day)
+        if day == 0 and year > 1 and self.depot is not None:
+            try:
+                self.depot.pay_dividends(runner, state, firm_id)
+            except Exception:  # Dividenden dürfen das Spiel nie stoppen
+                pass
         self._to_main.put(self._snapshot(runner, state, year, day))
         _, settings = self._to_thread.get()
         self._apply_orders(self._pending_orders, year, day)
@@ -339,6 +345,7 @@ class GameSession:
         runner = self.runner
         state = self._state
         player_id = self._firm_id
+        self._apply_trade_orders(orders, year, day)
         dpy = runner.config.simulation.days_per_year
         daughters = set(holding_player.daughters(runner, player_id))
 
@@ -411,6 +418,33 @@ class GameSession:
                     "ok": True,
                     "message": "Leitplanken wurden gespeichert",
                 })
+
+    def _apply_trade_orders(self, orders: dict, year: int, day: int) -> None:
+        """Cockpit 2: Kredit, Lastwagen und Aktien (market_sim/game/actions.py)."""
+        from market_sim.game import actions
+        runner, state, fid = self.runner, self._state, self._firm_id
+
+        def run(call):
+            try:
+                result = call()
+            except Exception as exc:  # ein Auftrag darf das Spiel nie stoppen
+                result = {"ok": False, "message": f"Auftrag fehlgeschlagen ({exc.__class__.__name__})"}
+            self.order_results.append({"ok": bool(result.get("ok")), "message": str(result.get("message", ""))})
+
+        loan = orders.get("loan")
+        if isinstance(loan, dict) and loan.get("amount"):
+            run(lambda: actions.take_loan(runner, state, fid, float(loan["amount"]), loan.get("bank_id"), year, day))
+        truck = orders.get("truck")
+        if isinstance(truck, dict) and truck.get("type"):
+            run(lambda: actions.buy_truck(runner, state, fid, truck["type"], truck.get("mode", "buy"), year, day))
+        stock = orders.get("stock")
+        if isinstance(stock, dict):
+            if self.depot is None:
+                self.depot = actions.Depot()
+            for target, shares in (stock.get("sell") or {}).items():
+                run(lambda t=target, n=shares: self.depot.sell(runner, fid, t, float(n)))
+            for target, shares in (stock.get("buy") or {}).items():
+                run(lambda t=target, n=shares: self.depot.buy(runner, fid, t, float(n)))
 
     def _holding_upkeep(self, year: int, day: int, upkeep: bool = True) -> None:
         """Aktualisiert CEOs, Tendenzen und Lohnkosten der Holding-Töchter."""

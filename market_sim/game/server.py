@@ -63,6 +63,10 @@ class Handler(SimpleHTTPRequestHandler):
             self._send_json(self.controller.options())
         elif path == "/api/saves":
             self._send_json(self.controller.saves())
+        elif path.startswith("/api/view/"):
+            from urllib.parse import parse_qs
+            query = {key: values[0] for key, values in parse_qs(urlsplit(self.path).query).items()}
+            self._send_json(self.controller.view(path[len("/api/view/"):], **query))
         elif path.startswith("/api/"):
             self.send_error(404)
         else:  # statische Dateien

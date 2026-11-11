@@ -489,9 +489,12 @@ class BrandBook:
             start = mk.start_awareness
             for age in {self.classes[n].age_group for n in self.class_names}:
                 sens = mk.age_sensitivity.get(age or "", 1.0)
+                def target(owner: str, age=age) -> float:
+                    wanted = getattr(self.player_choices.get(owner), "marketing_target", None)
+                    return 1.0 if not wanted else (1.5 if wanted == age else 0.75)
                 aware_mult[age] = (
-                    {b: 1 + sens * mk.brand_weight * (self.awareness.get(b, start) - 0.5) for b in self.brands},
-                    {f.id: 1 + sens * mk.store_weight * (self.store_awareness.get(f.id, start) - 0.5) for f in retailers},
+                    {b: 1 + sens * target(self.brands[b].owner) * mk.brand_weight * (self.awareness.get(b, start) - 0.5) for b in self.brands},
+                    {f.id: 1 + sens * target(f.id) * mk.store_weight * (self.store_awareness.get(f.id, start) - 0.5) for f in retailers},
                 )
         cat_boost: dict[str | None, dict[str, float]] = {}
         if self.categories_on:

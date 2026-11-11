@@ -7,10 +7,38 @@ import re
 import threading
 
 from market_sim.game.choices import PlayerChoices
+from market_sim.game.change_log import describe_changes
 from market_sim.game.messages import messages_for
 from market_sim.game.player import PlayerSettings
 from market_sim.game.saves import SaveGame, list_saves, read_save, replay, write_save
 from market_sim.game.session import BRANCHES, GameSession, RoundSnapshot
+
+
+ROHSTOFFE_DE = {
+    "co2": "CO2", "cork": "Kork", "fruit": "Früchte", "grapes": "Trauben", "hops": "Hopfen",
+    "malt": "Malz", "packaging": "Verpackung", "glass": "Glas", "sugar": "Zucker",
+    "water": "Wasser", "wheat": "Weizen", "barley": "Gerste", "electricity": "Strom",
+    "energy": "Energie", "aluminium": "Aluminium", "pet": "PET", "yeast": "Hefe",
+    "grain": "Getreide", "potatoes": "Kartoffeln", "wood": "Holz", "labels": "Etiketten",
+}
+STUFEN_DE = {"factory": "Hersteller", "wholesaler": "Grosshändler", "distributor": "Verteiler",
+             "retailer": "Detailhandel"}
+
+
+def _german_view(name: str, data: dict) -> dict:
+    """Englische Schlüssel der Simulation für die Anzeige übersetzen."""
+    if name == "commodities" and isinstance(data, dict):
+        for row in data.get("current", []):
+            row["name"] = ROHSTOFFE_DE.get(row.get("name"), row.get("name"))
+            if isinstance(row.get("index"), (int, float)):
+                row["index"] = round(row["index"] * 100, 1)
+        data["history"] = [{ROHSTOFFE_DE.get(k, k): (round(v * 100, 1) if k not in
+                            ("label", "policy_rate", "inflation", "fx_rate") and isinstance(v, (int, float)) else v)
+                            for k, v in row.items()} for row in data.get("history", [])]
+    if name == "swiss_map" and isinstance(data, dict):
+        for firm in data.get("firms", []):
+            firm["stage"] = STUFEN_DE.get(firm.get("stage"), firm.get("stage"))
+    return data
 
 
 class GameController:
@@ -41,6 +69,9 @@ class GameController:
         self.protocol: SaveGame | None = None
         self.history: list[dict] = []
         self.messages: list[dict] = []
+        self.macro_history: list[dict] = []
+        self.effects: list[dict] = []
+        self._pending_changes: list[str] = []
         self.sale: dict | None = None
         self._options_cache: dict | None = None
 
@@ -128,6 +159,9 @@ class GameController:
                 self.protocol = protocol
                 self.history = []
                 self.messages = []
+                self.macro_history = []
+                self.effects = []
+                self._pending_changes = []
                 self.sale = None
                 self._process(snapshot)
                 return self._state()
@@ -174,6 +208,7 @@ class GameController:
                         raise ValueError(f"Ungültige Einstellung: {key}") from exc
 
                 new_settings = replace(current, **updates)
+                self._pending_changes = describe_changes(current, updates, choices or {}, orders or {})
                 snapshot = self.session.end_round(new_settings, choices or None, orders or None)
                 if self.protocol is not None:
                     # Alte Spielstände ohne "choices": auf gleiche Länge auffüllen.
@@ -264,6 +299,9 @@ class GameController:
                 self.protocol = save
                 self.history = []
                 self.messages = []
+                self.macro_history = []
+                self.effects = []
+                self._pending_changes = []
                 self.sale = None
                 for item in snapshots:
                     self._process(item)
@@ -311,10 +349,16 @@ class GameController:
                 "cash": float(snapshot.cash),
                 "profit": float(snapshot.profit),
                 "sell_price": float(snapshot.sell_price),
+                "sales": float(snapshot.recent_sales),
+                "demand": float(snapshot.recent_demand),
+                "inventory": int(snapshot.inventory),
+                "backlog": int(snapshot.backlog),
             }
         )
         if self.session is None:
             return
+        self._record_macro(snapshot)
+        self._record_effect()
         names = {
             firm.id: firm.name
             for firm in self.session.runner._firms()
@@ -351,6 +395,8 @@ class GameController:
                 "profit": float(snapshot.profit),
                 "recent_demand": float(snapshot.recent_demand),
                 "recent_sales": float(snapshot.recent_sales),
+                "revenue_year": float(snapshot.sell_price) * float(snapshot.recent_sales)
+                * self.session.runner.config.simulation.days_per_year,
                 "rival_price": (
                     None
                     if snapshot.rival_price is None
@@ -365,7 +411,137 @@ class GameController:
             "history": list(self.history),
             "sale": self.sale,
             "review": self._review_dict(),
+            "effects": list(self.effects[-12:])[::-1],
+            "warnings": self._warnings(),
+            "classification": self._classification_label(),
+            "depot_value": self._depot_value(),
         }
+
+    # ---- Cockpit 2: Ansichten, Makro-Verlauf, Wirkungsprotokoll, Warnungen ----
+
+    VIEWS = {
+        "compare": ("world_market", "compare"), "capacity": ("world_market", "capacity"),
+        "market": ("world_market", "market"), "suppliers": ("world_market", "suppliers"),
+        "population": ("world_market", "population"), "swiss_map": ("world_market", "swiss_map"),
+        "macro": ("world_finance", "macro"), "banks": ("world_finance", "banks"),
+        "stocks": ("world_finance", "stocks"), "commodities": ("world_finance", "commodities"),
+        "trucks": ("world_finance", "trucks"), "research_tree": ("world_firm", "research_tree"),
+        "autopilot": ("world_firm", "autopilot"), "classification": ("world_firm", "classification"),
+        "glossary": ("world_firm", "glossary"),
+    }
+
+    def view(self, name: str, **query) -> dict:
+        """Lese-Ansicht für einen Reiter (nur eigene und öffentliche Daten)."""
+        import importlib
+        with self._lock:
+            if name not in self.VIEWS:
+                return {"error": f"Unbekannte Ansicht: {name}"}
+            if self.session is None or self.snapshot is None:
+                return {"error": "Kein Spiel aktiv"}
+            module_name, function_name = self.VIEWS[name]
+            module = importlib.import_module(f"market_sim.game.{module_name}")
+            extra: dict = {}
+            if name in ("macro", "commodities"):
+                extra["history"] = list(self.macro_history)
+            elif name == "stocks":
+                extra["depot"] = getattr(self.session, "depot", None)
+            elif name == "banks" and query.get("amount"):
+                try:
+                    extra["amount"] = float(query["amount"])
+                except (TypeError, ValueError):
+                    return {"error": "Ungültiger Betrag"}
+            try:
+                data = getattr(module, function_name)(
+                    self.session.runner, self.session.state, self.snapshot.firm_id, **extra)
+                return _german_view(name, data)
+            except Exception as exc:  # eine kaputte Ansicht darf das Spiel nicht stoppen
+                return {"error": f"Ansicht {name} nicht verfügbar ({exc.__class__.__name__}: {exc})"}
+
+    def _record_macro(self, snapshot) -> None:
+        env = self.session.runner.env
+        bank = getattr(env, "central_bank", None)
+        long_run = getattr(self.session.runner, "long_run", None)
+        row = {
+            "label": f"J{snapshot.year} M{snapshot.month}",
+            "policy_rate": float(getattr(bank, "policy_rate", 0.0) or 0.0),
+            "inflation": float(getattr(bank, "inflation", getattr(long_run, "inflation", 0.0)) or 0.0),
+            "fx_rate": float(getattr(env, "fx_rate", 1.0) or 1.0),
+        }
+        for name, value in (getattr(env, "commodity_price", {}) or {}).items():
+            try:
+                row[name] = float(value)
+            except (TypeError, ValueError):
+                pass
+        try:
+            row["strom"] = float(env.electricity_level())
+        except Exception:
+            pass
+        self.macro_history.append(row)
+
+    def _record_effect(self) -> None:
+        if len(self.history) < 2:
+            self._pending_changes = []
+            return
+        before, after = self.history[-2], self.history[-1]
+
+        def delta(key):
+            old, new = before.get(key, 0.0) or 0.0, after.get(key, 0.0) or 0.0
+            return None if not old else round((new - old) / abs(old), 4)
+
+        self.effects.append({
+            "label": f"Jahr {after['year']}, Monat {after['month']}",
+            "changes": list(self._pending_changes) or ["Keine Änderung"],
+            "deltas": {"price": delta("sell_price"), "sales": delta("sales"),
+                       "demand": delta("demand"), "cash": delta("cash")},
+            "cash_change": after["cash"] - before["cash"],
+        })
+        self._pending_changes = []
+
+    def _warnings(self) -> list[dict]:
+        warnings: list[dict] = []
+        snap = self.snapshot
+        if snap is None or snap.game_over:
+            return warnings
+        months_left = None
+        if len(self.history) >= 2:
+            burn = self.history[-2]["cash"] - self.history[-1]["cash"]
+            if burn > 0:
+                months_left = snap.cash / burn
+        if snap.cash < 0:
+            warnings.append({"level": "rot", "text": "Die Kasse ist im Minus. Ohne Gegenmassnahme droht der Konkurs."})
+        elif months_left is not None and months_left < 6:
+            warnings.append({"level": "gelb", "text": f"Die Kasse reicht beim jetzigen Verlust noch etwa {months_left:.0f} Monate."})
+        if snap.backlog > max(1.0, snap.recent_demand) * 3:
+            warnings.append({"level": "gelb", "text": "Grosser Rückstand: Kunden warten. Mehr produzieren oder Überstunden prüfen."})
+        if snap.inventory > max(1.0, snap.recent_demand) * 30:
+            warnings.append({"level": "gelb", "text": "Sehr viel Lager: bindet Geld und kostet Lagerkosten."})
+        if snap.rival_price and snap.sell_price > snap.rival_price * 1.25:
+            warnings.append({"level": "gelb", "text": "Dein Preis liegt mehr als 25 % über der Konkurrenz."})
+        try:
+            from market_sim.game import holding_player
+            for fid in holding_player.daughters(self.session.runner, snap.firm_id):
+                if self.session.ceo_book.ceo_of(fid) is None:
+                    warnings.append({"level": "gelb", "text": f"{self.session.runner.network.firm(fid).name} hat keinen CEO."})
+        except Exception:
+            pass
+        return warnings
+
+    def _classification_label(self) -> str | None:
+        try:
+            from market_sim.kpi import ARCHETYPE_DE
+            firm = self.session.runner.network.firm(self.snapshot.firm_id)
+            return ARCHETYPE_DE.get(firm.archetype, firm.archetype)
+        except Exception:
+            return None
+
+    def _depot_value(self) -> float:
+        depot = getattr(self.session, "depot", None)
+        if depot is None:
+            return 0.0
+        try:
+            return float(sum(p["value"] for p in depot.positions(self.session.runner)))
+        except Exception:
+            return 0.0
 
     def _holding_dict(self) -> dict:
         """Holding, kaufbare Firmen und CEOs (Phase 4)."""

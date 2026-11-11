@@ -27,6 +27,7 @@ class StateActor:
         self.seed = seed
         self.beliefs: dict[str, dict[str, list[float]]] = {}
         self.active: dict[str, set[str]] = {}
+        self.player_intensity: dict[tuple[str, str], float] = {}
         self.offence_ledger: list[dict[str, object]] = []
         self.previous_revenue: dict[str, float] = {}
         self.fear: dict[str, float] = {}
@@ -54,6 +55,7 @@ class StateActor:
         """Called after the annual strategies are set."""
         env = runner.env
         self.active = {}
+        self.player_intensity = {}
         env.firm_material_factor = {}
         env.material_savings = {}
         env.wage_savings = {}
@@ -78,7 +80,10 @@ class StateActor:
                 penalty = detect * (offence.fine_fixed + fine_share * last_revenue)
                 committed = benefit > penalty * (1 + self.cfg.aversion * (1 - risk))
                 if choice is not None:
-                    committed = offence.name in choice.offences
+                    intensity = choice.offence_intensity(offence.name)
+                    committed = intensity > 0
+                else:
+                    intensity = 1.0
                 runner.decision_log.record(env.period // runner.config.simulation.days_per_year + 1,
                     firm.id, "offence", {"offence": offence.name, "committed": committed,
                     "believed_detection_probability": detect,
@@ -88,13 +93,15 @@ class StateActor:
                 if committed:
                     self.active.setdefault(firm.id, set()).add(offence.name)
                     self.stats["offences"] += 1
+                    if choice is not None:
+                        self.player_intensity[(firm.id, offence.name)] = intensity
                     if offence.kind == "wage":
                         before = firm.wage_level
-                        firm.wage_level *= 1 - offence.benefit
+                        firm.wage_level *= 1 - offence.benefit * intensity
                         runtime.wage_level = firm.wage_level
                         env.wage_saving_ratio[firm.id] = before / firm.wage_level - 1 if firm.wage_level else 0.0
                     elif offence.kind == "material":
-                        env.firm_material_factor[firm.id] = 1 - offence.benefit
+                        env.firm_material_factor[firm.id] = 1 - offence.benefit * intensity
 
     def _distribute(self, runner, year, firm_id, runtime, summary, tax) -> None:
         """Gewinnverwendung nach der Gewinnsteuer (nur wenn runner.profit_distribution gesetzt ist)."""
@@ -161,17 +168,18 @@ class StateActor:
             tax_offence = next((o for o in cfg.offences if o.kind == "tax"), None)
             tax = max(0.0, summary.profit) * cfg.profit_tax
             if evading and tax_offence is not None:
-                tax *= 1 - tax_offence.benefit
+                tax *= 1 - tax_offence.benefit * self.player_intensity.get((firm.id, tax_offence.name), 1.0)
             runtime.adjust_cash(-tax, "staat:Gewinnsteuer")
             self.stats["taxes"] += tax
             self._distribute(runner, year, firm.id, runtime, summary, tax)
             for offence, roll in zip(cfg.offences, rolls):
                 if offence.name not in self.active.get(firm.id, ()):
                     continue
-                caught = roll < offence.detection_probability
+                level = self.player_intensity.get((firm.id, offence.name))
+                caught = roll < offence.detection_probability * (1.0 if level is None else 0.4 + 0.6 * level)
                 gain = (env.wage_savings.get(firm.id, 0.0) if offence.kind == "wage" else
                         env.material_savings.get(firm.id, 0.0) if offence.kind == "material" else
-                        max(0.0, summary.profit) * cfg.profit_tax * offence.benefit)
+                        max(0.0, summary.profit) * cfg.profit_tax * offence.benefit * (1.0 if level is None else level))
                 fine = damage = 0.0
                 belief = self.beliefs[firm.id][offence.name]
                 belief[0] += cfg.learning_rate * ((1.0 if caught else 0.0) - belief[0])

@@ -1,5 +1,6 @@
 :root {
-  --bg: #f3f5f7;
+  color-scheme: light;
+  --bg: #f4f6f8;
   --karte: #ffffff;
   --text: #263442;
   --text-leise: #667584;
@@ -10,10 +11,56 @@
   --warn: #a56c18;
   --eigen: #287b91;
   --markt: #8a6a9d;
+  --linie-1: #287b91;
+  --linie-2: #8a6a9d;
+  --linie-3: #34805a;
+  --linie-4: #c17b2d;
+  --schatten: 0 0.25rem 0.9rem color-mix(in srgb, var(--text) 8%, transparent);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f4f6f8;
+  --karte: #ffffff;
+  --text: #263442;
+  --text-leise: #667584;
+  --rand: #d8e0e6;
+  --akzent: #287b91;
+  --gut: #34805a;
+  --schlecht: #b84444;
+  --warn: #a56c18;
+  --eigen: #287b91;
+  --markt: #8a6a9d;
+  --linie-1: #287b91;
+  --linie-2: #8a6a9d;
+  --linie-3: #34805a;
+  --linie-4: #c17b2d;
+  --schatten: 0 0.25rem 0.9rem color-mix(in srgb, var(--text) 8%, transparent);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #182129;
+  --karte: #222e38;
+  --text: #e3ebf0;
+  --text-leise: #a5b3be;
+  --rand: #3b4a56;
+  --akzent: #75c1d2;
+  --gut: #79c994;
+  --schlecht: #ed8585;
+  --warn: #e3b763;
+  --eigen: #75c1d2;
+  --markt: #c5a4d6;
+  --linie-1: #75c1d2;
+  --linie-2: #c5a4d6;
+  --linie-3: #79c994;
+  --linie-4: #e3b763;
+  --schatten: 0 0.25rem 0.9rem color-mix(in srgb, var(--text) 12%, transparent);
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
     --bg: #182129;
     --karte: #222e38;
     --text: #e3ebf0;
@@ -25,6 +72,11 @@
     --warn: #e3b763;
     --eigen: #75c1d2;
     --markt: #c5a4d6;
+    --linie-1: #75c1d2;
+    --linie-2: #c5a4d6;
+    --linie-3: #79c994;
+    --linie-4: #e3b763;
+    --schatten: 0 0.25rem 0.9rem color-mix(in srgb, var(--text) 12%, transparent);
   }
 }
 
@@ -36,11 +88,16 @@
   display: none !important;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
   font-family: system-ui, sans-serif;
+  font-size: 1rem;
   line-height: 1.5;
 }
 
@@ -50,33 +107,33 @@ body.beschaeftigt {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 
 button,
 input,
-select {
-  min-height: 40px;
+select,
+textarea {
+  min-height: 2.5rem;
 }
 
 button {
   padding: 0.5rem 0.9rem;
   border: 1px solid var(--rand);
-  border-radius: 0.5rem;
+  border-radius: 0.55rem;
   background: var(--karte);
   color: var(--text);
   cursor: pointer;
-  transition: background-color 120ms ease, border-color 120ms ease;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
 }
 
 button:hover:not(:disabled) {
   border-color: var(--akzent);
 }
 
-button:focus-visible,
-input:focus-visible,
-select:focus-visible {
+:focus-visible {
   outline: 3px solid var(--akzent);
   outline-offset: 2px;
 }
@@ -88,6 +145,7 @@ button.primaer {
 }
 
 button.primaer:hover:not(:disabled) {
+  border-color: var(--eigen);
   background: var(--eigen);
 }
 
@@ -104,44 +162,106 @@ button:disabled {
 }
 
 input,
-select {
+select,
+textarea {
   width: 100%;
-  padding: 0.5rem 0.7rem;
+  padding: 0.55rem 0.75rem;
   border: 1px solid var(--rand);
-  border-radius: 0.5rem;
+  border-radius: 0.55rem;
   background: var(--karte);
   color: var(--text);
 }
 
+textarea {
+  resize: vertical;
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  width: auto;
+  min-width: 1rem;
+  min-height: auto;
+  margin: 0;
+  accent-color: var(--akzent);
+}
+
+input[type="range"] {
+  min-height: 2.5rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  accent-color: var(--akzent);
+}
+
 .karte {
   margin-bottom: 1rem;
-  padding: 1rem;
+  padding: 1.15rem;
   border: 1px solid var(--rand);
-  border-radius: 0.8rem;
+  border-radius: 0.85rem;
   background: var(--karte);
+  box-shadow: var(--schatten);
+}
+
+.karte h2,
+.karte h3 {
+  margin: 0 0 0.85rem;
+  font-size: 1.1rem;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  color: var(--text);
+  line-height: 1.35;
+}
+
+h3 {
+  margin: 1.2rem 0 0.5rem;
+  font-size: 1.05rem;
+  font-weight: 650;
+}
+
+h4 {
+  margin: 1rem 0 0.4rem;
+  font-size: 1rem;
+  font-weight: 650;
+}
+
+p {
+  margin: 0 0 0.75rem;
 }
 
 #kopf {
   position: sticky;
   top: 0;
-  z-index: 10;
+  z-index: 20;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 0.75rem;
-  padding: 0.75rem max(1rem, calc((100vw - 1200px) / 2));
+  gap: 0.65rem 0.85rem;
+  padding: 0.7rem max(1rem, calc((100vw - 1200px) / 2));
   border-bottom: 1px solid var(--rand);
   background: var(--karte);
+  box-shadow: var(--schatten);
 }
 
 #kopf h1 {
   margin: 0;
-  font-size: 1.15rem;
+  font-size: 1.2rem;
+  font-weight: 650;
   line-height: 1.25;
 }
 
 #branche-anzeige,
-#zeit-anzeige {
-  padding: 0.25rem 0.65rem;
+#zeit-anzeige,
+.badge {
+  display: inline-flex;
+  min-height: 2rem;
+  align-items: center;
+  padding: 0.2rem 0.7rem;
   border: 1px solid var(--rand);
   border-radius: 999px;
   color: var(--text-leise);
@@ -149,61 +269,188 @@ select {
   white-space: nowrap;
 }
 
+.badge,
+#einstufung-anzeige {
+  border-color: color-mix(in srgb, var(--akzent) 28%, var(--rand));
+  background: color-mix(in srgb, var(--akzent) 10%, var(--karte));
+  color: var(--akzent);
+  font-weight: 600;
+}
+
+#zeit-anzeige {
+  color: var(--text-leise);
+}
+
+#theme-btn {
+  width: 2.5rem;
+  min-width: 2.5rem;
+  min-height: 2.5rem;
+  padding: 0;
+  border-radius: 0.55rem;
+}
+
 #speichern-btn {
   margin-left: auto;
 }
 
-#fehler {
-  max-width: 1200px;
+#fehler,
+#status {
+  width: min(100% - 2rem, 1200px);
   margin: 1rem auto;
-  padding: 0.85rem 1rem;
-  border: 1px solid var(--schlecht);
+  padding: 0.8rem 1rem;
+  border: 1px solid var(--rand);
   border-radius: 0.7rem;
+  background: var(--karte);
+}
+
+#fehler {
+  border-color: color-mix(in srgb, var(--schlecht) 55%, var(--rand));
   background: color-mix(in srgb, var(--schlecht) 10%, var(--karte));
   color: var(--schlecht);
   font-weight: 600;
 }
 
 #status {
-  max-width: 1200px;
-  margin: 1rem auto;
-  padding: 0.75rem 1rem;
-  border: 1px solid var(--rand);
-  border-radius: 0.7rem;
-  background: var(--karte);
   color: var(--text-leise);
 }
 
 main {
   width: min(100% - 2rem, 1200px);
-  margin: 1.5rem auto;
+  margin: 1.25rem auto;
 }
 
 #ansicht-gruendung {
-  max-width: 560px;
+  max-width: 35rem;
   margin-right: auto;
   margin-left: auto;
 }
 
+#gruendung-form {
+  display: grid;
+  gap: 0.55rem;
+}
+
+#gruendung-form label {
+  margin-top: 0.6rem;
+  font-weight: 600;
+}
+
+#gruendung-form button {
+  margin-top: 0.65rem;
+}
+
 .feld {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
   margin-bottom: 1rem;
+}
+
+.feld-kopf {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
 }
 
 .feld-name {
   display: block;
-  margin-bottom: 0.35rem;
-  font-weight: 650;
+  margin-bottom: 0.1rem;
+  font-weight: 600;
 }
 
-small.hinweis {
+small.hinweis,
+.hinweis {
   display: block;
+  margin-top: 0.2rem;
+  color: var(--text-leise);
+  font-size: 0.875rem;
+}
+
+small.jahr.hinweis,
+.hinweis.jahr {
+  color: var(--warn);
+}
+
+.geplant {
+  color: var(--akzent);
+  font-size: 0.875rem;
+  font-style: italic;
+}
+
+.warnung {
+  padding: 0.75rem 0.9rem;
+  border: 1px solid color-mix(in srgb, var(--warn) 30%, var(--rand));
+  border-radius: 0.65rem;
+  background: color-mix(in srgb, var(--warn) 10%, var(--karte));
+  color: var(--text);
+}
+
+.autopilot-zeile {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+}
+
+.autopilot-zeile input[type="checkbox"],
+.autopilot-zeile input[type="radio"] {
+  flex: none;
   margin-top: 0.3rem;
+}
+
+.autopilot-text,
+.autopilot {
+  color: var(--text-leise);
+  font-size: 0.875rem;
+}
+
+.schieber {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.info-wrap {
+  position: relative;
+  display: inline-block;
+  flex: none;
+}
+
+.info-btn {
+  display: inline-grid;
+  width: 1.5rem;
+  min-width: 1.5rem;
+  min-height: 1.5rem;
+  place-items: center;
+  padding: 0;
+  border-radius: 50%;
   color: var(--text-leise);
   font-size: 0.85rem;
+  line-height: 1;
 }
 
-small.jahr.hinweis {
-  color: var(--warn);
+.info-pop {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  left: 0;
+  z-index: 30;
+  width: min(22rem, 90vw);
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--rand);
+  border-radius: 0.7rem;
+  background: var(--karte);
+  box-shadow: var(--schatten);
+  color: var(--text);
+}
+
+.info-pop p {
+  margin: 0 0 0.45rem;
+  font-size: 0.9rem;
+}
+
+.info-pop p:last-child {
+  margin-bottom: 0;
 }
 
 #spielstaende-liste {
@@ -225,9 +472,58 @@ small.jahr.hinweis {
   border-bottom: 0;
 }
 
+.reiter-leiste {
+  position: sticky;
+  top: 4.25rem;
+  z-index: 15;
+  display: flex;
+  gap: 0.25rem;
+  overflow-x: auto;
+  padding: 0.35rem 0.25rem 0;
+  border-bottom: 1px solid var(--rand);
+  background: var(--karte);
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+.reiter-btn {
+  position: relative;
+  flex: none;
+  min-height: 2.75rem;
+  padding: 0.55rem 0.85rem;
+  border: 0;
+  border-radius: 0.45rem 0.45rem 0 0;
+  background: transparent;
+  color: var(--text-leise);
+  white-space: nowrap;
+}
+
+.reiter-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--akzent) 7%, var(--karte));
+  color: var(--text);
+}
+
+.reiter-btn.aktiv,
+.reiter-btn[aria-selected="true"] {
+  color: var(--akzent);
+  font-weight: 650;
+}
+
+.reiter-btn.aktiv::after,
+.reiter-btn[aria-selected="true"]::after {
+  position: absolute;
+  right: 0.55rem;
+  bottom: 0;
+  left: 0.55rem;
+  height: 0.18rem;
+  border-radius: 999px 999px 0 0;
+  background: var(--akzent);
+  content: "";
+}
+
 .cockpit-raster {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 340px;
+  grid-template-columns: minmax(0, 1fr);
   align-items: start;
   gap: 1.25rem;
 }
@@ -239,14 +535,39 @@ small.jahr.hinweis {
   min-width: 0;
 }
 
-.haupt .karte h2 {
+.reiter-inhalt {
+  min-width: 0;
+  padding: 1.15rem 0 6rem;
+}
+
+.reiter-inhalt > h2:first-child {
+  margin-top: 0;
+}
+
+.reiter-inhalt h2 {
   margin: 0 0 0.85rem;
-  font-size: 1.05rem;
+  font-size: 1.2rem;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.reiter-inhalt h3 {
+  margin: 1.25rem 0 0.55rem;
+}
+
+.reiter-inhalt h4 {
+  margin: 1rem 0 0.4rem;
+}
+
+.raster {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(16rem, 100%), 1fr));
+  gap: 1rem;
 }
 
 #einstellungen-form {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(15rem, 100%), 1fr));
   gap: 1rem;
 }
 
@@ -256,12 +577,16 @@ small.jahr.hinweis {
 
 .kpi-raster {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(9rem, 100%), 1fr));
   gap: 0.75rem;
 }
 
 .kpi {
   min-width: 0;
+  padding: 0.85rem;
+  border: 1px solid var(--rand);
+  border-radius: 0.7rem;
+  background: color-mix(in srgb, var(--bg) 55%, var(--karte));
 }
 
 .kpi-label {
@@ -271,26 +596,172 @@ small.jahr.hinweis {
 
 .kpi-wert {
   display: block;
-  margin-top: 0.15rem;
-  font-size: clamp(1rem, 1.6vw, 1.3rem);
+  margin-top: 0.2rem;
+  font-size: clamp(1.15rem, 2vw, 1.55rem);
   font-weight: 700;
-  line-height: 1.2;
-  white-space: nowrap;
+  line-height: 1.25;
   font-variant-numeric: tabular-nums;
 }
 
-.kpi-wert.positiv {
+.kpi-hinweis {
+  display: block;
+  margin-top: 0.2rem;
+  color: var(--text-leise);
+  font-size: 0.8rem;
+}
+
+.kpi-wert.positiv,
+.positiv {
   color: var(--gut);
 }
 
-.kpi-wert.negativ {
+.kpi-wert.negativ,
+.negativ {
   color: var(--schlecht);
+}
+
+.ampel-liste {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ampel {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: 0.6rem;
+  background: color-mix(in srgb, var(--text-leise) 8%, var(--karte));
+}
+
+.ampel-punkt {
+  width: 0.65rem;
+  height: 0.65rem;
+  flex: none;
+  margin-top: 0.42rem;
+  border-radius: 50%;
+  background: var(--text-leise);
+}
+
+.ampel.rot {
+  background: color-mix(in srgb, var(--schlecht) 9%, var(--karte));
+}
+
+.ampel.rot .ampel-punkt {
+  background: var(--schlecht);
+}
+
+.ampel.gelb {
+  background: color-mix(in srgb, var(--warn) 11%, var(--karte));
+}
+
+.ampel.gelb .ampel-punkt {
+  background: var(--warn);
+}
+
+.ampel.gruen {
+  background: color-mix(in srgb, var(--gut) 9%, var(--karte));
+}
+
+.ampel.gruen .ampel-punkt {
+  background: var(--gut);
+}
+
+.wirkung-liste {
+  display: grid;
+  gap: 0.65rem;
+  margin: 0;
+  padding-left: 1.5rem;
+}
+
+.wirkung-liste li {
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--rand);
+  border-radius: 0.65rem;
+  background: var(--karte);
+}
+
+.wirkung-aenderungen {
+  margin-top: 0.4rem;
+  color: var(--text-leise);
+  font-size: 0.9rem;
+}
+
+.delta-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.6rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-leise) 10%, var(--karte));
+  color: var(--text-leise);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.delta-chip.hoch {
+  background: color-mix(in srgb, var(--gut) 12%, var(--karte));
+  color: var(--gut);
+}
+
+.delta-chip.runter {
+  background: color-mix(in srgb, var(--schlecht) 12%, var(--karte));
+  color: var(--schlecht);
+}
+
+.delta-chip.gleich {
+  color: var(--text-leise);
+}
+
+svg.linien-grafik,
+svg.punkt-grafik {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 100%;
+  color: var(--text-leise);
+  font-size: 0.75rem;
+  overflow: visible;
+}
+
+svg text {
+  fill: var(--text-leise);
+}
+
+.linie {
+  fill: none;
+  stroke: var(--akzent);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.nulllinie {
+  fill: none;
+  stroke: var(--text-leise);
+  stroke-dasharray: 4 4;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.punkt {
+  fill: var(--akzent);
+  opacity: 0.6;
+}
+
+.punkt.aktuell {
+  opacity: 1;
+  r: 5;
 }
 
 #kassenverlauf {
   display: block;
   width: 100%;
-  height: 80px;
+  height: auto;
+  max-height: 12rem;
 }
 
 #kassenverlauf .linie {
@@ -316,9 +787,7 @@ small.jahr.hinweis {
 }
 
 #meldungen {
-  position: sticky;
-  top: 5.5rem;
-  max-height: 80vh;
+  position: static;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -326,7 +795,7 @@ small.jahr.hinweis {
 
 #meldungen h2 {
   margin: 0 0 0.75rem;
-  font-size: 1.05rem;
+  font-size: 1.1rem;
 }
 
 #meldungen ul {
@@ -339,12 +808,12 @@ small.jahr.hinweis {
 .filter {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.25rem;
+  gap: 0.3rem;
   margin-bottom: 0.75rem;
 }
 
 .filter .filter-btn {
-  min-height: 40px;
+  min-height: 2.5rem;
   padding: 0.35rem 0.7rem;
   border-radius: 0.5rem;
   color: var(--text-leise);
@@ -362,10 +831,10 @@ small.jahr.hinweis {
 
 li.meldung {
   margin-bottom: 0.65rem;
-  padding: 0.55rem 0.7rem;
+  padding: 0.65rem 0.75rem;
   border: 1px solid var(--rand);
   border-left: 3px solid var(--rand);
-  border-radius: 0.45rem;
+  border-radius: 0.55rem;
   background: var(--karte);
 }
 
@@ -386,8 +855,28 @@ li.meldung .zeit {
   display: block;
   margin-top: 0.2rem;
   color: var(--text-leise);
-  font-size: 0.78rem;
+  font-size: 0.8rem;
   font-weight: 400;
+}
+
+#berater {
+  margin-top: 1rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--rand);
+}
+
+#berater textarea {
+  width: 100%;
+  margin: 0.4rem 0;
+  font: inherit;
+}
+
+#berater-antwort ul {
+  padding-left: 1.1rem;
+}
+
+#berater-antwort li {
+  margin: 0.35rem 0;
 }
 
 #spielende {
@@ -396,13 +885,14 @@ li.meldung .zeit {
 }
 
 dialog {
-  width: min(100% - 2rem, 560px);
+  width: min(100% - 2rem, 35rem);
   max-height: 85vh;
   padding: 1.25rem;
   border: 1px solid var(--rand);
   border-radius: 0.9rem;
   background: var(--karte);
   color: var(--text);
+  box-shadow: var(--schatten);
 }
 
 dialog::backdrop {
@@ -415,79 +905,489 @@ dialog form .aktionen {
   margin-top: 1rem;
 }
 
-@media (max-width: 800px) {
+dialog form {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.fussleiste {
+  position: sticky;
+  bottom: 0;
+  z-index: 18;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem 1rem;
+  margin: 1rem calc((min(100vw - 2rem, 1200px) - 100%) / 2) 0;
+  padding: 0.75rem max(1rem, calc((100vw - 1200px) / 2));
+  border-top: 1px solid var(--rand);
+  background: var(--karte);
+  box-shadow: 0 -0.2rem 0.8rem color-mix(in srgb, var(--text) 7%, transparent);
+}
+
+.geplant-zaehler {
+  display: inline-flex;
+  min-height: 2rem;
+  align-items: center;
+  padding: 0.2rem 0.7rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--warn) 14%, var(--karte));
+  color: var(--warn);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.fussleiste .aktionen {
+  justify-content: flex-end;
+}
+
+.reiter-inhalt table {
+  width: 100%;
+  margin: 0.75rem 0;
+  border-collapse: collapse;
+}
+
+.reiter-inhalt th,
+.reiter-inhalt td {
+  padding: 0.55rem 0.65rem;
+  border-bottom: 1px solid var(--rand);
+  text-align: left;
+  vertical-align: top;
+}
+
+.reiter-inhalt th {
+  color: var(--text-leise);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.reiter-inhalt td {
+  font-variant-numeric: tabular-nums;
+}
+
+.reiter-inhalt tbody tr:nth-child(even) {
+  background: color-mix(in srgb, var(--bg) 65%, var(--karte));
+}
+
+.tabelle-rahmen {
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--rand);
+  border-radius: 0.65rem;
+}
+
+.tabelle-rahmen table {
+  min-width: 35rem;
+  margin: 0;
+}
+
+.tabelle-rahmen select,
+.tabelle-rahmen input {
+  min-height: 2.25rem;
+  padding: 0.3rem 0.5rem;
+}
+
+.reiter-inhalt ul,
+.reiter-inhalt ol {
+  padding-left: 1.4rem;
+}
+
+.reiter-inhalt li + li {
+  margin-top: 0.25rem;
+}
+
+.reiter-inhalt details {
+  margin: 0.7rem 0;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--rand);
+  border-radius: 0.65rem;
+  background: var(--karte);
+}
+
+.reiter-inhalt summary {
+  min-height: 2.5rem;
+  align-content: center;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.reiter-inhalt details > :not(summary) {
+  margin-top: 0.65rem;
+}
+
+progress,
+meter {
+  width: 100%;
+  height: 0.85rem;
+  accent-color: var(--akzent);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.chip {
+  display: inline-flex;
+  min-height: 1.9rem;
+  align-items: center;
+  padding: 0.2rem 0.65rem;
+  border: 1px solid var(--rand);
+  border-radius: 999px;
+  background: var(--karte);
+  color: var(--text-leise);
+  font-size: 0.85rem;
+}
+
+.tab-leiste,
+.unter-reiter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0.75rem 0;
+}
+
+.fortschritt {
+  width: 100%;
+  min-height: 0.6rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-leise) 15%, var(--karte));
+}
+
+.fortschritt > * {
+  min-height: inherit;
+  border-radius: inherit;
+  background: var(--akzent);
+}
+
+.erfolg,
+.ergebnis-ok {
+  color: var(--gut);
+}
+
+.fehlertext,
+.ergebnis-fehler {
+  color: var(--schlecht);
+}
+
+.reiter-inhalt dl {
+  display: grid;
+  grid-template-columns: minmax(7rem, 0.7fr) minmax(0, 1.3fr);
+  gap: 0.4rem 0.8rem;
+  margin: 0.75rem 0;
+}
+
+.reiter-inhalt dt {
+  color: var(--text-leise);
+  font-weight: 600;
+}
+
+.reiter-inhalt dd {
+  min-width: 0;
+  margin: 0;
+}
+
+.karte table {
+  margin: 0.75rem 0;
+}
+
+#holding-bereich {
+  grid-column: 1 / -1;
+}
+
+.holding-tabelle {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.holding-tabelle th,
+.holding-tabelle td {
+  padding: 0.45rem 0.55rem;
+  border-bottom: 1px solid var(--rand);
+  text-align: left;
+}
+
+.holding-tabelle td.zahl,
+.holding-tabelle th.zahl {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.holding-tabelle-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.tochter-karte {
+  margin-top: 0.8rem;
+  padding: 0.9rem;
+  border: 1px solid var(--rand);
+  border-radius: 0.75rem;
+  background: var(--karte);
+}
+
+.avatar {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.avatar-bild,
+.avatar-initialen {
+  width: 3.5rem;
+  height: 3.5rem;
+  flex: none;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.avatar-initialen {
+  display: grid;
+  place-items: center;
+  background: var(--akzent);
+  color: var(--karte);
+  font-weight: 700;
+}
+
+.ceo-zeile,
+.ceo-auswahl-zeile {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  margin: 0.5rem 0;
+}
+
+.ceo-zeile p,
+.ceo-auswahl-zeile p {
+  margin: 0.1rem 0;
+}
+
+.ceo-auswahl-zeile > div:nth-child(2) {
+  flex: 1;
+}
+
+.ceo-aktionen,
+.tochter-richtlinien {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.5rem;
+}
+
+#rueckblick h3 {
+  margin: 1rem 0 0.4rem;
+}
+
+.rueckblick-grafik {
+  width: 100%;
+  height: auto;
+  max-height: 13.75rem;
+}
+
+.rueckblick-legende {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-top: 0.3rem;
+  font-size: 0.85rem;
+}
+
+.rueckblick-ich {
+  color: var(--akzent);
+  font-weight: 700;
+}
+
+@media (min-width: 900px) {
   .cockpit-raster {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) minmax(18rem, 21rem);
+    gap: 1.5rem;
   }
 
   #meldungen {
-    position: static;
-    max-height: none;
+    position: sticky;
+    top: 8rem;
+    max-height: calc(100vh - 9rem);
+    overflow: hidden;
+  }
+
+  #meldungen-liste {
+    flex: 1;
+    overflow-y: auto;
+  }
+}
+
+@media (max-width: 899px) {
+  #meldungen {
     order: 2;
+    max-height: none;
   }
 }
 
 @media (max-width: 600px) {
   #kopf {
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    padding: 0.65rem 1rem;
+    gap: 0.45rem 0.55rem;
+    padding: 0.6rem 0.75rem;
   }
 
   #kopf h1 {
     width: 100%;
+    font-size: 1.1rem;
+  }
+
+  #branche-anzeige,
+  #zeit-anzeige,
+  .badge {
+    font-size: 0.8rem;
   }
 
   #speichern-btn {
     margin-left: auto;
   }
 
+  .reiter-leiste {
+    top: 6.5rem;
+    gap: 0.1rem;
+    padding-right: 0.5rem;
+    padding-left: 0.5rem;
+  }
+
+  .reiter-btn {
+    padding-right: 0.7rem;
+    padding-left: 0.7rem;
+  }
+
   main {
     width: min(100% - 1.25rem, 1200px);
-    margin-top: 1rem;
+    margin-top: 0.75rem;
   }
 
   #fehler,
   #status {
+    width: auto;
     margin: 0.75rem;
   }
 
   .karte {
     margin-bottom: 0.75rem;
-    padding: 0.8rem;
+    padding: 0.9rem;
   }
 
   .cockpit-raster {
     gap: 0.75rem;
   }
 
+  .reiter-inhalt {
+    padding-top: 0.9rem;
+    padding-bottom: 6rem;
+  }
+
   #einstellungen-form {
     gap: 0.75rem;
   }
+
+  .fussleiste {
+    justify-content: stretch;
+    gap: 0.5rem;
+    margin-right: calc((min(100vw - 1.25rem, 1200px) - 100%) / 2);
+    margin-left: calc((min(100vw - 1.25rem, 1200px) - 100%) / 2);
+    padding: 0.6rem 0.75rem;
+  }
+
+  .geplant-zaehler {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .fussleiste .aktionen {
+    width: 100%;
+    justify-content: stretch;
+    gap: 0.4rem;
+  }
+
+  .fussleiste .aktionen button {
+    flex: 1 1 100%;
+  }
+
+  .info-pop {
+    right: 0;
+    left: auto;
+  }
+
+  .reiter-inhalt dl {
+    grid-template-columns: minmax(6rem, 0.8fr) minmax(0, 1.2fr);
+  }
+
+  .holding-tabelle {
+    min-width: 35rem;
+  }
+
+  .ceo-zeile,
+  .ceo-auswahl-zeile {
+    align-items: flex-start;
+  }
 }
 
-/* Phase 4: Holding und CEOs */
-#holding-bereich { grid-column: 1 / -1; }
-.holding-tabelle { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
-.holding-tabelle th, .holding-tabelle td { text-align: left; padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--rand, #8884); }
-.holding-tabelle td.zahl, .holding-tabelle th.zahl { text-align: right; font-variant-numeric: tabular-nums; }
-.holding-tabelle-wrap { overflow-x: auto; }
-.tochter-karte { border: 1px solid var(--rand, #8884); border-radius: 10px; padding: 0.8rem; margin-top: 0.8rem; }
-.avatar { display: flex; gap: 0.7rem; align-items: center; }
-.avatar-bild, .avatar-initialen { width: 56px; height: 56px; border-radius: 50%; flex: none; object-fit: cover; }
-.avatar-initialen { display: grid; place-items: center; background: var(--akzent, #4a7fa8); color: #fff; font-weight: 700; }
-.ergebnis-ok { color: var(--positiv, #3c9a5f); }
-.ergebnis-fehler { color: var(--negativ, #c0504d); }
-.geplant { color: var(--akzent, #4a7fa8); font-style: italic; }
-.ceo-zeile, .ceo-auswahl-zeile { display: flex; gap: 0.7rem; align-items: center; margin: 0.5rem 0; }
-.ceo-zeile p, .ceo-auswahl-zeile p { margin: 0.1rem 0; }
-.ceo-auswahl-zeile > div:nth-child(2) { flex: 1; }
-.ceo-aktionen, .tochter-richtlinien { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; margin-top: 0.5rem; }
-#berater { margin-top: 1rem; border-top: 1px solid var(--rand, #8884); padding-top: 0.8rem; }
-#berater textarea { width: 100%; box-sizing: border-box; margin: 0.4rem 0; font: inherit; }
-#berater-antwort ul { padding-left: 1.1rem; }
-#berater-antwort li { margin: 0.35rem 0; }
-#rueckblick h3 { margin: 1rem 0 0.4rem; }
-.rueckblick-grafik { width: 100%; height: auto; max-height: 220px; }
-.rueckblick-legende { display: flex; flex-wrap: wrap; gap: 1rem; font-size: 0.85rem; margin-top: 0.3rem; }
-.rueckblick-ich { font-weight: 700; color: var(--akzent, #4a7fa8); }
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+@media print {
+  :root {
+    color-scheme: light;
+  }
+
+  body {
+    background: var(--karte);
+    color: var(--text);
+  }
+
+  #kopf,
+  .reiter-leiste,
+  #fussleiste,
+  #theme-btn,
+  #speichern-btn {
+    position: static;
+    box-shadow: none;
+  }
+
+  #meldungen {
+    position: static;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .cockpit-raster {
+    display: block;
+  }
+
+  .karte,
+  .tochter-karte {
+    break-inside: avoid;
+    box-shadow: none;
+  }
+
+  button,
+  .filter {
+    display: none;
+  }
+}
+
+/* Gemeinsame Farbnamen für die Reiter-Module (verweisen auf die Grundfarben, gelten hell und dunkel). */
+:root, html[data-theme] {
+  --flaeche: color-mix(in srgb, var(--karte) 85%, var(--text) 15%);
+  --positiv: var(--gut);
+  --negativ: var(--schlecht);
+  --warnung: var(--warn);
+}

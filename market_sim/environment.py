@@ -783,6 +783,18 @@ class MarketEnvironment:
         return min(quantity, max(0, int(budget / unit_cost)))
 
     def _split_order(self, firm: Firm, candidates: list[Firm], quantity: int) -> dict[str, int]:
+        # Spielmodus: fester Lieferant bzw. Bewertungskriterium der Spielerfirma.
+        choice = getattr(self, "player_choices", {}).get(firm.id)
+        weights = self.config.supplier_score_weights
+        if choice is not None:
+            fixed = getattr(choice, "supplier_id", None)
+            if fixed and any(c.id == fixed for c in candidates):
+                candidates = [c for c in candidates if c.id == fixed]
+            rule = getattr(choice, "supplier_rule", None)
+            if rule and rule in type(weights).model_fields:
+                raw = {name: (1.0 if name == rule else 0.1) for name in type(weights).model_fields}
+                total = sum(raw.values())
+                weights = type(weights)(**{name: value / total for name, value in raw.items()})
         lead_times = {candidate.id: self.config.logistics.default_lead_time_days for candidate in candidates}
         delivered = None
         geo = self.geography
@@ -792,7 +804,7 @@ class MarketEnvironment:
             lead_times = {c.id: geo.km(c, firm) / geo.cfg.km_per_lead_day for c in candidates}
             delivered = {c.id: c.sell_price + geo.unit_transport_cost(c, firm) / units for c in candidates}
         return split_order(
-            firm, candidates, quantity, self.config.supplier_score_weights,
+            firm, candidates, quantity, weights,
             lead_times, self.config.policy.concentration,
             active_firm_ids=None,
             priority_boost=self.config.policy.supplier_priority_boost,

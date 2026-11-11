@@ -1,13 +1,32 @@
 'use strict';
 
 let aktuellerStand = null;
-let basisEinstellungen = {};
 let beschaeftigt = false;
 let meldungsFilter = 'alle';
 let statusTimer = null;
 let buttonZustaende = new Map();
+let geplantReiter = {};
+let aktiverReiter = 'uebersicht';
+let zeichnungsNr = 0;
+let reiterInitialisiert = false;
+let letzterRenderSchluessel = null;
+let themeModus = 'system';
 
 const svgNs = 'http://www.w3.org/2000/svg';
+const REITER_KEYS = [
+    'uebersicht',
+    'firma',
+    'markt',
+    'forschung',
+    'logistik',
+    'finanzen',
+    'boerse',
+    'rohstoffe',
+    'bevoelkerung',
+    'holding',
+    'graubereich',
+    'hilfe'
+];
 
 function element(id) {
     return document.getElementById(id);
@@ -95,7 +114,7 @@ function fuelleAuswahl(id, werte, mitLabel) {
 async function ladeOptionen() {
     const daten = await api('/api/options');
     if (!daten) return;
-    merkeOptionen(daten);
+    if (typeof merkeOptionen === 'function') merkeOptionen(daten);
 
     fuelleAuswahl('branche-select', daten.branches, true);
     fuelleAuswahl('region-select', daten.regions, false);
@@ -110,12 +129,9 @@ function formatiereDatum(wert) {
     return datum.toLocaleString('de-CH');
 }
 
-async function ladeSpielstaende() {
+function fuelleSpielstaende(daten) {
     const liste = element('spielstaende-liste');
-    if (!liste) return;
-
-    const daten = await api('/api/saves');
-    if (!daten) return;
+    if (!liste || !daten) return;
 
     liste.replaceChildren();
     const spielstaende = daten.saves || [];
@@ -140,6 +156,14 @@ async function ladeSpielstaende() {
         li.append(text, laden);
         liste.appendChild(li);
     });
+}
+
+async function ladeSpielstaende() {
+    const liste = element('spielstaende-liste');
+    if (!liste) return;
+
+    const daten = await api('/api/saves');
+    if (daten) fuelleSpielstaende(daten);
 }
 
 function setzeStatus(text, dauer) {
@@ -194,9 +218,12 @@ function updateButtons() {
         if (knopf) knopf.disabled = beschaeftigt || spielBeendet;
     });
 
-    document.querySelectorAll('[data-key]').forEach((feld) => {
-        feld.disabled = spielBeendet;
-    });
+    const firma = element('tab-firma');
+    if (firma) {
+        firma.querySelectorAll('input, select, textarea, button').forEach((feld) => {
+            if (spielBeendet) feld.disabled = true;
+        });
+    }
 
     if (beschaeftigt) {
         document.querySelectorAll('button').forEach((knopf) => {
@@ -232,9 +259,12 @@ function setzeText(id, text) {
 
 function formatiereGeld(wert) {
     const zahl = Number(wert);
+    const gueltig = Number.isFinite(zahl) ? zahl : 0;
+    const dezimalen = Math.abs(gueltig) < 100 && !Number.isInteger(gueltig) ? 2 : 0;
     return `${new Intl.NumberFormat('de-CH', {
-        maximumFractionDigits: 0
-    }).format(Number.isFinite(zahl) ? zahl : 0)} CHF`;
+        minimumFractionDigits: dezimalen,
+        maximumFractionDigits: dezimalen
+    }).format(gueltig)} CHF`;
 }
 
 function formatiereGanzzahl(wert) {
@@ -244,90 +274,22 @@ function formatiereGanzzahl(wert) {
     }).format(Number.isFinite(zahl) ? zahl : 0);
 }
 
-function setzeKpi(id, text, klasse) {
-    const feld = element(id);
-    if (!feld) return;
-
-    const wert = feld.matches('.kpi-wert') ? feld : feld.querySelector('.kpi-wert');
-    const ziel = wert || feld;
-    ziel.textContent = text;
-    if (wert) {
-        wert.classList.remove('positiv', 'negativ');
-        if (klasse) wert.classList.add(klasse);
-    }
+function formatiereZahl(wert, stellen) {
+    const zahl = Number(wert);
+    if (!Number.isFinite(zahl)) return '0';
+    return new Intl.NumberFormat('de-CH', {
+        minimumFractionDigits: stellen,
+        maximumFractionDigits: stellen
+    }).format(zahl);
 }
 
-function zeichneKassenverlauf(history) {
-    const svg = element('kassenverlauf');
-    if (!svg) return;
-
-    svg.replaceChildren();
-    svg.setAttribute('viewBox', '0 0 300 80');
-
-    const werte = (history || [])
-        .map((eintrag) => Number(eintrag.cash))
-        .filter(Number.isFinite);
-
-    if (werte.length === 0) return;
-
-    const min = Math.min(...werte);
-    const max = Math.max(...werte);
-    const gleicherWert = min === max;
-    const punkte = werte.map((wert, index) => {
-        const x = werte.length === 1
-            ? 4
-            : 4 + (index * 292) / (werte.length - 1);
-        const y = gleicherWert
-            ? 40
-            : 76 - ((wert - min) / (max - min)) * 72;
-        return `${x},${y}`;
-    });
-
-    if (werte.length === 1) punkte.push(`296,${punkte[0].split(',')[1]}`);
-
-    if (min <= 0 && max >= 0) {
-        const nulllinie = document.createElementNS(svgNs, 'line');
-        const y = gleicherWert
-            ? 40
-            : 76 - ((0 - min) / (max - min)) * 72;
-        nulllinie.setAttribute('x1', '4');
-        nulllinie.setAttribute('x2', '296');
-        nulllinie.setAttribute('y1', String(y));
-        nulllinie.setAttribute('y2', String(y));
-        nulllinie.setAttribute('class', 'nulllinie');
-        nulllinie.setAttribute('stroke-dasharray', '4 4');
-        svg.appendChild(nulllinie);
-    }
-
-    if (werte.length >= 2) {
-        const linie = document.createElementNS(svgNs, 'polyline');
-        linie.setAttribute('class', 'linie');
-        linie.setAttribute('points', punkte.join(' '));
-        linie.setAttribute('fill', 'none');
-        svg.appendChild(linie);
-    }
-}
-
-function fuelleEinstellungen(settings) {
-    basisEinstellungen = { ...(settings || {}) };
-
-    document.querySelectorAll('[data-key]').forEach((feld) => {
-        if (document.activeElement === feld) return;
-
-        const key = feld.dataset.key;
-        const wert = basisEinstellungen[key];
-
-        if (key === 'order_qty' && wert === null) {
-            feld.value = '';
-        } else if (feld.dataset.typ === 'prozent') {
-            const zahl = Number(wert);
-            feld.value = Number.isFinite(zahl) ? String(Math.round(zahl * 100)) : '';
-        } else if (wert !== undefined && wert !== null) {
-            feld.value = String(wert);
-        } else {
-            feld.value = '';
-        }
-    });
+function formatiereProzent(wert) {
+    const zahl = Number(wert);
+    if (!Number.isFinite(zahl)) return '0.0 %';
+    return `${new Intl.NumberFormat('de-CH', {
+        minimumFractionDigits: 1,
+        maximumFractionDigits: 1
+    }).format(zahl * 100)} %`;
 }
 
 function zeigeSpielende(state) {
@@ -394,8 +356,648 @@ function aktualisiereFilter() {
     });
 }
 
+function aktualisiereGeplantZaehler() {
+    const zaehler = element('geplant-zaehler');
+    if (!zaehler) return;
+
+    const anzahl = Object.keys(geplantReiter).length;
+    zaehler.hidden = anzahl === 0;
+    zaehler.textContent = anzahl === 1
+        ? 'Geplant: 1 Auftrag'
+        : `Geplant: ${anzahl} Aufträge`;
+}
+
+function planeReiter(key, value) {
+    if (value === null || value === undefined) {
+        delete geplantReiter[key];
+    } else {
+        geplantReiter[key] = value;
+    }
+    aktualisiereGeplantZaehler();
+}
+
+function baueCtx(state) {
+    const aktueller = state || aktuellerStand || {};
+
+    return {
+        state: aktueller,
+        ansicht: async (name, query) => {
+            const parameter = new URLSearchParams();
+            if (query && typeof query === 'object') {
+                Object.keys(query).forEach((key) => {
+                    const wert = query[key];
+                    if (wert !== null && wert !== undefined) {
+                        parameter.set(key, String(wert));
+                    }
+                });
+            }
+            const suffix = parameter.toString();
+            const pfad = `/api/view/${encodeURIComponent(name)}${suffix ? `?${suffix}` : ''}`;
+
+            try {
+                const res = await fetch(pfad, { method: 'GET' });
+                if (!res.ok) return null;
+                const daten = await res.json();
+                if (daten && Object.prototype.hasOwnProperty.call(daten, 'error')) return null;
+                return daten;
+            } catch (err) {
+                return null;
+            }
+        },
+        plane: (key, value) => planeReiter(key, value),
+        geplant: () => ({ ...geplantReiter }),
+        entscheide: (patch) => {
+            if (typeof entscheidePatch === 'function') entscheidePatch(patch);
+        },
+        geld: formatiereGeld,
+        zahl: (wert, stellen = 0) => formatiereZahl(wert, stellen),
+        prozent: formatiereProzent,
+        linien: baueLinienGrafik,
+        neuZeichnen: () => zeichneReiter(aktiverReiter)
+    };
+}
+
+window.CockpitCtx = baueCtx;
+
+function baueLinienGrafik(series, optionen) {
+    const grafik = document.createElementNS(svgNs, 'svg');
+    const hoehe = Math.max(120, Number(optionen && optionen.hoehe) || 200);
+    const labels = (optionen && optionen.labels) || [];
+    const serien = (series || []).map((reihe, index) => ({
+        name: reihe.name || `Serie ${index + 1}`,
+        werte: (reihe.werte || []).map(Number),
+        farbe: reihe.farbe || `var(--linie-${(index % 4) + 1})`
+    }));
+
+    grafik.setAttribute('class', 'linien-grafik');
+    grafik.setAttribute('viewBox', `0 0 600 ${hoehe}`);
+    grafik.setAttribute('width', '100%');
+    grafik.setAttribute('preserveAspectRatio', 'none');
+    grafik.setAttribute('role', 'img');
+
+    const alleWerte = serien.flatMap((reihe) => reihe.werte.filter(Number.isFinite));
+    if (!alleWerte.length) return grafik;
+
+    let min = Math.min(...alleWerte);
+    let max = Math.max(...alleWerte);
+    if (min === max) {
+        min -= 1;
+        max += 1;
+    }
+
+    const links = 52;
+    const rechts = 590;
+    const oben = 34;
+    const unten = hoehe - 32;
+    const yFuer = (wert) => unten - ((wert - min) / (max - min)) * (unten - oben);
+
+    const beschriftungMin = document.createElementNS(svgNs, 'text');
+    beschriftungMin.setAttribute('x', '4');
+    beschriftungMin.setAttribute('y', String(unten));
+    beschriftungMin.setAttribute('class', 'achsen-beschriftung');
+    beschriftungMin.textContent = formatiereZahl(min, 1);
+    grafik.appendChild(beschriftungMin);
+
+    const beschriftungMax = document.createElementNS(svgNs, 'text');
+    beschriftungMax.setAttribute('x', '4');
+    beschriftungMax.setAttribute('y', String(oben + 4));
+    beschriftungMax.setAttribute('class', 'achsen-beschriftung');
+    beschriftungMax.textContent = formatiereZahl(max, 1);
+    grafik.appendChild(beschriftungMax);
+
+    if (min <= 0 && max >= 0) {
+        const nulllinie = document.createElementNS(svgNs, 'line');
+        nulllinie.setAttribute('x1', String(links));
+        nulllinie.setAttribute('x2', String(rechts));
+        nulllinie.setAttribute('y1', String(yFuer(0)));
+        nulllinie.setAttribute('y2', String(yFuer(0)));
+        nulllinie.setAttribute('class', 'nulllinie');
+        nulllinie.setAttribute('stroke-dasharray', '4 4');
+        grafik.appendChild(nulllinie);
+    }
+
+    const laengsteSerie = Math.max(0, ...serien.map((reihe) => reihe.werte.length));
+    const abstand = laengsteSerie > 1 ? (rechts - links) / (laengsteSerie - 1) : 0;
+    serien.forEach((reihe, index) => {
+        const punkte = reihe.werte
+            .map((wert, punktIndex) => Number.isFinite(wert)
+                ? `${laengsteSerie > 1 ? links + punktIndex * abstand : (links + rechts) / 2},${yFuer(wert)}`
+                : null)
+            .filter(Boolean);
+        if (punkte.length < 2) return;
+
+        const linie = document.createElementNS(svgNs, 'polyline');
+        linie.setAttribute('class', 'linie');
+        linie.setAttribute('points', punkte.join(' '));
+        linie.setAttribute('fill', 'none');
+        linie.style.stroke = reihe.farbe;
+        linie.setAttribute('role', 'img');
+        linie.setAttribute('aria-label', reihe.name);
+        grafik.appendChild(linie);
+    });
+
+    const sichtbareLabels = [];
+    const schritt = Math.max(1, Math.ceil(labels.length / 6));
+    for (let index = 0; index < labels.length; index += schritt) {
+        sichtbareLabels.push(index);
+    }
+    if (labels.length && sichtbareLabels[sichtbareLabels.length - 1] !== labels.length - 1) {
+        sichtbareLabels.push(labels.length - 1);
+    }
+
+    sichtbareLabels.forEach((index) => {
+        const x = labels.length > 1
+            ? links + (index * (rechts - links)) / (labels.length - 1)
+            : (links + rechts) / 2;
+        const text = document.createElementNS(svgNs, 'text');
+        text.setAttribute('x', String(x));
+        text.setAttribute('y', String(hoehe - 7));
+        text.setAttribute('text-anchor', 'middle');
+        text.setAttribute('class', 'achsen-beschriftung');
+        text.textContent = String(labels[index]);
+        grafik.appendChild(text);
+    });
+
+    serien.forEach((reihe, index) => {
+        const x = links + index * 145;
+        const quadrat = document.createElementNS(svgNs, 'rect');
+        quadrat.setAttribute('x', String(x));
+        quadrat.setAttribute('y', '8');
+        quadrat.setAttribute('width', '9');
+        quadrat.setAttribute('height', '9');
+        quadrat.style.fill = reihe.farbe;
+        grafik.appendChild(quadrat);
+
+        const text = document.createElementNS(svgNs, 'text');
+        text.setAttribute('x', String(x + 13));
+        text.setAttribute('y', '16');
+        text.setAttribute('class', 'legende');
+        text.textContent = reihe.name;
+        grafik.appendChild(text);
+    });
+
+    return grafik;
+}
+
+function baueKarte(titel) {
+    const karte = document.createElement('section');
+    karte.className = 'karte';
+    const kopf = document.createElement('h2');
+    kopf.textContent = titel;
+    karte.appendChild(kopf);
+    return karte;
+}
+
+function baueKpiRaster() {
+    const raster = document.createElement('div');
+    raster.className = 'kpi-raster';
+    return raster;
+}
+
+function fuegeKpi(raster, label, wert, hinweis, info, klasse) {
+    const kpi = document.createElement('article');
+    kpi.className = 'kpi';
+
+    const kopf = document.createElement('div');
+    kopf.className = 'kpi-kopf';
+    const beschriftung = document.createElement('span');
+    beschriftung.className = 'kpi-label';
+    beschriftung.textContent = label;
+    kopf.appendChild(beschriftung);
+
+    if (info && typeof infoKnopf === 'function') {
+        const hilfe = infoKnopf(info.wofuer, info.wenn);
+        if (hilfe) kopf.appendChild(hilfe);
+    }
+
+    const anzeige = document.createElement('strong');
+    anzeige.className = 'kpi-wert';
+    if (klasse) anzeige.classList.add(klasse);
+    anzeige.textContent = wert;
+    kpi.append(kopf, anzeige);
+
+    if (hinweis) {
+        const zusatz = document.createElement('small');
+        zusatz.className = 'kpi-hinweis';
+        zusatz.textContent = hinweis;
+        kpi.appendChild(zusatz);
+    }
+
+    raster.appendChild(kpi);
+}
+
+function ersterWert(eintrag, namen) {
+    for (const name of namen) {
+        const wert = Number(eintrag && eintrag[name]);
+        if (Number.isFinite(wert)) return wert;
+    }
+    return null;
+}
+
+function zeichneAmpel(karte, warnings) {
+    const liste = document.createElement('ul');
+    liste.className = 'ampel-liste';
+
+    if (!warnings || warnings.length === 0) {
+        const li = document.createElement('li');
+        li.className = 'ampel gruen';
+        const punkt = document.createElement('span');
+        punkt.className = 'ampel-punkt';
+        li.append(punkt, document.createTextNode('Alles im grünen Bereich'));
+        liste.appendChild(li);
+    } else {
+        warnings.forEach((warning) => {
+            const li = document.createElement('li');
+            const stufe = warning.level === 'rot' ? 'rot' : 'gelb';
+            li.className = `ampel ${stufe}`;
+            const punkt = document.createElement('span');
+            punkt.className = 'ampel-punkt';
+            li.append(punkt, document.createTextNode(String(warning.text || '')));
+            liste.appendChild(li);
+        });
+    }
+
+    karte.appendChild(liste);
+}
+
+function zeichneWirkungsprotokoll(karte, effects) {
+    const erklaerung = document.createElement('p');
+    erklaerung.textContent = 'Hier siehst du, wie deine Entscheide die Firma verändert haben.';
+    karte.appendChild(erklaerung);
+
+    const liste = document.createElement('ol');
+    liste.className = 'wirkung-liste';
+    const eintraege = (effects || []).slice(-12).reverse();
+
+    if (!eintraege.length) {
+        const leer = document.createElement('p');
+        leer.textContent = 'Noch kein Wirkungsprotokoll: es erscheint nach der ersten Runde.';
+        karte.appendChild(leer);
+        return;
+    }
+
+    const deltaNamen = {
+        sales: 'Absatz',
+        revenue: 'Umsatz',
+        cash: 'Kasse',
+        price: 'Preis',
+        demand: 'Nachfrage'
+    };
+
+    eintraege.forEach((effekt) => {
+        const li = document.createElement('li');
+        const titel = document.createElement('strong');
+        titel.textContent = String(effekt.label || 'Entscheid');
+        li.appendChild(titel);
+
+        const aenderungen = document.createElement('ul');
+        aenderungen.className = 'wirkung-aenderungen';
+        (effekt.changes || []).forEach((text) => {
+            const aenderung = document.createElement('li');
+            aenderung.textContent = String(text);
+            aenderungen.appendChild(aenderung);
+        });
+        if (aenderungen.childNodes.length) li.appendChild(aenderungen);
+
+        const chips = document.createElement('div');
+        chips.className = 'delta-chips';
+        Object.keys(deltaNamen).forEach((key) => {
+            const wert = Number(effekt.deltas && effekt.deltas[key]);
+            if (!Number.isFinite(wert)) return;
+
+            const chip = document.createElement('span');
+            const klasse = wert > 0 ? 'hoch' : (wert < 0 ? 'runter' : 'gleich');
+            const vorzeichen = wert > 0 ? '+' : '';
+            chip.className = `delta-chip ${klasse}`;
+            chip.textContent = `${deltaNamen[key]} ${vorzeichen}${formatiereProzent(wert)}`;
+            chips.appendChild(chip);
+        });
+        if (chips.childNodes.length) li.appendChild(chips);
+
+        liste.appendChild(li);
+    });
+
+    karte.appendChild(liste);
+}
+
+function zeichnePunktGrafik(karte, history, kpis) {
+    const punkte = (history || []).map((eintrag) => ({
+        preis: Number(eintrag.sell_price),
+        absatz: ersterWert(eintrag, ['sales', 'recent_sales'])
+    })).filter((punkt) => Number.isFinite(punkt.preis) && punkt.absatz !== null);
+
+    if (punkte.length < 2) {
+        const preis = Number(kpis.sell_price);
+        const absatz = Number(kpis.recent_sales);
+        const text = document.createElement('p');
+        text.textContent = `Sobald du mehrere Runden gespielt hast, siehst du hier, wie dein Preis den Absatz verändert. Aktuell: Preis ${formatiereGeld(preis)}${Number.isFinite(absatz) ? `, Absatz ${formatiereGanzzahl(absatz)}` : ''}.`;
+        karte.appendChild(text);
+        return;
+    }
+
+    const grafik = document.createElementNS(svgNs, 'svg');
+    grafik.setAttribute('class', 'punkt-grafik');
+    grafik.setAttribute('viewBox', '0 0 600 220');
+    grafik.setAttribute('width', '100%');
+    grafik.setAttribute('role', 'img');
+    grafik.setAttribute('aria-label', 'Preis und Absatz');
+
+    const minX = Math.min(...punkte.map((punkt) => punkt.preis));
+    const maxX = Math.max(...punkte.map((punkt) => punkt.preis));
+    const minY = Math.min(...punkte.map((punkt) => punkt.absatz));
+    const maxY = Math.max(...punkte.map((punkt) => punkt.absatz));
+    const xDiff = maxX === minX ? 1 : maxX - minX;
+    const yDiff = maxY === minY ? 1 : maxY - minY;
+    const xFuer = (wert) => 70 + ((wert - minX) / xDiff) * 500;
+    const yFuer = (wert) => 178 - ((wert - minY) / yDiff) * 145;
+
+    const achsen = document.createElementNS(svgNs, 'path');
+    achsen.setAttribute('d', 'M70 20 V178 H570');
+    achsen.setAttribute('class', 'grafik-achse');
+    grafik.appendChild(achsen);
+
+    [
+        { x: 4, y: 24, text: formatiereGanzzahl(maxY), klasse: 'achsen-beschriftung' },
+        { x: 4, y: 178, text: formatiereGanzzahl(minY), klasse: 'achsen-beschriftung' },
+        { x: 70, y: 198, text: formatiereZahl(minX, 2), klasse: 'achsen-beschriftung' },
+        { x: 520, y: 198, text: formatiereZahl(maxX, 2), klasse: 'achsen-beschriftung' }
+    ].forEach((angabe) => {
+        const text = document.createElementNS(svgNs, 'text');
+        text.setAttribute('x', String(angabe.x));
+        text.setAttribute('y', String(angabe.y));
+        text.setAttribute('class', angabe.klasse);
+        text.textContent = angabe.text;
+        grafik.appendChild(text);
+    });
+
+    const titelX = document.createElementNS(svgNs, 'text');
+    titelX.setAttribute('x', '320');
+    titelX.setAttribute('y', '216');
+    titelX.setAttribute('text-anchor', 'middle');
+    titelX.setAttribute('class', 'achsen-titel');
+    titelX.textContent = 'Preis (CHF)';
+    grafik.appendChild(titelX);
+
+    const titelY = document.createElementNS(svgNs, 'text');
+    titelY.setAttribute('x', '16');
+    titelY.setAttribute('y', '12');
+    titelY.setAttribute('class', 'achsen-titel');
+    titelY.textContent = 'Absatz';
+    grafik.appendChild(titelY);
+
+    punkte.forEach((punkt, index) => {
+        const kreis = document.createElementNS(svgNs, 'circle');
+        kreis.setAttribute('cx', String(xFuer(punkt.preis)));
+        kreis.setAttribute('cy', String(yFuer(punkt.absatz)));
+        kreis.setAttribute('r', index === punkte.length - 1 ? '7' : '5');
+        kreis.setAttribute('class', `punkt${index === punkte.length - 1 ? ' aktuell' : ''}`);
+        kreis.setAttribute('aria-label', `Preis ${formatiereGeld(punkt.preis)}, Absatz ${formatiereGanzzahl(punkt.absatz)}`);
+        grafik.appendChild(kreis);
+    });
+
+    karte.appendChild(grafik);
+}
+
+async function zeichneUebersicht(el) {
+    const state = aktuellerStand || {};
+    const kpis = state.kpis || {};
+    const ctx = baueCtx(state);
+    const [capacity, classification] = await Promise.all([
+        ctx.ansicht('capacity'),
+        ctx.ansicht('classification')
+    ]);
+
+    const raster = baueKpiRaster();
+    const history = state.history || [];
+    const letzterVerlauf = history.length ? history[history.length - 1] : {};
+    const umsatzHistorie = history.slice().reverse().find((eintrag) => {
+        return eintrag.revenue !== undefined && eintrag.revenue !== null
+            && Number.isFinite(Number(eintrag.revenue));
+    });
+    const umsatz = umsatzHistorie
+        ? Number(umsatzHistorie.revenue)
+        : Number(kpis.sell_price || 0) * Number(kpis.recent_sales || 0);
+    const kasse = Number(kpis.cash);
+    const gewinn = Number(kpis.profit);
+
+    const infos = {
+        cash: {
+            wofuer: 'Das verfügbare Geld deiner Firma.',
+            wenn: 'Eine knappe Kasse erschwert Einkäufe, Investitionen und Lohnzahlungen.'
+        },
+        profit: {
+            wofuer: 'Der Gewinn deiner Firma im letzten Zeitraum.',
+            wenn: 'Ein höherer Gewinn stärkt die Firma; Verluste belasten ihre Kasse.'
+        },
+        revenue: {
+            wofuer: 'Der geschätzte oder gemeldete Umsatz deiner Firma.',
+            wenn: 'Der Umsatz ergibt sich aus verkauften Produkten und ihrem Preis.'
+        },
+        sales: {
+            wofuer: 'Wie viele Produkte deine Firma zuletzt verkauft hat.',
+            wenn: 'Der Absatz hängt unter anderem von Preis, Nachfrage und Lieferfähigkeit ab.'
+        },
+        inventory: {
+            wofuer: 'Wie viele Produkte aktuell auf Lager liegen.',
+            wenn: 'Mehr Lager kann Lieferungen sichern, bindet aber Geld.'
+        },
+        backlog: {
+            wofuer: 'Noch nicht erfüllte Nachfrage.',
+            wenn: 'Ein Rückstand kann entstehen, wenn die Nachfrage deine Lieferfähigkeit übersteigt.'
+        },
+        employees: {
+            wofuer: 'Die Anzahl der Mitarbeitenden deiner Firma.',
+            wenn: 'Mehr Mitarbeitende können die verfügbare Arbeitsleistung erhöhen und kosten Lohn.'
+        },
+        demand: {
+            wofuer: 'Die geschätzte Nachfrage pro Tag.',
+            wenn: 'Die Spanne zeigt mögliche Werte; der Durchschnitt hilft bei der Planung.'
+        },
+        capacity: {
+            wofuer: 'Wie viele Einheiten deine Firma pro Tag liefern kann.',
+            wenn: 'Eine hohe Auslastung lässt wenig Spielraum für zusätzliche Nachfrage.'
+        },
+        classification: {
+            wofuer: 'Die Einstufung deiner Firma durch die Simulation.',
+            wenn: 'Deine Entscheide beeinflussen, wie die Firma eingestuft wird.'
+        }
+    };
+
+    fuegeKpi(raster, 'Kasse', formatiereGeld(kpis.cash), null, infos.cash,
+        Number.isFinite(kasse) ? (kasse >= 0 ? 'positiv' : 'negativ') : '');
+    fuegeKpi(raster, 'Gewinn eigener Firma', formatiereGeld(kpis.profit), null, infos.profit,
+        Number.isFinite(gewinn) ? (gewinn >= 0 ? 'positiv' : 'negativ') : '');
+    fuegeKpi(raster, 'Umsatz pro Jahr (hochgerechnet)', formatiereGeld(kpis.revenue_year ?? umsatz), null, infos.revenue);
+    fuegeKpi(raster, 'Absatz', formatiereGanzzahl(kpis.recent_sales), null, infos.sales);
+    fuegeKpi(raster, 'Lager', formatiereGanzzahl(kpis.inventory), null, infos.inventory);
+    fuegeKpi(raster, 'Rückstand', formatiereGanzzahl(kpis.backlog), null, infos.backlog);
+    fuegeKpi(raster, 'Mitarbeiter', formatiereGanzzahl(kpis.employees), null, infos.employees);
+
+    const nachfrage = capacity && capacity.demand;
+    const nachfrageMin = nachfrage && Number(nachfrage.min);
+    const nachfrageMax = nachfrage && Number(nachfrage.max);
+    const nachfrageWert = nachfrage && Number.isFinite(nachfrageMin) && Number.isFinite(nachfrageMax)
+        ? `${formatiereGanzzahl(nachfrageMin)} bis ${formatiereGanzzahl(nachfrageMax)}`
+        : formatiereGanzzahl(kpis.recent_demand);
+    const nachfrageAvg = nachfrage && Number(nachfrage.avg);
+    fuegeKpi(
+        raster,
+        'Nachfrage-Spanne',
+        nachfrageWert,
+        Number.isFinite(nachfrageAvg) ? `Durchschnitt: ${formatiereGanzzahl(nachfrageAvg)}` : null,
+        infos.demand
+    );
+
+    const kapazitaet = Number(capacity && capacity.capacity_per_day);
+    const auslastung = Number(capacity && capacity.utilization_last_year);
+    fuegeKpi(
+        raster,
+        'Kapazität pro Tag',
+        Number.isFinite(kapazitaet) ? formatiereGanzzahl(kapazitaet) : '–',
+        Number.isFinite(auslastung) ? `Auslastung letztes Jahr: ${formatiereProzent(auslastung)}` : null,
+        infos.capacity
+    );
+
+    const einstufungsLabel = classification && classification.label
+        ? classification.label
+        : (typeof state.classification === 'string' ? state.classification : '');
+    const erklaerung = classification && classification.explanation
+        ? String(classification.explanation).split(/\r?\n/)[0].slice(0, 140)
+        : '';
+    fuegeKpi(raster, 'Einstufung', einstufungsLabel || '–', erklaerung || null, infos.classification);
+
+    el.appendChild(raster);
+
+    const ampelKarte = baueKarte('Auf einen Blick');
+    zeichneAmpel(ampelKarte, state.warnings || []);
+    el.appendChild(ampelKarte);
+
+    const verlaufKarte = baueKarte('Kassenverlauf und Gewinn');
+    if (history.length < 2) {
+        const hinweis = document.createElement('p');
+        hinweis.textContent = 'Der Verlauf erscheint nach der ersten Runde';
+        verlaufKarte.appendChild(hinweis);
+    } else {
+        const labels = history.map((eintrag) => `J${eintrag.year}/${eintrag.month}`);
+        verlaufKarte.appendChild(ctx.linien([
+            {
+                name: 'Kasse',
+                werte: history.map((eintrag) => Number(eintrag.cash)),
+                farbe: 'var(--linie-1)'
+            },
+            {
+                name: 'Gewinn',
+                werte: history.map((eintrag) => Number(eintrag.profit)),
+                farbe: 'var(--linie-2)'
+            }
+        ], { labels, hoehe: 220 }));
+    }
+    el.appendChild(verlaufKarte);
+
+    const wirkungsKarte = baueKarte('Was haben deine Entscheide bewirkt?');
+    zeichneWirkungsprotokoll(wirkungsKarte, state.effects || []);
+    el.appendChild(wirkungsKarte);
+
+    const preisKarte = baueKarte('Preis und Absatz');
+    zeichnePunktGrafik(preisKarte, history, kpis);
+    el.appendChild(preisKarte);
+}
+
+async function zeichneReiter(key) {
+    const normalisiert = REITER_KEYS.includes(key) ? key : 'uebersicht';
+    const el = element(`tab-${normalisiert}`);
+    if (!el || normalisiert !== aktiverReiter) return;
+
+    const nr = ++zeichnungsNr;
+    const scrollY = window.scrollY;
+    const staging = document.createElement('div');
+    const state = aktuellerStand || {};
+    const ctx = baueCtx(state);
+
+    try {
+        if (normalisiert === 'uebersicht') {
+            await zeichneUebersicht(staging);
+        } else if (normalisiert === 'firma') {
+            const [autopilot, einstufung] = await Promise.all([
+                ctx.ansicht('autopilot'),
+                ctx.ansicht('classification')
+            ]);
+            if (nr !== zeichnungsNr || normalisiert !== aktiverReiter) return;
+            if (typeof zeichneFirma === 'function') {
+                zeichneFirma(staging, state, autopilot, einstufung);
+            } else {
+                staging.appendChild(bauePlatzhalterkarte('Dieser Bereich kommt gleich.'));
+            }
+        } else if (normalisiert === 'holding') {
+            if (typeof fuelleHolding === 'function') fuelleHolding(state);
+            return;
+        } else if (window.REITER && window.REITER[normalisiert]) {
+            await window.REITER[normalisiert].render(staging, ctx);
+        } else {
+            staging.appendChild(bauePlatzhalterkarte('Dieser Bereich kommt gleich.'));
+        }
+
+        if (nr !== zeichnungsNr || normalisiert !== aktiverReiter) return;
+        el.replaceChildren(...staging.childNodes);
+        window.scrollTo(window.scrollX, scrollY);
+    } catch (err) {
+        if (nr !== zeichnungsNr || normalisiert !== aktiverReiter) return;
+        const karte = baueKarte('Hinweis');
+        const hinweis = document.createElement('p');
+        hinweis.textContent = `Dieser Bereich konnte nicht angezeigt werden: ${err && err.message ? err.message : 'Unbekannter Fehler'}`;
+        karte.appendChild(hinweis);
+        el.replaceChildren(karte);
+        window.scrollTo(window.scrollX, scrollY);
+    }
+}
+
+function bauePlatzhalterkarte(text) {
+    const karte = baueKarte('Hinweis');
+    const absatz = document.createElement('p');
+    absatz.textContent = text;
+    karte.appendChild(absatz);
+    return karte;
+}
+
+function waehleReiter(key, nurHash) {
+    const gewaehlt = REITER_KEYS.includes(key) ? key : 'uebersicht';
+    aktiverReiter = gewaehlt;
+
+    document.querySelectorAll('.reiter-btn[data-tab]').forEach((knopf) => {
+        const aktiv = knopf.dataset.tab === gewaehlt;
+        knopf.classList.toggle('aktiv', aktiv);
+        knopf.setAttribute('aria-selected', aktiv ? 'true' : 'false');
+        knopf.tabIndex = aktiv ? 0 : -1;
+    });
+
+    REITER_KEYS.forEach((reiter) => {
+        const abschnitt = element(`tab-${reiter}`);
+        if (abschnitt) abschnitt.hidden = reiter !== gewaehlt;
+    });
+
+    if (!nurHash && window.location.hash !== `#${gewaehlt}`) {
+        window.history.replaceState(null, '', `#${gewaehlt}`);
+    }
+    reiterInitialisiert = true;
+    zeichneReiter(gewaehlt);
+}
+
+function leseHashReiter() {
+    const key = window.location.hash.replace(/^#/, '');
+    return REITER_KEYS.includes(key) ? key : 'uebersicht';
+}
+
 function render(state) {
     if (!state) return;
+
+    const firma = state.firm || {};
+    const schluessel = `${state.year ?? ''}|${state.month ?? ''}|${firma.id ?? ''}`;
+    if (letzterRenderSchluessel !== null && schluessel !== letzterRenderSchluessel) {
+        if (typeof leereEntwurf === 'function') leereEntwurf();
+        geplantReiter = {};
+        aktualisiereGeplantZaehler();
+    }
+    letzterRenderSchluessel = schluessel;
     aktuellerStand = state;
 
     if (!state.running) {
@@ -412,86 +1014,38 @@ function render(state) {
     setzeSichtbar('ansicht-cockpit', true);
     setzeSichtbar('speichern-btn', true);
 
-    const firma = state.firm || {};
-    const kpis = state.kpis || {};
-    const brancheNamen = { hersteller: 'Hersteller', grosshaendler: 'Grosshändler', verteiler: 'Verteiler', detailhaendler: 'Detailhändler', gastro: 'Gastro' };
+    const brancheNamen = {
+        hersteller: 'Hersteller',
+        grosshaendler: 'Grosshändler',
+        verteiler: 'Verteiler',
+        detailhaendler: 'Detailhändler',
+        gastro: 'Gastro'
+    };
     const branche = brancheNamen[firma.branch] || firma.branch || '';
+    const einstufung = state.classification && typeof state.classification === 'object'
+        ? state.classification.label
+        : state.classification;
 
     setzeText('firmenname', firma.name || '');
     setzeText('branche-anzeige', branche);
+    setzeText('einstufung-anzeige', einstufung || '');
+    setzeSichtbar('einstufung-anzeige', Boolean(einstufung));
     setzeText('zeit-anzeige', `Jahr ${state.year}, Monat ${state.month}`);
 
-    const kasse = Number(kpis.cash);
-    const gewinn = Number(kpis.profit);
-    setzeKpi('kpi-cash', formatiereGeld(kpis.cash), kasse >= 0 ? 'positiv' : 'negativ');
-    setzeKpi('kpi-profit', formatiereGeld(kpis.profit), gewinn >= 0 ? 'positiv' : 'negativ');
-    setzeKpi('kpi-inventory', formatiereGanzzahl(kpis.inventory));
-    setzeKpi('kpi-backlog', formatiereGanzzahl(kpis.backlog));
-    setzeKpi('kpi-employees', formatiereGanzzahl(kpis.employees));
-    setzeKpi('kpi-demand', formatiereGanzzahl(kpis.recent_demand));
-    setzeKpi('kpi-sales', formatiereGanzzahl(kpis.recent_sales));
-
-    const preis = Number(kpis.sell_price);
-    const konkurrenz = kpis.rival_price === null || kpis.rival_price === undefined
-        ? ' (kein Konkurrenzpreis)'
-        : ` (Konkurrenz: ${Number(kpis.rival_price).toFixed(2)} CHF)`;
-    setzeKpi(
-        'kpi-price',
-        `${Number.isFinite(preis) ? preis.toFixed(2) : '0.00'} CHF${konkurrenz}`
-    );
-
-    zeichneKassenverlauf(state.history || []);
-    fuelleEinstellungen(state.settings || {});
-    fuelleEntscheide(state);
-    fuelleHolding(state);
-
-    const preisband = state.price_band || {};
-    setzeText(
-        'preisband-hinweis',
-        `Erlaubt: ${preisband.min} bis ${preisband.max} CHF`
-    );
-
+    if (typeof fuelleHolding === 'function') fuelleHolding(state);
     zeigeSpielende(state);
-    zeigeRueckblick(state);
+    if (typeof zeigeRueckblick === 'function') zeigeRueckblick(state);
     zeichneMeldungen(state.messages || []);
     aktualisiereFilter();
+    aktualisiereGeplantZaehler();
+
+    if (!reiterInitialisiert) {
+        waehleReiter(leseHashReiter(), false);
+    } else {
+        waehleReiter(aktiverReiter, true);
+    }
+
     updateButtons();
-}
-
-function geaenderteEinstellungen() {
-    const settings = {};
-    const gesehen = new Set();
-
-    document.querySelectorAll('[data-key]').forEach((feld) => {
-        const key = feld.dataset.key;
-        if (gesehen.has(key)) return;
-        gesehen.add(key);
-
-        let wert;
-        if (feld.dataset.typ === 'prozent') {
-            const zahl = Number(feld.value);
-            if (feld.value.trim() === '' || !Number.isFinite(zahl)) return;
-            wert = Math.round(Math.min(100, Math.max(0, zahl)) / 100 * 10000) / 10000;
-        } else if (feld.dataset.typ === 'zahl') {
-            if (key === 'order_qty' && feld.value.trim() === '') {
-                wert = null;
-            } else {
-                const zahl = Number(feld.value);
-                if (!Number.isFinite(zahl)) return;
-                wert = zahl;
-            }
-        } else {
-            wert = String(feld.value);
-        }
-
-        const vorher = basisEinstellungen[key];
-        const gleich = typeof wert === 'number' && typeof vorher === 'number'
-            ? Math.abs(wert - vorher) < (feld.dataset.typ === 'prozent' ? 0.005 : 1e-9)
-            : wert === vorher;
-        if (!gleich) settings[key] = wert;
-    });
-
-    return settings;
 }
 
 function kopiereUeberstunden(quelle) {
@@ -553,6 +1107,90 @@ async function speichereSpielstand(name) {
     );
 }
 
+async function rundeBeenden(weiterWieBisher) {
+    const settings = weiterWieBisher || typeof geaenderteEinstellungen !== 'function'
+        ? {}
+        : geaenderteEinstellungen();
+    const choices = weiterWieBisher || typeof geaenderteEntscheide !== 'function'
+        ? {}
+        : geaenderteEntscheide();
+    const holding = typeof geplanteAuftraegeHolding === 'function'
+        ? geplanteAuftraegeHolding()
+        : {};
+    const orders = { ...(holding || {}), ...geplantReiter };
+
+    await postAktion(
+        '/api/round',
+        { settings, choices, orders },
+        'Rechne …',
+        async () => {
+            if (typeof leereAuftraegeHolding === 'function') leereAuftraegeHolding();
+            if (typeof leereEntwurf === 'function') leereEntwurf();
+            geplantReiter = {};
+            aktualisiereGeplantZaehler();
+            const liste = element('meldungen-liste');
+            if (liste) liste.scrollTop = 0;
+        }
+    );
+}
+
+function setzeTheme(modus) {
+    themeModus = modus;
+    const knopf = element('theme-btn');
+
+    if (modus === 'system') {
+        delete document.documentElement.dataset.theme;
+        try {
+            localStorage.removeItem('cockpit-theme');
+        } catch (err) {
+            // Lokaler Speicher kann im Browser gesperrt sein.
+        }
+    } else {
+        document.documentElement.dataset.theme = modus === 'hell' ? 'light' : 'dark';
+        try {
+            localStorage.setItem('cockpit-theme', modus);
+        } catch (err) {
+            // Lokaler Speicher kann im Browser gesperrt sein.
+        }
+    }
+
+    if (knopf) {
+        const titel = modus === 'system'
+            ? 'Darstellung: System'
+            : `Darstellung: ${modus}`;
+        knopf.title = titel;
+        knopf.setAttribute('aria-label', titel);
+    }
+}
+
+function ladeTheme() {
+    let gespeichert = null;
+    try {
+        gespeichert = localStorage.getItem('cockpit-theme');
+    } catch (err) {
+        gespeichert = null;
+    }
+
+    if (gespeichert === 'hell' || gespeichert === 'dunkel') {
+        setzeTheme(gespeichert);
+    } else {
+        themeModus = 'system';
+        delete document.documentElement.dataset.theme;
+        const knopf = element('theme-btn');
+        if (knopf) {
+            knopf.title = 'Darstellung: System';
+            knopf.setAttribute('aria-label', 'Darstellung: System');
+        }
+    }
+}
+
+function wechsleTheme() {
+    const naechster = themeModus === 'system'
+        ? 'hell'
+        : (themeModus === 'hell' ? 'dunkel' : 'system');
+    setzeTheme(naechster);
+}
+
 function verbindeEreignisse() {
     const branche = element('branche-select');
     if (branche) branche.addEventListener('change', schalteGruendungsfelder);
@@ -563,7 +1201,7 @@ function verbindeEreignisse() {
             ereignis.preventDefault();
             if (beschaeftigt) return;
 
-            const nameFeld = element('firmenname-eingabe') || gruendung.querySelector('[name="name"]');
+            const nameFeld = element('name-input') || gruendung.querySelector('[name="name"]');
             const name = nameFeld ? nameFeld.value.trim() : '';
             if (!name) {
                 if (nameFeld) nameFeld.focus();
@@ -585,37 +1223,27 @@ function verbindeEreignisse() {
         });
     }
 
-    const einstellungen = element('einstellungen-form');
-    if (einstellungen) {
-        einstellungen.addEventListener('submit', async (ereignis) => {
-            ereignis.preventDefault();
-            await postAktion(
-                '/api/round',
-                { settings: geaenderteEinstellungen(), choices: geaenderteEntscheide(), orders: geplanteAuftraegeHolding() },
-                'Rechne …',
-                async () => {
-                    leereAuftraegeHolding();
-                    const liste = element('meldungen-liste');
-                    if (liste) liste.scrollTop = 0;
-                }
-            );
+    const reiterleiste = element('reiterleiste');
+    if (reiterleiste) {
+        reiterleiste.addEventListener('click', (ereignis) => {
+            const knopf = ereignis.target.closest('.reiter-btn[data-tab]');
+            if (!knopf || !reiterleiste.contains(knopf)) return;
+            waehleReiter(knopf.dataset.tab, false);
         });
     }
+
+    window.addEventListener('hashchange', () => {
+        waehleReiter(leseHashReiter(), true);
+    });
+
+    const theme = element('theme-btn');
+    if (theme) theme.addEventListener('click', wechsleTheme);
+
+    const runde = element('runde-btn');
+    if (runde) runde.addEventListener('click', () => rundeBeenden(false));
 
     const weiter = element('weiter-btn');
-    if (weiter) {
-        weiter.addEventListener('click', () => {
-            postAktion('/api/round', { settings: {}, choices: {}, orders: geplanteAuftraegeHolding() }, 'Rechne …', async () => {
-                leereAuftraegeHolding();
-                const liste = element('meldungen-liste');
-                if (liste) liste.scrollTop = 0;
-            });
-        });
-    }
-
-    document.querySelectorAll('[data-key="overtime_level"]').forEach((feld) => {
-        feld.addEventListener('input', () => kopiereUeberstunden(feld));
-    });
+    if (weiter) weiter.addEventListener('click', () => rundeBeenden(true));
 
     document.querySelectorAll('.filter-btn[data-filter]').forEach((knopf) => {
         knopf.addEventListener('click', () => {
@@ -665,14 +1293,18 @@ function verbindeEreignisse() {
         neu.addEventListener('click', async () => {
             if (beschaeftigt) return;
             render({ running: false });
+            letzterRenderSchluessel = null;
+            geplantReiter = {};
+            aktualisiereGeplantZaehler();
+            if (typeof leereEntwurf === 'function') leereEntwurf();
             await Promise.all([ladeOptionen(), ladeSpielstaende()]);
         });
     }
 }
 
 async function start() {
+    ladeTheme();
     verbindeEreignisse();
-    verbindeEntscheide();
 
     const [spiel, optionen, spielstaende] = await Promise.all([
         api('/api/game'),
@@ -680,48 +1312,23 @@ async function start() {
         api('/api/saves')
     ]);
 
-    if (optionen) merkeOptionen(optionen);
-    if (spiel) render(spiel);
-
     if (optionen) {
+        if (typeof merkeOptionen === 'function') merkeOptionen(optionen);
         fuelleAuswahl('branche-select', optionen.branches, true);
         fuelleAuswahl('region-select', optionen.regions, false);
         fuelleAuswahl('kategorie-select', optionen.categories, false);
         schalteGruendungsfelder();
     }
 
-    if (spielstaende) {
-        const liste = element('spielstaende-liste');
-        if (liste) {
-            liste.replaceChildren();
-            const eintraege = spielstaende.saves || [];
-            setzeSichtbar('keine-spielstaende', eintraege.length === 0);
-            eintraege.forEach((spielstand) => {
-                const li = document.createElement('li');
-                const datum = formatiereDatum(spielstand.saved_at);
-                const teile = [spielstand.label || '', datum].filter(Boolean);
-                const laden = document.createElement('button');
-                laden.type = 'button';
-                laden.className = 'laden';
-                laden.textContent = 'Laden';
-                laden.addEventListener('click', () => ladeSpielstand(spielstand.name || ''));
-                li.append(
-                    document.createTextNode(
-                        `${spielstand.name || ''} – ${spielstand.firm || ''} (${teile.join(', ')}) `
-                    ),
-                    laden
-                );
-                liste.appendChild(li);
-            });
-        }
-    }
-
-    if (!spiel) {
+    if (spiel) {
+        render(spiel);
+    } else {
         setzeSichtbar('ansicht-gruendung', true);
         setzeSichtbar('ansicht-cockpit', false);
         setzeSichtbar('speichern-btn', false);
     }
 
+    if (spielstaende) fuelleSpielstaende(spielstaende);
     aktualisiereFilter();
 }
 
