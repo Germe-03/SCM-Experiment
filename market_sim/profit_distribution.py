@@ -35,7 +35,7 @@ class ProfitDistribution:
         self.history: list[dict] = []
 
     def distribute(self, year, firm_id, runtime, profit_after_tax, share_capital, monthly_cost,
-                   parent_runtime=None) -> dict:
+                   parent_runtime=None, payout_ratio=None) -> dict:
         cfg = self.cfg
         acc = self.accounts.setdefault(
             firm_id, {"legal_reserve": 0.0, "retained": 0.0, "loss_carryforward": 0.0})
@@ -56,7 +56,8 @@ class ProfitDistribution:
             add = min(cfg.legal_reserve_rate * profit, room)
             acc["legal_reserve"] += add
             balance = max(0.0, profit + acc["retained"] - add)
-            dividend = cfg.payout_ratio * balance
+            ratio = cfg.payout_ratio if payout_ratio is None else max(0.0, min(1.0, payout_ratio))
+            dividend = ratio * balance
             spare = runtime.cash - cfg.min_cash_months * max(0.0, monthly_cost)
             dividend = max(0.0, min(dividend, spare))
             vst = dividend * cfg.withholding_tax

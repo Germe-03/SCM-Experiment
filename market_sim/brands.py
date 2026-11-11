@@ -77,6 +77,7 @@ class BrandBook:
         if config.brands is None or config.consumers is None:
             raise ValueError("the market needs brands.yaml and consumers.yaml")
         self.config = config
+        self.player_choices: dict = {}  # rebound to env.player_choices in fulfill (Spielmodus)
         self.cfg = config.brands
         owners = {firm.id: firm for firm in firms}
         self.brands: dict[str, Brand] = {}
@@ -218,7 +219,11 @@ class BrandBook:
         if not (cfg.enabled and firm.channel == "restaurant"):
             return 1.0
         # Phase 24: house beer and signature drinks raise the markup of one restaurant.
-        return cfg.markup * getattr(self, "markup_bonus", {}).get(firm.id, 1.0)
+        value = cfg.markup * getattr(self, "markup_bonus", {}).get(firm.id, 1.0)
+        choice = self.player_choices.get(firm.id)
+        if choice is not None and choice.markup_factor is not None:
+            value *= choice.markup_factor
+        return value
 
     def retail_price(self, sell_price: float, brand: Brand, firm: Firm | None = None) -> float:
         markup = self.markup(firm) if firm is not None else 1.0
@@ -393,6 +398,7 @@ class BrandBook:
     # -- daily consumer market -----------------------------------------
     def fulfill(self, env: MarketEnvironment, total_demand: int) -> tuple[dict[str, int], dict[str, int], int]:
         """Serve one day of class demand; return requested and sold units per retailer and lost units."""
+        self.player_choices = getattr(env, "player_choices", self.player_choices)
         retailers = sorted(
             (f for f in env.network.firms_in("retailer") if env.runtimes[f.id].active), key=lambda f: f.id
         )

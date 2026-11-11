@@ -218,6 +218,11 @@ class SimulationRunner:
         self._entry_year: dict[str, int] = {}
         self._first_sale_year: dict[str, int] = {}
         self._last_failure: dict[tuple[str, str], int] = {}
+        # Spielmodus: optional callback at the start of every day (runner, state, year, day).
+        self.day_hook: Callable[[SimulationRunner, RunState, int, int], None] | None = None
+        # Spielmodus Phase 3: player choices per firm id (see market_sim/game/choices.py).
+        self.player_choices: dict = {}
+        self.env.player_choices = self.player_choices  # same dict, for subsystems that only see env
 
     def _in_maturation(self, firm_id: str, year: int) -> bool:
         """True for a wine entrant still within its grace period and without a first sale."""
@@ -561,6 +566,8 @@ class SimulationRunner:
             self.marketing.year_start(self)
 
         for day in range(self.config.simulation.days_per_year):
+            if self.day_hook is not None:
+                self.day_hook(self, state, year + 1, day)
             decisions = {}
             for firm in self._firms():
                 runtime = self.env.runtimes[firm.id]

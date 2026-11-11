@@ -262,7 +262,12 @@ class ResearchTreeLab(ResearchLab):
                 or firm.id not in summaries
             ):
                 continue
-            if summaries[firm.id].profit <= 0:
+            # Spielmodus: Entscheid des Spielers (None = Autopilot).
+            choice = getattr(runner, "player_choices", {}).get(firm.id)
+            forced = choice.research_target if choice is not None else None
+            if forced == "":
+                continue  # Spieler: keine Forschung
+            if summaries[firm.id].profit <= 0 and forced is None:
                 continue
 
             tree = tree_key(firm)
@@ -320,17 +325,21 @@ class ResearchTreeLab(ResearchLab):
             preferred_branches = self.cfg.branch_preferences.get(behaviour_of(firm), [])
             preferred = [stage for stage in options if stage.branch in preferred_branches]
             pool = preferred or options
-            if not pool or choice_roll >= self.cfg.start_probability:
+            chosen = next((o for o in options if o.name == forced), None) if forced else None
+            if chosen is None and (not pool or choice_roll >= self.cfg.start_probability):
                 continue
 
-            weights = self.perceived_weights(firm, pool)
-            target = choice_roll / self.cfg.start_probability * sum(weights.values())
-            stage = pool[-1]
-            for candidate in pool:
-                target -= weights[candidate.name]
-                if target < 0:
-                    stage = candidate
-                    break
+            if chosen is not None:
+                stage = chosen
+            else:
+                weights = self.perceived_weights(firm, pool)
+                target = choice_roll / self.cfg.start_probability * sum(weights.values())
+                stage = pool[-1]
+                for candidate in pool:
+                    target -= weights[candidate.name]
+                    if target < 0:
+                        stage = candidate
+                        break
 
             cost = self.research_cost(tree, stage, state.year) * price
             if cost > 0 and not env.arrange_funding(firm.id, cost, "rnd", self.cfg.cash_cover, state):

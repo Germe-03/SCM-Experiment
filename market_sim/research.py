@@ -64,21 +64,29 @@ class ResearchLab:
             runtime = env.runtimes[firm.id]
             if not self.cfg.enabled or not runtime.active or firm.id in self.running or firm.id not in summaries:
                 continue
-            if summaries[firm.id].profit <= 0:
+            choice = getattr(runner, "player_choices", {}).get(firm.id)
+            forced = choice.research_target if choice is not None else None
+            if forced == "":
+                continue  # Spieler: keine Forschung
+            if summaries[firm.id].profit <= 0 and forced is None:
                 continue
             options = [p for p in self.cfg.projects if p.enabled and firm.stage in p.stages
                        and (p.kind != "alkoholfrei" or firm.category == "beer")]
             preferred = [p for p in options if p.name in self.cfg.preferences.get(behaviour_of(firm), [])]
             pool = preferred or options
-            if not pool or choice_roll >= self.cfg.start_probability:
+            chosen = next((o for o in options if o.name == forced), None) if forced else None
+            if chosen is None and (not pool or choice_roll >= self.cfg.start_probability):
                 continue
-            target = choice_roll / self.cfg.start_probability * sum(p.selection_weight for p in pool)
-            project = pool[-1]
-            for candidate in pool:
-                target -= candidate.selection_weight
-                if target < 0:
-                    project = candidate
-                    break
+            if chosen is not None:
+                project = chosen
+            else:
+                target = choice_roll / self.cfg.start_probability * sum(p.selection_weight for p in pool)
+                project = pool[-1]
+                for candidate in pool:
+                    target -= candidate.selection_weight
+                    if target < 0:
+                        project = candidate
+                        break
             cost = project.cost * runner.long_run.price_index
             if not env.arrange_funding(firm.id, cost, "rnd", self.cfg.cash_cover, state):
                 continue

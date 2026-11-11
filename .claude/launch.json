@@ -1,0 +1,35 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "dashboard",
+      "runtimeExecutable": ".venv/Scripts/python.exe",
+      "runtimeArgs": [
+        "-m",
+        "market_sim.serve",
+        "--dir",
+        "runs",
+        "--port",
+        "8770"
+      ],
+      "port": 8770
+    },
+    {
+      "name": "spiel",
+      "runtimeExecutable": ".venv/Scripts/python.exe",
+      "runtimeArgs": [
+        "-m",
+        "market_sim.game.server",
+        "--port",
+        "8771",
+        "--saves",
+        "runs/spielstaende",
+        "--years",
+        "3",
+        "--days-per-year",
+        "120"
+      ],
+      "port": 8771
+    }
+  ]
+}

@@ -166,6 +166,7 @@ class Geography:
             runtime = env.runtimes[firm.id]
             if not runtime.active or firm.id not in summaries:
                 continue
+            self._player_orders(runner, firm, summaries[firm.id], state, days)
             if stage_use[firm.stage] < cfg.stage_utilization_min:
                 continue
             self._invest(runner, firm, summaries[firm.id], state, days)
@@ -177,6 +178,8 @@ class Geography:
         """Own fleet: fixed cost plus damage risk; service: dearer per km, no risk."""
         cfg = self.cfg
         env = runner.env
+        player = getattr(runner, "player_choices", {}).get(firm.id)
+        wanted = player.transport_mode if player is not None and player.transport_mode in ("own", "service") else None
         shipped = sum(env.runtimes[firm.id].shipment_history[-runner.config.simulation.days_per_year:])
         if not shipped:
             return
@@ -197,19 +200,47 @@ class Geography:
             self.trucks.decide(runner, state, firm, shipped,
                                shipped * (mean_km * cfg.own_rate * self.fuel_index + damage), service,
                                mean_km=mean_km)
+            if wanted is not None and firm.transport_mode != wanted:
+                self._set_transport(runner, firm, wanted, state)
             return
         own = shipped * (mean_km * cfg.own_rate * self.fuel_index + damage) + cfg.fleet_cost_per_day * 365
         choice = "service" if service < own else "own"
+        if wanted is not None:
+            choice = wanted
         if choice != firm.transport_mode:
-            firm.transport_mode = choice
-            state.events.append({"year": state.year, "day": runner.config.simulation.days_per_year,
-                                 "firm": firm.id, "event": "transport_switch",
-                                 "details": "jetzt Transportdienst" if choice == "service" else "jetzt eigene Flotte"})
+            self._set_transport(runner, firm, choice, state)
+
+    def _set_transport(self, runner, firm, choice, state) -> None:
+        firm.transport_mode = choice
+        state.events.append({"year": state.year, "day": runner.config.simulation.days_per_year,
+                             "firm": firm.id, "event": "transport_switch",
+                             "details": "jetzt Transportdienst" if choice == "service" else "jetzt eigene Flotte"})
+
+    def _player_orders(self, runner, firm, summary, state, days) -> None:
+        """Player's one-time orders (capacity, new site), run regardless of utilization and profit."""
+        choice = getattr(runner, "player_choices", {}).get(firm.id)
+        if choice is None or (choice.expand_order is None and choice.site_order is None):
+            return
+        env = runner.env
+        unit_cost = self.cfg.build_cost_per_capacity_unit.get(firm.stage, 0.0) * runner.long_run.price_index
+        if choice.expand_order is not None:
+            units = max(1, int(choice.expand_order))
+            self._start(env, firm, "expand", units, units * unit_cost, days, state)
+            choice.expand_order = None
+        if choice.site_order is not None:
+            region = choice.site_order
+            if firm.stage == "retailer" and region in self.regions and region not in self.sites(firm):
+                units = max(1, round(env._effective_capacity(firm.id) * self.cfg.site_fraction))
+                self._start(env, firm, "site", (region, units), units * unit_cost, days, state)
+            choice.site_order = None
 
     def _invest(self, runner, firm, summary, state, days) -> None:
         cfg = self.cfg
         env = runner.env
         runtime = env.runtimes[firm.id]
+        player = getattr(runner, "player_choices", {}).get(firm.id)
+        if player is not None and player.auto_invest is False:
+            return
         if any(p[1] == firm.id for p in self.projects) or summary.profit <= 0:
             return
         capacity = env._effective_capacity(firm.id)

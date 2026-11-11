@@ -34,6 +34,10 @@ class Marketing:
             if firm.stage in ("wholesaler", "distributor"):
                 continue  # trade firms do not advertise to consumers
             self.daily_budget[firm.id] = share * runtime.last_year_revenue / days
+            choice = getattr(runner, "player_choices", {}).get(firm.id)
+            if choice is not None and choice.marketing_budget is not None:
+                index = runner.long_run.price_index or 1.0
+                self.daily_budget[firm.id] = max(0.0, choice.marketing_budget) * index / days
 
     def daily(self, env) -> None:
         for firm_id, amount in self.daily_budget.items():

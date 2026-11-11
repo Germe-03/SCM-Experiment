@@ -148,8 +148,12 @@ class StockMarket:
         new_listings = []
         if year >= cfg.tradable_from_year:
             for fid in active:
+                choice = getattr(runner, "player_choices", {}).get(fid)
+                wish = choice.listing if choice is not None else None
+                if wish is False:
+                    continue
                 if (fid not in self.listed and fid not in self._ever
-                        and (fid in self._exempt
+                        and (wish is True or fid in self._exempt
                              or year - self._first_active[fid] >= cfg.listing_min_years)):
                     runtime = runner.env.runtimes[fid]
                     firm = runner.network.firm(fid)

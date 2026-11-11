@@ -337,6 +337,7 @@ class MarketEnvironment:
         # Phase 39: stock per firm and commodity, risk appetite and this year's purchase prices.
         self.commodity_stock: dict[str, dict[str, float]] = {}
         self.commodity_courage: dict[str, float] = {}
+        self._player_choices: dict = {}
         self.commodity_spend: dict[str, dict[str, list[float]]] = {}
         self.material_cost_multiplier = 1.0
         # Electricity: own price index (own random stream), samples of the year, yearly rows.
@@ -705,6 +706,22 @@ class MarketEnvironment:
         return budget > 0 and amount <= budget
 
     @property
+    def player_choices(self) -> dict:
+        return self.__dict__.setdefault("_player_choices", {})
+
+    @player_choices.setter
+    def player_choices(self, value: dict) -> None:
+        self._player_choices = value
+        if getattr(self, "banking", None) is not None:
+            self.banking.player_choices = value
+
+    def _courage(self, firm_id: str) -> float:
+        choice = self.player_choices.get(firm_id)
+        if choice is not None and choice.commodity_courage is not None:
+            return max(0.0, min(1.0, choice.commodity_courage))
+        return max(0.0, min(1.0, self.commodity_courage.get(firm_id, 0.5)))
+
+    @property
     def loans_enabled(self) -> bool:
         return self.banking is not None and self.config.banking.loans.enabled
 
@@ -727,9 +744,11 @@ class MarketEnvironment:
         if banking is None or not lc.enabled or amount <= 0:
             return old_ok
         rng = banking.loan_rng
+        choice = self.player_choices.get(firm_id)
+        mode = choice.credit_mode if choice is not None else "auto"
         policy = self.policy_rate()
         skip = min(lc.max_skip, lc.rate_damping * max(0.0, policy - lc.rate_neutral))
-        if commit and skip > 0 and rng.random() < skip:
+        if commit and skip > 0 and rng.random() < skip and mode != "prefer":
             return False
         reserve = lc.reserve_months / 12.0 * lc.cost_share * runtime.last_year_revenue
         cash_ok = old_ok and runtime.cash - amount >= reserve
@@ -737,10 +756,16 @@ class MarketEnvironment:
         days = self.config.simulation.days_per_year
         events = state.events if state is not None else banking.credit_events
         offer, reason = banking.loan_offer(firm_id, runtime, amount, purpose, policy)
+        if mode == "never":
+            if commit and cash_ok:
+                rng.random()  # keep the random stream identical
+            return old_ok
         if not commit:
             return cash_ok or offer is not None
-        risk = max(0.0, min(1.0, self.commodity_courage.get(firm_id, 0.5)))
+        risk = self._courage(firm_id)
         prefers_credit = cash_ok and rng.random() < lc.preference_base + lc.preference_risk * risk
+        if mode == "prefer" and cash_ok:
+            prefers_credit = True
         if cash_ok and not (prefers_credit and offer is not None):
             return True
         if offer is None:
@@ -1233,7 +1258,7 @@ class MarketEnvironment:
             self.record_commodity_purchase(firm.id, need - used, name)
         self._book_production(firm, runtime, max(0.0, amount))
         # Buy ahead of need when the price is below the recent average.
-        courage = max(0.0, min(1.0, self.commodity_courage.get(firm.id, 0.5)))
+        courage = self._courage(firm.id)
         threshold = 1.0 - cfg.stock_discount_threshold * (1.0 - courage)
         daily = max(1, self._effective_capacity(firm.id))
         for name in sorted(amounts):

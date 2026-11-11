@@ -108,6 +108,7 @@ class BankingSystem:
         self._term_cache: dict[str, float] | None = None
         self._loan_counter = 0
         self.loan_rng = random.Random(f"loans-{seed}")
+        self.player_choices: dict = {}
         for firm_id in sorted(runtimes):
             if runtimes[firm_id].active:
                 self.add_firm(firm_id)
@@ -143,6 +144,10 @@ class BankingSystem:
                     noise: dict[str, float]) -> str | None:
         cfg = self.cfg
         debt = max(0.0, -runtimes[firm_id].cash)
+        choice = self.player_choices.get(firm_id)
+        wanted = choice.bank_id if choice is not None else None
+        if wanted is not None and wanted in self.banks and self.banks[wanted].active and wanted not in exclude:
+            return wanted
         candidates = [bid for bid in sorted(self.banks)
                       if self.banks[bid].active and bid not in exclude
                       and (debt == 0 or debt <= self.room(self.banks[bid]))]

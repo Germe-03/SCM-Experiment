@@ -65,7 +65,8 @@ class StateActor:
                 continue
             if firm.id not in self.beliefs:
                 self._new_beliefs(firm.id)
-            if not self.willing(firm.id):
+            choice = getattr(runner, "player_choices", {}).get(firm.id)
+            if choice is None and not self.willing(firm.id):
                 continue
             risk = runner.strategies[firm.id].risk_tolerance if firm.id in runner.strategies else 0.5
             last_revenue = max(1.0, runtime.last_year_revenue)
@@ -76,6 +77,8 @@ class StateActor:
                 benefit = offence.benefit * self._base(offence.kind, runtime, last_revenue)
                 penalty = detect * (offence.fine_fixed + fine_share * last_revenue)
                 committed = benefit > penalty * (1 + self.cfg.aversion * (1 - risk))
+                if choice is not None:
+                    committed = offence.name in choice.offences
                 runner.decision_log.record(env.period // runner.config.simulation.days_per_year + 1,
                     firm.id, "offence", {"offence": offence.name, "committed": committed,
                     "believed_detection_probability": detect,
@@ -103,8 +106,10 @@ class StateActor:
         if groups is not None and groups.is_sub_only(firm_id):
             group = groups.group_of(firm_id)
             parent_rt = runner.env.runtimes.get(group.listing_id) if group is not None else None
+        choice = getattr(runner, "player_choices", {}).get(firm_id)
         dist.distribute(year, firm_id, runtime, summary.profit - tax, runtime.initial_cash,
-                        max(0.0, summary.revenue - summary.profit) / 12.0, parent_rt)
+                        max(0.0, summary.revenue - summary.profit) / 12.0, parent_rt,
+                        payout_ratio=choice.payout_ratio if choice is not None else None)
 
     def willing(self, firm_id: str) -> bool:
         """Only some firms consider breaking the law at all; the rest never weigh it."""
