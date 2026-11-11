@@ -99,8 +99,13 @@ class LeasingBook:
                 monthly_payment(financed, residual, annual_rate, years),
             )
 
+        # Phase 57b: a dealer leases only to creditworthy firms: the bank would lend,
+        # or the firm earns money and could pay a third of the amount from its cash.
+        creditworthy = terms is not None or (
+            getattr(runtime, "profit", 0.0) > 0 and runtime.cash >= financed / 3
+        )
         dealer_offer = None
-        if richest is not None:
+        if richest is not None and creditworthy:
             annual_rate = (
                 max(0.0, policy_rate)
                 + self.cfg.bank_margin
@@ -252,6 +257,20 @@ class LeasingBook:
                     reason = "leasing_verwertung"
                 self._dealer_cash(lessor, amount, reason)
 
+    def _successor(self, runner, state, firm_id: str) -> str | None:
+        """Active successor of a firm that left by merger, takeover or holding (else None)."""
+        market = getattr(runner, "stock_market", None)
+        if market is None or not hasattr(market, "delisting_reason"):
+            return None
+        try:
+            reason, successor = market.delisting_reason(runner, state, firm_id)
+        except Exception:
+            return None
+        if reason not in ("merger", "takeover", "holding") or not successor:
+            return None
+        rt = runner.env.runtimes.get(successor)
+        return successor if rt is not None and rt.active else None
+
     def year_end(self, runner, state) -> None:
         env = runner.env
         year = state.year
@@ -265,6 +284,16 @@ class LeasingBook:
             truck = contract["truck"]
 
             if runtime is None or not runtime.active:
+                successor = self._successor(runner, state, firm_id)
+                if successor is not None:
+                    # Merger or takeover: the successor takes over contract and truck.
+                    moved = self.trucks.remove_truck(firm_id, truck.id) if hasattr(self.trucks, "remove_truck") else None
+                    self.trucks.fleets.setdefault(successor, []).append(moved or truck)
+                    (moved or truck).owner = successor
+                    contract["firm"] = successor
+                    self._event(state, successor, "lease_transferred",
+                                f"Leasingvertrag von {firm_id} übernommen")
+                    continue
                 remaining = contract["outstanding"]
                 proceeds = self.trucks.value(env, truck) * self.cfg.default_sale_factor
                 if hasattr(self.trucks, "remove_truck"):

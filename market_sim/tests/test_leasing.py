@@ -223,6 +223,7 @@ def test_dealer_self_lease():
     book, banking, trucks, env, state, runtime, truck = make_system(
         dealers=[dealer], bank_loan=False
     )
+    runtime.profit = 1.0  # profitable firm with cash: the dealer leases without a bank
     offer = make_offer(book, env)
 
     assert offer.kind == "dealer"
@@ -235,3 +236,28 @@ def test_dealer_self_lease():
     financed = 200000.0 - offer.down_payment
     assert math.isclose(dealer.cash, dealer_cash - financed)
     assert banking.receivables == receivables_before
+
+
+def test_dealer_refuses_firm_without_credit_and_profit():
+    dealer = FakeDealer("D1", cash=50_000_000.0, margin=0.3)
+    book, banking, trucks, env, state, runtime, truck = make_system(
+        cash=10_000.0, dealers=[dealer], bank_loan=False
+    )
+    runtime.profit = -5.0
+    assert make_offer(book, env) is None
+
+
+def test_merger_transfers_contract_instead_of_default():
+    book, banking, trucks, env, state, runtime, truck = make_system()
+    trucks.fleets = {"F1": [truck]}
+    offer = make_offer(book, env)
+    book.start(env, state, "F1", truck, None, offer)
+    env.runtimes["F2"] = FakeRuntime(1_000_000.0)
+    runtime.active = False
+    runner = FakeRunner(env)
+    runner.stock_market = SimpleNamespace(delisting_reason=lambda r, s, fid: ("merger", "F2"))
+    book.year_end(runner, FakeState(2, state.events))
+    contract = book.contracts[0]
+    assert contract["status"] == "active" and contract["firm"] == "F2"
+    assert banking.loss == 0.0
+    assert any(e["event"] == "lease_transferred" for e in state.events)

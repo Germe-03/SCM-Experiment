@@ -214,6 +214,10 @@ EVENT_TEMPLATES: dict[str, list[dict[str, str | None]]] = {
         {"text": "{zeit} geriet {firma} mit dem Lastwagen-Leasing in Zahlungsverzug.", "when": None},
         {"text": "{zeit} fiel bei {firma} ein Leasingvertrag für einen Lastwagen aus.", "when": None},
     ],
+    "lease_transferred": [
+        {"text": "{zeit} übernahm {firma} auch die laufenden Lastwagen-Leasingverträge.", "when": None},
+        {"text": "{zeit} führte {firma} ein übernommenes Lastwagen-Leasing weiter.", "when": None},
+    ],
     "market_entry": [
         {"text": "{zeit} trat {firma} in den Markt ein.", "when": None},
         {"text": "{zeit} nahm {firma} den Betrieb in der Stufe {stufe} auf.", "when": None},
@@ -475,6 +479,7 @@ EVENT_IMPORTANCE: dict[str, int] = {
     "lease_started": 2,
     "lease_ended": 2,
     "lease_default": 5,
+    "lease_transferred": 2,
 }
 
 DEFAULT_IMPORTANCE = 3
