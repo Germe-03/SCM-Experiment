@@ -460,53 +460,8 @@
           } }
         ], candidates));
 
-        // Einkauf nach Anteilen: je Lieferant ein Feld «Anteil %».
-        var anteile = aktuelleAnteile(ctx);
-        var anteilBlock = abschnitt(root, 'Einkauf nach Anteilen');
-        anteilBlock.appendChild(el('p', '', 'Lege fest, wie viel Prozent deiner Bestellung bei welchem Lieferanten eingekauft wird. Die Prozente werden auf 100 umgerechnet, du musst nicht genau 100 eingeben. Leer lassen = kein Anteil.'));
-        anteilBlock.appendChild(el('p', 'rd-note', 'Wichtig: Sobald du hier mindestens einen Anteil einträgst, haben die Anteile Vorrang vor der Regel und dem festen Lieferanten unten.'));
-        var summe = el('p', 'rd-leise', '');
-        function sendeAnteile(eingaben) {
-          var ergebnis = {};
-          Object.keys(eingaben).forEach(function (id) {
-            var text = String(eingaben[id].value).trim().replace(',', '.');
-            var n = Number(text);
-            if (text !== '' && Number.isFinite(n) && n > 0) ergebnis[id] = n;
-          });
-          sendeAnteileAnzeige(summe, eingaben, ctx);
-          ctx.entscheide({ supplier_shares: Object.keys(ergebnis).length ? ergebnis : null });
-        }
-        var eingaben = {};
-        anteilBlock.appendChild(tabelle([
-          { key: 'name', label: 'Lieferant', value: function (s) { return wert(s, 'name', '–'); } },
-          { key: 'price', label: 'Preis', value: function (s) { return (ctx.preis ? ctx.preis(s.price) : geld(ctx, s.price)); } },
-          { key: 'quality', label: 'Qualität', value: function (s) { return zahl(ctx, s.quality, 2); } },
-          { key: 'reliability', label: 'Zuverlässigkeit', value: function (s) { return zahl(ctx, s.reliability, 2); } },
-          { key: 'lead_time', label: 'Lieferzeit (Tage)', value: function (s) {
-            var tage = s.lead_time !== undefined && s.lead_time !== null ? s.lead_time : s.lead_time_days;
-            return tage === undefined || tage === null ? '–' : zahl(ctx, tage);
-          } },
-          { key: 'anteil', label: 'Anteil %', value: function (s) {
-            var input = el('input');
-            input.type = 'number';
-            input.min = '0';
-            input.max = '100';
-            input.step = '1';
-            input.className = 'anteil-feld';
-            input.dataset.lieferant = String(s.id);
-            input.setAttribute('aria-label', 'Anteil in Prozent: ' + wert(s, 'name', ''));
-            var bisher = anteile[String(s.id)];
-            input.value = bisher !== undefined && bisher !== null ? String(bisher) : '';
-            input.addEventListener('input', function () { sendeAnteile(eingaben); });
-            eingaben[String(s.id)] = input;
-            return input;
-          } }
-        ], candidates));
-        anteilBlock.appendChild(summe);
-        sendeAnteileAnzeige(summe, eingaben, ctx);
-
         var label = el('label', 'rd-form');
-        label.appendChild(document.createTextNode('Lieferant wählen (nur ohne Anteile) '));
+        label.appendChild(document.createTextNode('Lieferant wählen '));
         var select = el('select');
         [
           ['', 'Automatisch'],

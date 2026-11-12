@@ -220,16 +220,7 @@
 
     aktualisieren();
 
-    var order = ctx.state && ctx.state.choices ? ctx.state.choices.storage_order : null;
-    var feld = eingabefeld('Lager ausbauen (Flaschen)', order === undefined || order === null ? '' : order, 0, 1);
-    feld.input.addEventListener('input', function () {
-      var n = Math.max(0, zahlRoh(feld.input.value));
-      ctx.entscheide({ storage_order: n > 0 ? n : null });
-    });
-    var form = el('div', 'rd-form');
-    form.appendChild(feld.label);
-    block.appendChild(form);
-    textZeile(block, 'Einmalige Kosten, der Ausbau steht ab dem nächsten Halt bereit.', 'rd-note');
+    textZeile(block, 'Das Lager ausbauen kannst du im Reiter Lager.', 'rd-note');
     if (platzText) textZeile(block, platzText, 'rd-leise');
 
     return { aktualisieren: aktualisieren, block: block };
@@ -444,7 +435,7 @@
     aktualisieren();
   }
 
-  function haendlerRender(root, ctx, data) {
+  function haendlerRender(root, ctx, data, quellen) {
     var nachfrageBlock = abschnitt(root, 'Nachfrage je Getränkeart');
     var markenBlock = abschnitt(root, 'Marken');
     if (!data) {
@@ -473,6 +464,9 @@
         brand: brand,
         id: id,
         feld: field.input,
+        warnung: el('span', 'rd-negativ re-lagerwarnung'),
+        knopf: el('button', '', '▸'),
+        offen: false,
         _row: function (tr) {
           tr.dataset.marke = String(wert(brand, 'name', '')).toLocaleLowerCase('de');
           tr.dataset.kategorie = String(wert(brand, 'category', ''));
@@ -624,9 +618,95 @@
       { key: 'demand_share', label: 'Nachfrageanteil', value: function (row) {
         return prozent(ctx, row.brand.demand_share);
       } },
-      { key: 'feld', label: 'Flaschen/Tag', value: function (row) { return row.feld; } }
+      { key: 'feld', label: 'Flaschen/Tag', value: function (row) {
+        var box = el('span');
+        box.appendChild(row.feld);
+        box.appendChild(row.warnung);
+        return box;
+      } },
+      { key: 'quellen', label: 'Grosshändler', value: function (row) { return row.knopf; } }
     ], brandRows);
     markenBlock.appendChild(table);
+    var wahl = Object.assign({}, (ctx.state && ctx.state.choices && ctx.state.choices.brand_suppliers) || {});
+    var quellenBrands = quellen && quellen.brands && typeof quellen.brands === 'object' ? quellen.brands : {};
+    function liefermenge(row) {
+      var liste = array(quellenBrands[row.id]);
+      var fest = wahl[row.id];
+      if (fest !== undefined && fest !== null) {
+        liste = liste.filter(function (s) { return String(s.supplier_id) === String(fest); });
+      }
+      return { n: liste.length, summe: liste.reduce(function (sum, s) { return sum + zahlRoh(s.deliverable_per_day); }, 0) };
+    }
+    function pruefeLiefermenge(row) {
+      var info = liefermenge(row);
+      var plan = menge(row.id);
+      if (info.n && plan > info.summe) {
+        row.warnung.textContent = ' Plan übersteigt die lieferbare Menge (' + zahl(ctx, info.summe) + ' pro Tag)';
+      } else {
+        row.warnung.textContent = '';
+      }
+    }
+    brandRows.forEach(function (row) {
+      // Tabellenzeile der Marke über das Eingabefeld finden (wird von tabelle() gebaut).
+      if (!row.row && row.feld && row.feld.closest) {
+        row.row = row.feld.closest('tr');
+        if (row.row) {
+          row.row.dataset.marke = String(wert(row.brand, 'name', '')).toLocaleLowerCase('de');
+          row.row.dataset.kategorie = String(wert(row.brand, 'category', ''));
+        }
+      }
+      row.knopf.type = 'button';
+      row.knopf.setAttribute('aria-label', 'Grosshändler anzeigen: ' + wert(row.brand, 'name', ''));
+      row.knopf.setAttribute('aria-expanded', 'false');
+      var liste = array(quellenBrands[row.id]);
+      var detail = el('tr', 're-detail');
+      detail.hidden = true;
+      var zelle = el('td');
+      zelle.colSpan = 10;
+      detail.appendChild(zelle);
+      row.detail = detail;
+      if (!liste.length) {
+        zelle.appendChild(el('p', 'rd-leise', quellen ? 'Für diese Marke sind keine Grosshändler bekannt.' : 'Noch nicht verfügbar'));
+      } else {
+        var auswahlLabel = el('label', '', 'Grosshändler für diese Marke ');
+        var select = el('select');
+        var auto = el('option', '', 'automatisch');
+        auto.value = '';
+        select.appendChild(auto);
+        liste.forEach(function (s) {
+          var o = el('option', '', wert(s, 'supplier_name', s.supplier_id));
+          o.value = String(s.supplier_id);
+          select.appendChild(o);
+        });
+        select.value = wahl[row.id] !== undefined && wahl[row.id] !== null ? String(wahl[row.id]) : '';
+        if (select.value !== (wahl[row.id] === undefined || wahl[row.id] === null ? '' : String(wahl[row.id]))) select.value = '';
+        select.addEventListener('change', function () {
+          if (select.value) wahl[row.id] = select.value;
+          else delete wahl[row.id];
+          ctx.entscheide({ brand_suppliers: Object.keys(wahl).length ? Object.assign({}, wahl) : null });
+          pruefeLiefermenge(row);
+        });
+        auswahlLabel.appendChild(select);
+        zelle.appendChild(auswahlLabel);
+        zelle.appendChild(tabelle([
+          { key: 'supplier_name', label: 'Grosshändler' },
+          { key: 'price', label: 'Preis', value: function (s) { return preis(ctx, s.price); } },
+          { key: 'stock', label: 'Lager', value: function (s) { return zahl(ctx, s.stock); } },
+          { key: 'deliverable_per_day', label: 'Lieferbar/Tag', value: function (s) { return zahl(ctx, s.deliverable_per_day); } },
+          { key: 'fill_rate', label: 'Lieferquote', value: function (s) {
+            return s.fill_rate === undefined || s.fill_rate === null ? '–' : prozent(ctx, s.fill_rate);
+          } }
+        ], liste));
+      }
+      if (row.row) row.row.after(detail);
+      row.knopf.addEventListener('click', function () {
+        row.offen = !row.offen;
+        row.knopf.textContent = row.offen ? '▾' : '▸';
+        row.knopf.setAttribute('aria-expanded', row.offen ? 'true' : 'false');
+        detail.hidden = !row.offen || (row.row && row.row.hidden);
+      });
+      pruefeLiefermenge(row);
+    });
     var note = el('div', 'rd-kachel');
     note.appendChild(el('strong', '', 'Regal-Fixkosten'));
     note.appendChild(el('p', '', 'Für jede Getränkeart, die du führst (Lager oder Bestellmenge > 0), fallen Regal-Fixkosten pro Jahr an. Wenige Sorten gut zu führen (Spezialisierung) ist oft günstiger.'));
@@ -658,6 +738,7 @@
         var matchesName = !query || row.row.dataset.marke.indexOf(query) >= 0;
         var matchesCategory = !markenkategorie || row.row.dataset.kategorie === markenkategorie;
         row.row.hidden = !(matchesName && matchesCategory);
+        if (row.detail) row.detail.hidden = row.row.hidden || !row.offen;
       });
     }
 
@@ -714,6 +795,7 @@
       brandRows.forEach(function (row) {
         if (!row.row) return;
         row.row.className = menge(row.id) > 0 ? 'rd-eigen' : '';
+        if (row.detail) pruefeLiefermenge(row);
       });
       storage.aktualisieren();
     }
@@ -814,9 +896,10 @@
     var p = await laden(ctx, 'purchasing');
     var l = await laden(ctx, 'deliveries');
     var branch = ctx && ctx.state && ctx.state.firm ? ctx.state.firm.branch : '';
+    var q = branch === 'hersteller' ? null : await laden(ctx, 'brand_sources');
 
     if (branch === 'hersteller') herstellerRender(root, ctx, p);
-    else haendlerRender(root, ctx, p);
+    else haendlerRender(root, ctx, p, q);
     lieferungenRender(root, ctx, l);
   }
 

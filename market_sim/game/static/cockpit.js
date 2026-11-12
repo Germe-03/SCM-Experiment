@@ -20,6 +20,7 @@ const REITER_KEYS = [
     'forschung',
     'logistik',
     'einkauf',
+    'lager',
     'finanzen',
     'abschluesse',
     'boerse',
@@ -673,7 +674,8 @@ function fuegeKpi(raster, label, wert, hinweis, info, klasse) {
     if (hinweis) {
         const zusatz = document.createElement('small');
         zusatz.className = 'kpi-hinweis';
-        zusatz.textContent = hinweis;
+        if (hinweis.nodeType) zusatz.appendChild(hinweis);
+        else zusatz.textContent = hinweis;
         kpi.appendChild(zusatz);
     }
 
@@ -1016,7 +1018,10 @@ async function zeichneUebersicht(el) {
             Number.isFinite(gewinnJahr) ? (gewinnJahr >= 0 ? 'positiv' : 'negativ') : '');
     }
     fuegeKpi(raster, 'Absatz pro Tag (Flaschen)', formatiereGanzzahl(kpis.recent_sales), null, infos.sales);
-    fuegeKpi(raster, 'Lager (Flaschen)', formatiereGanzzahl(kpis.inventory), null, infos.inventory);
+    const lagerLink = document.createElement('a');
+    lagerLink.href = '#lager';
+    lagerLink.textContent = 'Details im Reiter Lager';
+    fuegeKpi(raster, 'Lager (Flaschen)', formatiereGanzzahl(kpis.inventory), lagerLink, infos.inventory);
     fuegeKpi(raster, 'Rückstand (Flaschen)', formatiereGanzzahl(kpis.backlog), null, infos.backlog);
     fuegeKpi(raster, 'Mitarbeiter', formatiereGanzzahl(kpis.employees), null, infos.employees);
 
@@ -1036,12 +1041,15 @@ async function zeichneUebersicht(el) {
     );
 
     const kapazitaet = Number(capacity && capacity.capacity_per_day);
-    const auslastung = Number(capacity && capacity.utilization_last_year);
+    const ersteresJahr = Number(state.year) === 1;
+    const auslastungJetzt = Number(engpass && engpass.utilization_now);
+    const auslastung = ersteresJahr && engpass && engpass.utilization_now !== null && engpass.utilization_now !== undefined && Number.isFinite(auslastungJetzt)
+        ? auslastungJetzt : Number(capacity && capacity.utilization_last_year);
     fuegeKpi(
         raster,
         'Kapazität (Flaschen pro Tag)',
         Number.isFinite(kapazitaet) ? formatiereGanzzahl(kapazitaet) : '–',
-        Number.isFinite(auslastung) ? `Auslastung letztes Jahr: ${formatiereProzent(auslastung)}` : null,
+        Number.isFinite(auslastung) ? `${ersteresJahr && Number.isFinite(auslastungJetzt) ? 'Auslastung jetzt' : 'Auslastung letztes Jahr'}: ${formatiereProzent(auslastung)}` : null,
         infos.capacity
     );
 

@@ -115,6 +115,7 @@ class GameController:
         self.messages: list[dict] = []
         self.macro_history: list[dict] = []
         self.purchase_history: list[dict] = []
+        self.stock_history: list[dict] = []
         self.effects: list[dict] = []
         self._pending_changes: list[str] = []
         self._year_totals: dict[int, tuple[float, float]] = {}
@@ -230,6 +231,7 @@ class GameController:
                 self.messages = []
                 self.macro_history = []
                 self.purchase_history = []
+                self.stock_history = []
                 self.effects = []
                 self._pending_changes = []
                 self._year_totals = {}
@@ -295,6 +297,7 @@ class GameController:
                     )
                 session_orders = dict(orders_copy)
                 session_orders.pop("expand", None)
+                self._apply_brand_suppliers(choices_copy)
 
                 self._pending_changes = describe_changes(
                     current, updates, choices or {}, orders or {}
@@ -350,6 +353,7 @@ class GameController:
             self.messages = []
             self.macro_history = []
             self.purchase_history = []
+            self.stock_history = []
             self.effects = []
             self._pending_changes = []
             self._year_totals = {}
@@ -443,6 +447,8 @@ class GameController:
                 self.price_history = []
                 self.messages = []
                 self.macro_history = []
+                self.purchase_history = []
+                self.stock_history = []
                 self.effects = []
                 self._pending_changes = []
                 self._year_totals = {}
@@ -597,6 +603,7 @@ class GameController:
 
         self._record_macro(snapshot)
         self._record_effect()
+        self._record_stock(snapshot)
         try:
             prices = self.session.runner.env.component_prices(snapshot.firm_id)
             if prices:
@@ -811,6 +818,7 @@ class GameController:
         "takeover_offers": ("views2", "takeover_offers"), "assortment": ("views2", "assortment"),
         "purchasing": ("views3", "purchasing"), "deliveries": ("views3", "deliveries"),
         "daughters": ("views3", "daughters"), "stocks_all": ("views3", "stocks_all"),
+        "inventory": ("views4", "inventory"), "brand_sources": ("views4", "brand_sources"),
     }
 
     def view(self, name: str, **query) -> dict:
@@ -830,6 +838,8 @@ class GameController:
                 extra["year"] = int(self.snapshot.year)
             elif name == "purchasing":
                 extra["history"] = list(self.purchase_history)
+            elif name == "inventory":
+                extra["stock_history"] = list(self.stock_history)
             elif name == "costs":
                 extra["year"] = int(self.snapshot.year)
             elif name == "stocks":
@@ -856,6 +866,55 @@ class GameController:
                 return _german_view(name, data)
             except Exception as exc:  # eine kaputte Ansicht darf das Spiel nicht stoppen
                 return {"error": f"Ansicht {name} nicht verfügbar ({exc.__class__.__name__}: {exc})"}
+
+    def _apply_brand_suppliers(self, choices_copy: dict) -> None:
+        """brand_suppliers (Marke -> Grosshändler) in supplier_shares (Lieferant -> Flaschen) umrechnen."""
+        try:
+            runner = self.session.runner
+            current = runner.player_choices.get(self.snapshot.firm_id)
+            suppliers = choices_copy.get("brand_suppliers", getattr(current, "brand_suppliers", None))
+            if not isinstance(suppliers, dict) or not suppliers:
+                # Feste Lieferanten wieder entfernt: auch die daraus berechneten Anteile entfernen.
+                if "brand_suppliers" in choices_copy and getattr(current, "supplier_shares", None):
+                    choices_copy["supplier_shares"] = None
+                return
+            plan = choices_copy.get("brand_plan", getattr(current, "brand_plan", None))
+            plan = plan if isinstance(plan, dict) else {}
+            shares: dict = {}
+            for brand_id, supplier_id in suppliers.items():
+                if not supplier_id:
+                    continue
+                try:
+                    amount = float(plan.get(brand_id, 0) or 0)
+                except (TypeError, ValueError):
+                    amount = 0.0
+                shares[supplier_id] = shares.get(supplier_id, 0.0) + max(0.0, amount)
+            if shares and sum(shares.values()) <= 0:
+                shares = {supplier_id: 1.0 for supplier_id in shares}
+            if shares:
+                choices_copy["supplier_shares"] = shares
+        except Exception:
+            pass
+
+    def _record_stock(self, snapshot) -> None:
+        """Lagerstand je Marke (Flaschen) dieser Runde merken (für Lager-Verlauf und Absatz pro Tag)."""
+        try:
+            runner = self.session.runner
+            runtime = runner.env.runtimes.get(snapshot.firm_id)
+            unit = self._unit_size()
+            stock = getattr(runtime, "stock", None) or {}
+            month = int(snapshot.month)
+            names = ("Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August",
+                     "September", "Oktober", "November", "Dezember")
+            month_name = names[month - 1] if 1 <= month <= 12 else f"Monat {month}"
+            self.stock_history.append({
+                "label": f"Jahr {int(snapshot.year)}, {month_name}",
+                "year": int(snapshot.year),
+                "month": month,
+                "brands": {str(b): float(v) * unit for b, v in stock.items()},
+            })
+        except Exception:
+            pass
 
     def _record_macro(self, snapshot) -> None:
         env = self.session.runner.env

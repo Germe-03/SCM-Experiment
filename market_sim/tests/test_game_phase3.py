@@ -54,6 +54,7 @@ def test_player_choices_update_unknown_key_and_to_dict_fields():
         "storage_order",
         "cancel_open_orders",
         "daughter_rules",
+        "brand_suppliers",
     }
 
     with pytest.raises(ValueError):

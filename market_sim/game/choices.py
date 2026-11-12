@@ -69,6 +69,9 @@ class PlayerChoices:
     cancel_open_orders: bool | None = None
     # Feedback 3 – rules for daughters run by a CEO: firm id -> {"no_credit": bool, "no_stakes": bool}.
     daughter_rules: dict | None = None
+    # Feedback 4 – traders: fixed wholesaler per brand (brand id -> supplier firm id); missing = automatic.
+    # The controller turns it into supplier_shares before each round.
+    brand_suppliers: dict | None = None
 
     def offence_intensity(self, name: str) -> float:
         """Intensity 0..1 of an offence the player chose (0 = not committed)."""
