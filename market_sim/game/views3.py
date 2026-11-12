@@ -219,7 +219,7 @@ def purchasing(runner, state, player_id, **extra) -> dict:
         return {
             "kind": "haendler",
             "categories": categories,
-            "brands": [_clean(item) for item in catalog if isinstance(item, dict)],
+            "brands": _with_buy_prices(runner, state, player_id, [_clean(item) for item in catalog if isinstance(item, dict)]),
             "plan": _clean(plan),
             "storage": storage,
         }
@@ -566,3 +566,17 @@ def stocks_all(runner, state, player_id, **extra) -> dict:
         return {"firms": firms, "series": series}
     except Exception:
         return {"firms": [], "series": {}}
+
+
+def _with_buy_prices(runner, state, player_id, brands):
+    """Für Händler: Preis = was du beim Grosshändler zahlst (nicht der Herstellerpreis)."""
+    try:
+        from market_sim.game.views4 import buy_prices
+        buy = buy_prices(runner, state, player_id)
+        for item in brands:
+            if item.get("id") in buy:
+                item["producer_price"] = item.get("price")
+                item["price"] = buy[item["id"]]
+    except Exception:
+        pass
+    return brands

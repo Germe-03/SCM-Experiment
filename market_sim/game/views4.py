@@ -165,10 +165,12 @@ def inventory(runner, state, player_id, **extra) -> dict:
         if not isinstance(catalog, list):
             catalog = []
         prices = {}
+        buy = buy_prices(runner, state, player_id)
         for row in catalog:
             if isinstance(row, dict):
-                prices[row.get("id")] = _number(row.get("price"))
-                prices[str(row.get("id"))] = _number(row.get("price"))
+                price = buy.get(row.get("id"), _number(row.get("price")))
+                prices[row.get("id")] = price
+                prices[str(row.get("id"))] = price
 
         incoming_by_brand = {}
         incoming = _read(runtime, "incoming_brands", [])
@@ -629,3 +631,22 @@ def brand_sources(runner, state, player_id, **extra) -> dict:
         })
     except Exception:
         return {"brands": {}, "by_supplier": []}
+
+
+def buy_prices(runner, state, player_id) -> dict:
+    """Preis pro Flasche, den die Spielerfirma beim Grosshändler zahlt: fester Lieferant der Marke,
+    sonst der günstigste, der die Marke führt. {brand_id: preis}"""
+    try:
+        sources = brand_sources(runner, state, player_id).get("brands", {}) or {}
+        choice = getattr(runner, "player_choices", {}).get(player_id)
+        fixed = getattr(choice, "brand_suppliers", None) or {}
+        out = {}
+        for brand_id, rows in sources.items():
+            rows = [r for r in rows if _number(r.get("price")) > 0]
+            if not rows:
+                continue
+            chosen = [r for r in rows if r.get("supplier_id") == fixed.get(brand_id)]
+            out[brand_id] = round(_number((chosen or [min(rows, key=lambda r: _number(r.get("price")))])[0].get("price")), 2)
+        return out
+    except Exception:
+        return {}
