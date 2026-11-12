@@ -24,6 +24,9 @@
   <script src="reiter_spezial.js"></script>
   <script src="reiter_abschluesse.js"></script>
   <script src="reiter_sortiment.js"></script>
+  <script src="reiter_boerse.js"></script>
+  <script src="reiter_einkauf.js"></script>
+  <script src="cockpit_zusatz.js"></script>
   <script src="cockpit.js" defer></script>
 </head>
 <body>
@@ -35,6 +38,7 @@
     <span id="dauer-anzeige" hidden></span>
     <button type="button" id="theme-btn" aria-label="Hell/Dunkel umschalten">◐</button>
     <button type="button" id="speichern-btn">Speichern</button>
+    <button type="button" id="neues-spiel-btn">Neues Spiel</button>
   </header>
 
   <div id="fehler" role="alert" hidden></div>
@@ -91,6 +95,7 @@
         <button type="button" class="reiter-btn" role="tab" data-tab="markt">Markt</button>
         <button type="button" class="reiter-btn" role="tab" data-tab="forschung">Forschung</button>
         <button type="button" class="reiter-btn" role="tab" data-tab="logistik">Logistik</button>
+        <button type="button" class="reiter-btn" role="tab" data-tab="einkauf">Einkauf</button>
         <button type="button" class="reiter-btn" role="tab" data-tab="finanzen">Finanzen</button>
         <button type="button" class="reiter-btn" role="tab" data-tab="abschluesse">Abschlüsse</button>
         <button type="button" class="reiter-btn" role="tab" data-tab="boerse">Börse</button>
@@ -108,6 +113,7 @@
           <section id="tab-markt" class="reiter-inhalt" role="tabpanel" hidden></section>
           <section id="tab-forschung" class="reiter-inhalt" role="tabpanel" hidden></section>
           <section id="tab-logistik" class="reiter-inhalt" role="tabpanel" hidden></section>
+          <section id="tab-einkauf" class="reiter-inhalt" role="tabpanel" hidden></section>
           <section id="tab-finanzen" class="reiter-inhalt" role="tabpanel" hidden></section>
           <section id="tab-abschluesse" class="reiter-inhalt" role="tabpanel" hidden></section>
           <section id="tab-boerse" class="reiter-inhalt" role="tabpanel" hidden></section>
@@ -141,6 +147,10 @@
       <div id="spielende" class="karte" hidden>
         <h2 id="spielende-titel"></h2>
         <p id="spielende-text"></p>
+        <div id="dashboard-bereich" class="dashboard-bereich" hidden>
+          <p id="dashboard-status" role="status"></p>
+          <a id="dashboard-link" class="primaer dashboard-link" href="/dashboard" target="_blank" rel="noopener" hidden>Dashboard öffnen</a>
+        </div>
         <button type="button" id="neu-btn" class="primaer">Neues Spiel</button>
       </div>
 
@@ -149,6 +159,7 @@
         <div class="aktionen">
           <button type="button" id="runde-btn" class="primaer">Runde beenden</button>
           <button type="button" id="weiter-btn">Wie bisher weiter</button>
+          <button type="button" id="jahr-btn">Rest des Jahres überspringen</button>
           <button type="button" id="verkaufen-btn" class="gefahr">Firma verkaufen</button>
         </div>
       </footer>

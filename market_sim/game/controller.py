@@ -114,6 +114,7 @@ class GameController:
         self.price_history: list[dict] = []
         self.messages: list[dict] = []
         self.macro_history: list[dict] = []
+        self.purchase_history: list[dict] = []
         self.effects: list[dict] = []
         self._pending_changes: list[str] = []
         self._year_totals: dict[int, tuple[float, float]] = {}
@@ -201,7 +202,12 @@ class GameController:
                 if years is not None and years not in YEARS_CHOICES:
                     raise ValueError("Ungültige Spieldauer")
                 game_years = years if years is not None else (self.years if self.years is not None else 10)
-                session = GameSession(self.seed, game_years, self.days_per_year)
+                session = GameSession(
+                    self.seed, self.years, self.days_per_year,
+                    game_years=game_years,
+                    dashboard_dir=self.save_dir.parent / "spiele",
+                )
+                game_years = session.game_years
                 session.found(branch, name, region, category)
                 snapshot = session.start()
                 protocol = SaveGame(
@@ -223,6 +229,7 @@ class GameController:
                 self.price_history = []
                 self.messages = []
                 self.macro_history = []
+                self.purchase_history = []
                 self.effects = []
                 self._pending_changes = []
                 self._year_totals = {}
@@ -311,6 +318,53 @@ class GameController:
                 return self._state()
             except (ValueError, RuntimeError, KeyError, OSError) as exc:
                 return {"error": str(exc)}
+
+    def skip_year(self, settings: dict | None = None, choices: dict | None = None,
+                  orders: dict | None = None) -> dict:
+        """Erste Runde mit den Eingaben, dann ohne Halt bis zum ersten Halt im nächsten Jahr."""
+        with self._lock:
+            if self.session is None or self.snapshot is None:
+                return {"error": "Kein Spiel aktiv"}
+            start_year = int(self.snapshot.year)
+            result = self.end_round(settings, choices, orders)
+            guard = 0
+            while (
+                "error" not in result
+                and self.snapshot is not None
+                and not self.snapshot.game_over
+                and int(self.snapshot.year) == start_year
+                and guard < 100
+            ):
+                guard += 1
+                result = self.end_round()
+            return result
+
+    def reset(self) -> dict:
+        """Beendet das Spiel ohne Speichern und kehrt zur Gründung zurück."""
+        with self._lock:
+            self.session = None
+            self.snapshot = None
+            self.protocol = None
+            self.history = []
+            self.price_history = []
+            self.messages = []
+            self.macro_history = []
+            self.purchase_history = []
+            self.effects = []
+            self._pending_changes = []
+            self._year_totals = {}
+            self._seen_notices = set()
+            self.sale = None
+            return {"running": False}
+
+    def dashboard_file(self):
+        """Pfad des fertigen Dashboards des aktuellen Spiels oder None."""
+        with self._lock:
+            session = self.session
+            path = getattr(session, "dashboard_path", None) if session is not None else None
+            if path is not None and getattr(session, "dashboard_status", None) == "fertig":
+                return Path(path)
+            return None
 
     def sell(self) -> dict:
         """Verkauft die Firma und beendet das Spiel."""
@@ -544,6 +598,15 @@ class GameController:
         self._record_macro(snapshot)
         self._record_effect()
         try:
+            prices = self.session.runner.env.component_prices(snapshot.firm_id)
+            if prices:
+                self.purchase_history.append({
+                    "label": f"J{snapshot.year} M{snapshot.month}",
+                    **{str(k): round(float(v), 4) for k, v in prices.items()},
+                })
+        except Exception:
+            pass
+        try:
             names = {
                 firm.id: firm.name
                 for firm in self.session.runner._firms()
@@ -578,6 +641,7 @@ class GameController:
                 self._seen_notices,
                 self.session.ceo_book,
                 years_left,
+                snapshot.events,
             ))
         except Exception:
             pass
@@ -724,6 +788,10 @@ class GameController:
             "warnings": self._warnings(),
             "classification": self._classification_label(),
             "depot_value": self._depot_value(),
+            "dashboard_status": getattr(self.session, "dashboard_status", None),
+            "dashboard_progress": int(getattr(self.session, "dashboard_progress", 0) or 0),
+            "dashboard_url": "/dashboard" if getattr(self.session, "dashboard_status", None) else None,
+            "sim_years": int(runner.config.simulation.years),
         }
 
     # ---- Cockpit 2: Ansichten, Makro-Verlauf, Wirkungsprotokoll, Warnungen ----
@@ -741,6 +809,8 @@ class GameController:
         "financials": ("views2", "financials"), "reports": ("views2", "reports"),
         "calculation": ("views2", "calculation"), "pricing": ("views2", "pricing"),
         "takeover_offers": ("views2", "takeover_offers"), "assortment": ("views2", "assortment"),
+        "purchasing": ("views3", "purchasing"), "deliveries": ("views3", "deliveries"),
+        "daughters": ("views3", "daughters"), "stocks_all": ("views3", "stocks_all"),
     }
 
     def view(self, name: str, **query) -> dict:
@@ -758,6 +828,8 @@ class GameController:
                 extra["history"] = list(self.macro_history)
             elif name in ("financials", "calculation", "pricing"):
                 extra["year"] = int(self.snapshot.year)
+            elif name == "purchasing":
+                extra["history"] = list(self.purchase_history)
             elif name == "costs":
                 extra["year"] = int(self.snapshot.year)
             elif name == "stocks":

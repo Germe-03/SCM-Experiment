@@ -703,16 +703,19 @@ function zeichneFirma(el, state, autopilot, einstufung, preise) {
         schritt: '1'
     });
 
-    const qualitaet = firmaKarte(form, 'Qualität');
-    baueEingabefeld(qualitaet, {
-        key: 'target_quality',
-        label: 'Zielqualität %',
-        istEinstellung: true,
-        typ: 'prozent',
-        min: 0,
-        max: 100,
-        schritt: '1'
-    });
+    // Händler brauchen keine Zielqualität: sie führen Marken, die Qualität steckt in der Marke.
+    if (branch === 'hersteller') {
+        const qualitaet = firmaKarte(form, 'Qualität');
+        baueEingabefeld(qualitaet, {
+            key: 'target_quality',
+            label: 'Zielqualität %',
+            istEinstellung: true,
+            typ: 'prozent',
+            min: 0,
+            max: 100,
+            schritt: '1'
+        });
+    }
 
     if (['hersteller', 'detailhaendler', 'gastro'].includes(branch)) {
         const marketing = firmaKarte(form, 'Marketing');

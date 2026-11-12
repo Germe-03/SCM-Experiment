@@ -182,7 +182,10 @@ class StockMarket:
                     )
                     book = max(0.0, runtime.cash) + capacity * cost
                     fundamental = self.fundamental(runner, state, fid)
-                    value0 = max(fundamental, book)
+                    # Ursache des Startabsturzes: Buchwert-Boden (Kapazitaet) lag weit ueber dem
+                    # Fundamentalwert, den die taegliche Kursbildung ansteuert. Bei den
+                    # Anfangskotierungen (Spielmodus) startet der Kurs deshalb auf dem Fundamentalwert.
+                    value0 = fundamental if tradable_from < cfg.tradable_from_year else max(fundamental, book)
 
                     self.listed.add(fid)
                     self._ever.add(fid)

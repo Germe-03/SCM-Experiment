@@ -49,6 +49,11 @@ def test_player_choices_update_unknown_key_and_to_dict_fields():
         "courier_preference",
         "patent_lawsuits",
         "category_shares",
+        "component_plan",
+        "brand_plan",
+        "storage_order",
+        "cancel_open_orders",
+        "daughter_rules",
     }
 
     with pytest.raises(ValueError):

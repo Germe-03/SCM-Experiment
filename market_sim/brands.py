@@ -308,6 +308,26 @@ class BrandBook:
         """Ship from a mixed stock; the customer's category mix decides what it gets."""
         if not self.categories_on or customer is None:
             return take_from_stock(stock, quantity)
+        plan = self.player_brand_plan(customer.id)
+        parcel: dict[str, int] = {}
+        if plan:
+            # Player brand plan: follow the brand mix as far as the supplier has these brands.
+            remaining = min(quantity, sum(stock.values()))
+            open_b = {b: w for b, w in plan.items() if stock.get(b, 0) > 0}
+            got_b = {b: 0 for b in open_b}
+            while remaining > 0 and open_b:
+                for b, units in largest_remainder(remaining, open_b).items():
+                    units = min(units, stock[b] - got_b[b])
+                    got_b[b] += units
+                    remaining -= units
+                open_b = {b: w for b, w in open_b.items() if got_b[b] < stock[b]}
+            for b, units in got_b.items():
+                if units:
+                    stock[b] -= units
+                    parcel[b] = units
+            quantity = remaining
+            if quantity <= 0:
+                return parcel
         weights = self.customer_weights(customer)
         by_cat: dict[str, int] = {}
         for b, units in stock.items():
@@ -324,14 +344,73 @@ class BrandBook:
                 units = min(units, by_cat[c] - alloc[c])
                 alloc[c] += units
                 remaining -= units
-        parcel: dict[str, int] = {}
         for c, units in alloc.items():
             if units:
                 sub = {b: v for b, v in stock.items() if v > 0 and self.brands[b].category == c}
                 for b, got in take_from_stock(sub, units).items():
                     stock[b] -= got
-                    parcel[b] = got
+                    parcel[b] = parcel.get(b, 0) + got
         return parcel
+
+    def player_brand_plan(self, firm_id: str) -> dict[str, float] | None:
+        """Brand plan {brand_id: bottles per day} of a player firm (only known, positive entries), or None."""
+        choice = self.player_choices.get(firm_id)
+        plan = getattr(choice, "brand_plan", None) if choice is not None else None
+        if not plan:
+            return None
+        clean = {b: float(v) for b, v in plan.items() if b in self.brands and float(v) > 0}
+        return clean or None
+
+    def brand_catalog(self, runner, firm_id: str) -> list[dict]:
+        """All brands with price, quality, reputation and demand share (share of their category's purchases)."""
+        env = runner.env
+        unit = self.config.unit_scale.real_units_per_sim_unit
+        sold = {b: u for b, u in self.brand_units.items()}
+        if not sum(sold.values()):
+            sold = dict(self.brand_wanted)
+        per_cat: dict[str, list[str]] = {}
+        for b, brand in self.brands.items():
+            per_cat.setdefault(brand.category, []).append(b)
+        rows = []
+        for b in sorted(self.brands):
+            brand = self.brands[b]
+            owner = env.runtimes.get(brand.owner)
+            try:
+                owner_firm = env.network.firm(brand.owner)
+            except Exception:
+                owner_firm = None
+            members = per_cat[brand.category]
+            total = sum(sold.get(m, 0) for m in members)
+            share = sold.get(b, 0) / total if total else 1 / len(members)
+            sell = owner_firm.sell_price if owner_firm is not None else 0.0
+            rows.append({
+                "id": b, "name": brand.name, "category": brand.category, "owner": brand.owner,
+                "owner_name": owner_firm.name if owner_firm is not None else brand.owner,
+                "positioning": brand.positioning, "value": self.category_value(brand.category),
+                "quality": self.quality(brand, env), "reputation": brand.reputation,
+                "price": self.retail_price(sell, brand),  # sell_price ist schon pro Flasche
+                "demand_share": share,
+            })
+        return rows
+
+    def demand_by_category(self, runner, region: str | None = None) -> dict[str, float]:
+        """Consumer demand per category in bottles per day (optionally the share of one region's stores)."""
+        env = runner.env
+        sim = self.config.simulation
+        unit = self.config.unit_scale.real_units_per_sim_unit
+        total = {c: 0.0 for c in (self.base_share or {"beer": 1.0})}
+        for name in self.class_names:
+            cls = self.classes[name]
+            per_day = self.class_volume[name] / sim.days_per_year
+            shares = self.class_shares(cls, {}, seasonal=False) if self.categories_on else {"beer": 1.0}
+            for c, s in shares.items():
+                total[c] = total.get(c, 0.0) + per_day * s
+        if region is not None:
+            stores = [f for f in env.network.firms_in("retailer")]
+            if stores:
+                total = {c: v * sum(1 for f in stores if f.region == region) / len(stores)
+                         for c, v in total.items()}
+        return {c: v * unit for c, v in total.items()}
 
     # -- flows ----------------------------------------------------------
     def initial_stock(self, firm: Firm, inventory: int) -> dict[str, int]:

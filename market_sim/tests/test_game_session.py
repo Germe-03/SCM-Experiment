@@ -138,6 +138,7 @@ def test_sell_firm():
     assert res.firm_id == "factory_p01"
     assert not isinstance(_policy(session.runner, res.firm_id), PlayerPolicy)
     assert session.finished
+    assert session.wait_done(300)
     assert any(
         (event["event"] if isinstance(event, dict) else getattr(event, "event", None))
         == "player_sale"

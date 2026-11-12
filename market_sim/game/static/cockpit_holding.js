@@ -432,6 +432,7 @@ function fuelleHolding(state) {
         abschnitt.appendChild(holdingTochterKarte(tochter, holdingState));
     });
     container.appendChild(abschnitt);
+    if (typeof zeichneTochterRendite === 'function') zeichneTochterRendite(container);
 }
 
 function geplanteAuftraegeHolding() {

@@ -57,6 +57,18 @@ class PlayerChoices:
     # Feedback 2: assortment of trading firms, category -> share (beer, wine, spirits, softdrinks,
     # water; any positive numbers, normalised). None = as the market buys.
     category_shares: dict | None = None
+    # Feedback 3 – producers: daily raw-material purchase per component (name -> amount per day in the
+    # component's own unit, as config amounts per sim unit × units). None = automatic buying as before.
+    component_plan: dict | None = None
+    # Feedback 3 – traders: daily purchase per brand (brand id -> bottles per day). Wins over
+    # category_shares. None = as before.
+    brand_plan: dict | None = None
+    # Feedback 3 – storage: one-time order to add storage places (bottles); reset after execution.
+    storage_order: int | None = None
+    # Feedback 3 – cancel all open (ordered, not yet delivered) orders once; reset after execution.
+    cancel_open_orders: bool | None = None
+    # Feedback 3 – rules for daughters run by a CEO: firm id -> {"no_credit": bool, "no_stakes": bool}.
+    daughter_rules: dict | None = None
 
     def offence_intensity(self, name: str) -> float:
         """Intensity 0..1 of an offence the player chose (0 = not committed)."""

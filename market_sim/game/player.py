@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -51,6 +53,7 @@ class PlayerPolicy(FirmPolicy):
 
     def __init__(self, settings: PlayerSettings):
         self.settings = settings
+        self.choices = None  # PlayerChoices der Firma (von der Session gesetzt)
 
     def decide_annual(
         self,
@@ -88,7 +91,18 @@ class PlayerPolicy(FirmPolicy):
     ) -> DailyDecision:
         """Build a daily decision from player settings and observations."""
         sell_price = strategy.clamp_price(self.settings.base_price)
-        if self.settings.order_qty is not None:
+        plan = getattr(getattr(self, "choices", None), "brand_plan", None)
+        plan_bottles = 0.0
+        if isinstance(plan, dict):
+            for value in plan.values():
+                try:
+                    plan_bottles += max(0.0, float(value))
+                except (TypeError, ValueError):
+                    pass
+        if plan_bottles > 0:
+            unit = max(1, int(getattr(config.unit_scale, "real_units_per_sim_unit", 1) or 1))
+            order_qty = math.ceil(plan_bottles / unit)
+        elif self.settings.order_qty is not None:
             order_qty = max(0, int(self.settings.order_qty))
         else:
             demand = max(1.0, obs.recent_demand)

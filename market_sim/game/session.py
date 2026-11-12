@@ -66,8 +66,20 @@ class GameSession:
         years: int | None = None,
         days_per_year: int | None = None,
         config=None,
+        game_years: int | None = None,
+        dashboard_dir=None,
     ) -> None:
+        # years = Gesamtlänge der Simulation (None = config.simulation.years, 50);
+        # game_years = Spielzeit, danach läuft die Firma im Autopilot weiter.
         self.runner, _ = build_runner(years, seed, days_per_year, config)
+        total = int(self.runner.config.simulation.years)
+        self.game_years = min(total, int(game_years)) if game_years else total
+        self.seed = seed
+        self.dashboard_dir = dashboard_dir
+        self.dashboard_status: str | None = None
+        self.dashboard_progress: int = 0
+        self.dashboard_path = None
+        self._done = threading.Event()
         self.result: RunResult | None = None
         self.finished = False
         self._founding: tuple[str, str, str | None, str | None] | None = None
@@ -194,6 +206,7 @@ class GameSession:
             runner.player_choices = {}
             runner.env.player_choices = runner.player_choices
         runner.player_choices[firm.id] = PlayerChoices()
+        runner.policies[firm.id].choices = runner.player_choices[firm.id]
         if (
             stage == "factory"
             and firm.category == "wine"
@@ -280,23 +293,88 @@ class GameSession:
             "details": f"Verkauf für {price:,.0f}",
         })
         self._reason = "verkauft"
+        self._mark_dashboard_running()
         self._holding = False
+        self.finished = True
         self._to_thread.put(("continue", None))
-        self._wait()
         return SaleResult(year=year, month=month, price=price, firm_id=firm_id)
 
+    def _end_in_thread(self, reason: str, year: int, day: int) -> None:
+        """Spielende im Simulationsthread: Firma an den Autopiloten, Simulation läuft weiter."""
+
+        runner = self.runner
+        firm_id = self._firm_id
+        if reason == "ende":
+            self._last_year = max(1, year - 1)
+            self._last_day = max(0, runner.config.simulation.days_per_year - 1)
+            try:
+                runner.policies[firm_id] = policy_for_firm(self._current_firm())
+            except Exception:
+                pass
+            runner.player_choices.pop(firm_id, None)
+        runner.day_hook = None
+        self._reason = reason
+        self._mark_dashboard_running()
+        self.finished = True
+        self._holding = False
+        self._to_main.put(self._snapshot(
+            runner, self._state, self._last_year, self._last_day,
+            game_over=True, reason=reason,
+        ))
+
+    def _mark_dashboard_running(self) -> None:
+        if self.dashboard_status is None:
+            self.dashboard_status = "laeuft"
+
+    def wait_done(self, timeout: float | None = None) -> bool:
+        """Wartet, bis Simulation und Dashboard fertig sind (für Tests)."""
+        return self._done.wait(timeout)
+
+    def _on_year_end(self, runner, state) -> None:
+        self.dashboard_progress = int(state.year)
+
     def _run(self, state: RunState) -> None:
-        """Führt die Simulation im Hintergrund aus."""
+        """Führt die Simulation im Hintergrund aus, danach das Dashboard."""
 
         try:
             result = self.runner.continue_run(
                 state,
                 self.runner.config.simulation.years,
+                on_year_end=self._on_year_end,
             )
         except Exception as exc:
+            self.dashboard_status = "fehler" if self.finished else None
             self._to_main.put(("error", exc))
+            self._done.set()
             return
+        self.result = result
         self._to_main.put(("done", result))
+        self._mark_dashboard_running()
+        try:
+            self.dashboard_path = self._write_dashboard(result)
+            self.dashboard_status = "fertig"
+        except Exception:
+            self.dashboard_status = "fehler"
+        self._done.set()
+
+    def _write_dashboard(self, result):
+        """Schreibt das Beobachter-Dashboard der ganzen Simulation."""
+        from datetime import datetime
+        from pathlib import Path
+        import re
+        from market_sim.dashboard import write_dashboard_html
+        from market_sim.dashboard_data import build_dashboard_data
+
+        runner = self.runner
+        data = build_dashboard_data(result, runner.network, runner.config, self.seed)
+        try:
+            firm_name = runner.network.firm(self._firm_id).name
+        except Exception:
+            firm_name = self._firm_id or "spiel"
+        slug = re.sub(r"[^A-Za-z0-9_\-]+", "_", firm_name).strip("_") or "firma"
+        base = Path(self.dashboard_dir) if self.dashboard_dir else Path("runs") / "spiele"
+        target = base / f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{slug}" / "dashboard.html"
+        return write_dashboard_html(data, target).resolve()
 
     def _hook(
         self,
@@ -310,12 +388,15 @@ class GameSession:
         if day % runner.config.workforce.days_per_month != 0:
             return
         firm_id = self._firm_id
-        if not runner.env.runtimes[firm_id].active:
-            runner.day_hook = None
-            return
-
         self._state = state
         self.state = state
+        if not runner.env.runtimes[firm_id].active:
+            self._end_in_thread("konkurs", year, day)
+            return
+        if year > self.game_years:
+            self._end_in_thread("ende", year, day)
+            return
+
         self._last_year = year
         self._last_day = day
         self._holding_upkeep(year, day)
@@ -496,7 +577,11 @@ class GameSession:
 
         item = self._to_main.get()
         if isinstance(item, RoundSnapshot):
-            self._holding = True
+            if item.game_over:
+                self.finished = True
+                self._holding = False
+            else:
+                self._holding = True
             return item
 
         kind, value = item

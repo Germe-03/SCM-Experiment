@@ -1277,7 +1277,23 @@ class TraceabilityConfig(ConfigModel):
     exit_drivers: int = Field(default=3, ge=1, le=3)
 
 
+class StorageConfig(ConfigModel):
+    """Spielmodus (Feedback 3): Lagerplatz und Regal-Fixkosten der Spielerfirmen (CHF real, Flaschen)."""
+
+    # Start-Kapazität = start_days x Tageskapazität der Firma (in Flaschen).
+    start_days: float = Field(default=10.0, gt=0)
+    # Platzbedarf einer Rohstoffeinheit in Flaschen-Äquivalenten.
+    space_per_component: float = Field(default=0.1, ge=0)
+    # Zusatzmiete je Flasche über der Kapazität und Tag.
+    overflow_cost_per_bottle_day: float = Field(default=0.01, ge=0)
+    # Einmalige Kosten je ausgebauter Flasche Lagerplatz.
+    build_cost_per_bottle: float = Field(default=0.5, ge=0)
+    # Regal-Fixkosten je geführte Getränkeart und Jahr (nur Händler-Spielerfirmen).
+    category_fixed_cost_per_year: float = Field(default=12000.0, ge=0)
+
+
 class MarketConfig(ConfigModel):
+    storage: StorageConfig = Field(default_factory=StorageConfig)
     personas: PersonasConfig = Field(default_factory=PersonasConfig)
     traceability: TraceabilityConfig = Field(default_factory=TraceabilityConfig)
     unit_scale: UnitScaleConfig

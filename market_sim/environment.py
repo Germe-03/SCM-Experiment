@@ -336,6 +336,10 @@ class MarketEnvironment:
         self.commodity_history: list[dict] = [self._commodity_row()]
         # Phase 39: stock per firm and commodity, risk appetite and this year's purchase prices.
         self.commodity_stock: dict[str, dict[str, float]] = {}
+        # Feedback 3: deliveries per (buyer, supplier) in sim units, built storage places (bottles).
+        self.delivery_book: dict[str, dict[str, dict[str, int]]] = {}
+        self.delivery_book_year: dict[str, dict[str, dict[str, int]]] = {}
+        self.storage_extra: dict[str, int] = {}
         self.commodity_courage: dict[str, float] = {}
         self._player_choices: dict = self.__dict__.get("_player_choices", {})  # keep the runner's dict across reset()
         self.commodity_spend: dict[str, dict[str, list[float]]] = {}
@@ -425,6 +429,7 @@ class MarketEnvironment:
         self._update_commodity_index()
         self._update_electricity()
         self._age_commodity_stock()
+        self._player_orders()
         active_ids = {
             firm_id for firm_id, runtime in self.runtimes.items()
             if runtime.active
@@ -561,6 +566,7 @@ class MarketEnvironment:
                     runtime.record_items(runtime.sold_items, downstream_id, items)
                     if not delay:
                         self.runtimes[downstream_id].incoming_shipments[-1] += quantity
+                    self._book_delivery(downstream_id, supplier_id, delivered=quantity)
             if self.banking is not None:
                 shipped = sum(allocations.values())
                 runtime.inventory -= shipped
@@ -598,7 +604,11 @@ class MarketEnvironment:
                     if self._harvest_producer(firm):
                         continue
                     quantity = self.affordable_units(firm.id, quantity, self.unit_production_cost(firm))
-                    self._procure_and_book(firm, self.runtimes[firm.id], quantity)
+                    planned = self._planned_components(firm.id)
+                    if planned is not None:
+                        quantity = self._procure_planned(firm, self.runtimes[firm.id], quantity, planned)
+                    else:
+                        self._procure_and_book(firm, self.runtimes[firm.id], quantity)
                     # P1 fix: a factory production start is its replenishment order.
                     self.runtimes[firm.id].on_order += quantity
                     self.runtimes[firm.id].incoming_shipments[-1] += quantity
@@ -624,6 +634,7 @@ class MarketEnvironment:
                 # P1 fix: include queued, not-yet-shipped supplier orders.
                 self.runtimes[firm.id].on_order += sum(allocations.values())
                 for supplier_id, split_quantity in allocations.items():
+                    self._book_delivery(firm.id, supplier_id, ordered=split_quantity)
                     queue = self.runtimes[supplier_id].incoming_orders[-1]
                     queue[firm.id] = queue.get(firm.id, 0) + split_quantity
 
@@ -654,6 +665,8 @@ class MarketEnvironment:
                     1 + (cfg.overtime_wage_premium - 1) * firm.overtime_level
                 ) * scale
             runtime.fixed_cost += self._daily_fixed_cost(firm)
+            if firm_id in self.player_choices:
+                runtime.fixed_cost += self._storage_daily_cost(firm_id)
             if self.enable_rnd:
                 self._apply_rnd(firm_id)
             runtime.calculate_period_cost(daily_wage)
@@ -715,6 +728,151 @@ class MarketEnvironment:
         if getattr(self, "banking", None) is not None:
             self.banking.player_choices = value
 
+    # --- Spielmodus Feedback 3: Rohstoffplan, Lagerplatz, Lieferungen -----------------------------
+
+    def _unit_size(self) -> int:
+        return self.config.unit_scale.real_units_per_sim_unit
+
+    def _book_delivery(self, buyer_id: str, supplier_id: str, ordered: int = 0, delivered: int = 0,
+                       dropped: int = 0) -> None:
+        """Remember ordered / delivered / open units per (buyer, supplier); observation only."""
+        days = self.config.simulation.days_per_year
+        if self.period % days == 0 and getattr(self, "_delivery_year", None) != self.period // days:
+            self._delivery_year = self.period // days
+            self.delivery_book_year = {}
+        for book in (self.delivery_book, self.delivery_book_year):
+            row = book.setdefault(buyer_id, {}).setdefault(
+                supplier_id, {"ordered": 0, "delivered": 0, "open": 0})
+            row["ordered"] += ordered
+            row["delivered"] += delivered
+            row["open"] = max(0, row["open"] + ordered - delivered - dropped)
+
+    def _planned_components(self, firm_id: str) -> dict | None:
+        choice = self.player_choices.get(firm_id)
+        plan = getattr(choice, "component_plan", None)
+        return plan if isinstance(plan, dict) and plan else None
+
+    def _component_names(self, firm_id: str) -> dict[str, float]:
+        amounts = self.config.commodities.amounts(self._firm_category(firm_id))
+        if self.config.electricity.enabled:
+            amounts.pop("energy", None)
+        return amounts
+
+    def component_need(self, firm_id: str, bottles_per_day: float) -> dict[str, float]:
+        """Raw materials per day for a daily output in bottles (component units)."""
+        sim_units = max(0.0, float(bottles_per_day)) / self._unit_size()
+        return {name: sim_units * amount for name, amount in sorted(self._component_names(firm_id).items())}
+
+    def component_stock(self, firm_id: str) -> dict[str, float]:
+        stock = self.commodity_stock.get(firm_id, {})
+        return {name: stock.get(name, 0.0) for name in sorted(self._component_names(firm_id))}
+
+    def component_prices(self, firm_id: str) -> dict[str, float]:
+        return {name: self._component_price(firm_id, name) for name in sorted(self._component_names(firm_id))}
+
+    def _procure_planned(self, firm: Firm, runtime: FirmRuntime, quantity: int, plan: dict) -> int:
+        """Player plan: buy exactly the planned amounts today; produce only what the stock allows."""
+        stock = self.commodity_stock.setdefault(firm.id, {})
+        amounts = self._component_names(firm.id)
+        unit_cost = self.unit_production_cost(firm)
+        material = self.material_cost_per_unit(firm.id) + self.electricity_cost_per_unit(firm.id)
+        scale = unit_cost / material if material > 0 else 1.0
+        for name in sorted(plan):
+            try:
+                bought = float(plan[name])
+            except (TypeError, ValueError):
+                continue
+            if bought <= 0 or name not in amounts:
+                continue
+            self._book_production(firm, runtime, bought * self._component_price(firm.id, name) * scale)
+            self.record_commodity_purchase(firm.id, bought, name)
+            stock[name] = stock.get(name, 0.0) + bought
+        for name, amount in amounts.items():
+            if amount > 0:
+                quantity = min(quantity, int(stock.get(name, 0.0) / amount + 1e-9))
+        quantity = max(0, quantity)
+        for name, amount in amounts.items():
+            stock[name] = max(0.0, stock.get(name, 0.0) - quantity * amount)
+        unit_cost = self.unit_production_cost(firm, quantity)
+        self._record_electricity(firm, quantity, unit_cost)
+        paid = sum(quantity * amount * self._component_price(firm.id, name) * scale
+                   for name, amount in amounts.items())
+        self._book_production(firm, runtime, max(0.0, quantity * unit_cost - paid))
+        return quantity
+
+    def storage_capacity(self, firm_id: str) -> int:
+        """Storage places in bottle equivalents (start days of daily capacity plus built places)."""
+        base = self.config.storage.start_days * self._effective_capacity(firm_id) * self._unit_size()
+        return int(base) + self.storage_extra.get(firm_id, 0)
+
+    def storage_used(self, firm_id: str) -> int:
+        """Goods in bottles plus raw materials weighted with ``space_per_component``."""
+        unit = self._unit_size()
+        used = self.runtimes[firm_id].inventory * unit
+        stock = self.commodity_stock.get(firm_id, {})
+        used += sum(stock.values()) * unit * self.config.storage.space_per_component
+        return int(round(used))
+
+    def _storage_daily_cost(self, firm_id: str) -> float:
+        """Overflow rent and shelf fixed costs; only called for player firms."""
+        cfg = self.config.storage
+        days = self.config.simulation.days_per_year
+        cost = max(0, self.storage_used(firm_id) - self.storage_capacity(firm_id)) * cfg.overflow_cost_per_bottle_day
+        if self.network.firm(firm_id).stage != "factory":
+            kinds = {c for c, units in self.stock_by_category(firm_id).items() if units > 0}
+            plan = getattr(self.player_choices.get(firm_id), "brand_plan", None) or {}
+            book = self.brand_book
+            for brand_id, amount in plan.items():
+                brand = book.brands.get(brand_id) if book is not None else None
+                try:
+                    if brand is not None and float(amount) > 0:
+                        kinds.add(brand.category)
+                except (TypeError, ValueError):
+                    pass
+            cost += len(kinds) * cfg.category_fixed_cost_per_year / days
+        return cost
+
+    def _player_orders(self) -> None:
+        """One-time player orders: build storage places, cancel open orders (then reset to None)."""
+        for firm_id in sorted(self.player_choices):
+            choice = self.player_choices[firm_id]
+            runtime = self.runtimes.get(firm_id)
+            if runtime is None or not runtime.active:
+                continue
+            places = getattr(choice, "storage_order", None)
+            if places is not None:
+                try:
+                    places = max(0, int(places))
+                except (TypeError, ValueError):
+                    places = 0
+                if places:
+                    self.storage_extra[firm_id] = self.storage_extra.get(firm_id, 0) + places
+                    runtime.fixed_cost += places * self.config.storage.build_cost_per_bottle
+                choice.storage_order = None
+            if getattr(choice, "cancel_open_orders", None):
+                self._cancel_open_orders(firm_id)
+            if getattr(choice, "cancel_open_orders", None) is not None:
+                choice.cancel_open_orders = None
+
+    def _cancel_open_orders(self, firm_id: str) -> None:
+        """Remove every order of this firm that suppliers have not shipped yet; no cost."""
+        runtime = self.runtimes[firm_id]
+        for supplier_id, supplier in self.runtimes.items():
+            dropped = 0
+            for queue in supplier.incoming_orders:
+                dropped += queue.pop(firm_id, 0)
+            dropped += supplier.backlog_by_downstream.pop(firm_id, 0)
+            if dropped:
+                supplier.backlog = sum(supplier.backlog_by_downstream.values())
+                runtime.on_order = max(0, runtime.on_order - dropped)
+                self._book_delivery(firm_id, supplier_id, dropped=dropped)
+            row = self.delivery_book.get(firm_id, {}).get(supplier_id)
+            if row is not None:
+                row["open"] = 0
+        year_rows = self.delivery_book_year.get(firm_id, {})
+        for row in year_rows.values():
+            row["open"] = 0
+
     def _courage(self, firm_id: str) -> float:
         choice = self.player_choices.get(firm_id)
         if choice is not None and choice.commodity_courage is not None:
@@ -746,6 +904,10 @@ class MarketEnvironment:
         rng = banking.loan_rng
         choice = self.player_choices.get(firm_id)
         mode = choice.credit_mode if choice is not None else "auto"
+        for owner_choice in self.player_choices.values():
+            rules = (getattr(owner_choice, "daughter_rules", None) or {}).get(firm_id)
+            if isinstance(rules, dict) and rules.get("no_credit"):
+                mode = "never"
         policy = self.policy_rate()
         skip = min(lc.max_skip, lc.rate_damping * max(0.0, policy - lc.rate_neutral))
         if commit and skip > 0 and rng.random() < skip and mode != "prefer":

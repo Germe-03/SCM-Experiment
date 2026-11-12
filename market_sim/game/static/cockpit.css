@@ -1493,3 +1493,13 @@ html { scroll-padding-top: calc(var(--kopf-hoehe, 4.25rem) + 3.5rem); }
 .chart { min-width: 0; max-width: 100%; overflow: hidden; }
 .chart canvas { display: block; max-width: 100%; }
 main, section, .karte, .raster > *, [class*="grid"] > * { min-width: 0; }
+
+/* Zusätze Feedback 3 */
+#neues-spiel-btn { margin-left: 0.25rem; }
+.dashboard-bereich { display: grid; gap: 0.6rem; margin: 0.75rem 0; justify-items: start; }
+.dashboard-link { display: inline-block; padding: 0.9rem 1.8rem; font-size: 1.25rem; font-weight: 700; border-radius: 0.6rem; background: var(--akzent); color: #fff; text-decoration: none; }
+.engpass-warnung { color: var(--negativ, #c0392b); font-weight: 600; }
+.tochter-rendite { margin-top: 1rem; }
+.tochter-rendite table { width: 100%; border-collapse: collapse; }
+.tochter-rendite th, .tochter-rendite td { padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--rand); text-align: left; }
+.tochter-rendite .regeln { display: grid; gap: 0.2rem; }

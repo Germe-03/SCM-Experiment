@@ -559,6 +559,24 @@ def classification(runner, state, player_id, **extra) -> dict:
     except Exception:
         history = []
 
+    year = _read(state, "year", 0)
+    try:
+        year = int(year)
+    except Exception:
+        year = 0
+
+    if year <= 1 or not history:
+        return {
+            "archetype": None,
+            "label": "Noch nicht eingestuft – erste Einstufung Ende Jahr 1",
+            "explanation": _text(
+                "Die Simulation beobachtet jedes Jahr sechs Dinge: Preis im Preisband, Lohn im Vergleich zum Start, "
+                "Forschungsausgaben, angestrebte Qualität, Lagerziel in Tagen und Überstunden. "
+                "Die Einstufung wird jedes Jahr neu geprüft und kann sich durch deine Entscheide ändern."
+            ),
+            "history": [],
+        }
+
     return {
         "archetype": _json_value(archetype),
         "label": _json_value(label),
@@ -701,22 +719,37 @@ def costs(runner, state, player_id, **extra) -> dict:
 
 def bottleneck(runner, state, player_id, **extra) -> dict:
     """Ermittelt den wahrscheinlichsten Engpass der Firma."""
-    texts = {
-        "lager": "Dein Engpass ist das Lager: Der Vorrat reicht nicht einmal für einen Tag, bestelle mehr Rohstoffe oder erhöhe das Lagerziel.",
-        "personal": "Dein Engpass ist das Personal: Du verkaufst fast alles, was du herstellen kannst, stelle mehr Mitarbeitende ein.",
-        "transport": "Dein Engpass ist der Transport: Deine Lastwagen schaffen nicht mehr als dein heutiger Absatz, ein weiterer Lastwagen kann sich lohnen.",
-        "nachfrage": "Dein Engpass ist die Nachfrage: Du könntest mehr herstellen, als gekauft wird, senke den Preis oder wirb mehr.",
-    }
     result = {
         "kind": "nachfrage",
-        "text": texts["nachfrage"],
+        "text": "Dein Engpass ist die Nachfrage: Du könntest mehr verkaufen, als Kunden kaufen. Senke den Preis, werbe mehr oder führe andere Marken.",
         "capacity_per_day": 0.0,
         "demand_per_day": 0.0,
         "sales_per_day": 0.0,
         "transport_per_day": None,
         "days_of_stock": 999.0,
+        "utilization_now": 0.0,
+        "idle_cost_per_bottle": 0.0,
     }
     try:
+        network = _read(runner, "network")
+        firm_method = _read(network, "firm")
+        firm = firm_method(player_id) if callable(firm_method) else None
+        stage = _read(firm, "stage")
+        if stage == "factory":
+            texts = {
+                "lager": "Dein Engpass sind die Rohstoffe: Der Vorrat reicht nicht für einen Tag Produktion. Bestelle mehr Rohstoffe (Einkauf).",
+                "personal": "Dein Engpass ist die Produktion: Deine Kapazität und dein Personal begrenzen die Produktion. Stelle mehr Mitarbeitende ein oder baue die Kapazität aus.",
+                "transport": "Dein Engpass ist der Transport: Deine Lastwagen schaffen nicht mehr als dein heutiger Absatz, ein weiterer Lastwagen kann sich lohnen.",
+                "nachfrage": "Dein Engpass ist die Nachfrage: Du könntest mehr herstellen, als gekauft wird, senke den Preis oder wirb mehr.",
+            }
+        else:
+            texts = {
+                "lager": "Dein Engpass ist die Bestellmenge: Dein Lager reicht nicht einmal für einen Tag. Bestelle mehr oder suche einen Lieferanten, der mehr liefert.",
+                "personal": "Dein Engpass ist das Personal: Du verkaufst fast alles, was du abwickeln kannst, stelle mehr Mitarbeitende ein.",
+                "transport": "Dein Engpass ist der Transport: Deine Lastwagen schaffen nicht mehr als dein heutiger Absatz, ein weiterer Lastwagen kann sich lohnen.",
+                "nachfrage": "Dein Engpass ist die Nachfrage: Du könntest mehr verkaufen, als Kunden kaufen. Senke den Preis, werbe mehr oder führe andere Marken.",
+            }
+
         try:
             config = _read(runner, "config")
             unit_size = int(_read_path(config, "unit_scale", "real_units_per_sim_unit", default=1))
@@ -754,6 +787,7 @@ def bottleneck(runner, state, player_id, **extra) -> dict:
         capacity_per_day = capacity * unit_size
         demand_per_day = demand * unit_size
         sales_per_day = sales * unit_size
+        utilization_now = min(1.0, sales_per_day / capacity_per_day) if capacity_per_day > 0 else 0.0
 
         if days_of_stock < 1 and sales < demand:
             kind = "lager"
@@ -764,6 +798,15 @@ def bottleneck(runner, state, player_id, **extra) -> dict:
         else:
             kind = "nachfrage"
 
+        idle_cost_per_bottle = 0.0
+        try:
+            from market_sim.financials import calculation
+
+            overhead = calculation(runner, player_id)["overhead"]
+            idle_cost_per_bottle = _number(overhead) * (1.0 - utilization_now)
+        except Exception:
+            idle_cost_per_bottle = 0.0
+
         result = {
             "kind": kind,
             "text": texts[kind],
@@ -772,6 +815,8 @@ def bottleneck(runner, state, player_id, **extra) -> dict:
             "sales_per_day": _number(sales_per_day, digits=2),
             "transport_per_day": _number(transport, digits=2) if transport is not None else None,
             "days_of_stock": _number(days_of_stock, digits=2),
+            "utilization_now": _number(utilization_now, digits=3),
+            "idle_cost_per_bottle": _number(idle_cost_per_bottle, digits=3),
         }
     except Exception:
         pass

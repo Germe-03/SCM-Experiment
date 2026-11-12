@@ -111,8 +111,15 @@ class Holdings:
         players = set(getattr(runner, "player_choices", {}) or {})  # never automatic owners or targets
         candidates = [f for f in list(runner._firms()) + dealers if env.runtimes[f.id].active and f.id in summaries
                       and summaries[f.id].profit > 0 and f.id not in players]
+        no_stakes = {  # daughters of a player holding that must not buy stakes
+            fid for ch in (getattr(runner, "player_choices", {}) or {}).values()
+            for fid, rule in (getattr(ch, "daughter_rules", None) or {}).items()
+            if isinstance(rule, dict) and rule.get("no_stakes")
+        }
         for owner in sorted(candidates, key=lambda f: f.id):
             buy_roll, target_roll, size_roll = rolls[owner.id]
+            if owner.id in no_stakes:
+                continue
             o_rt = env.runtimes[owner.id]
             if buy_roll >= cfg.buy_probability or o_rt.cash <= 0:
                 continue

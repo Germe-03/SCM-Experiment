@@ -406,6 +406,9 @@ def check_plan(
     def warn(level: str, text: str):
         warnings.append({"level": level, "text": text})
 
+    def _fmt(n):
+        return f"{round(n):,}".replace(",", "'")
+
     try:
         unit = int(unit_size)
         if unit <= 0:
@@ -414,23 +417,84 @@ def check_plan(
         unit = 1
 
     try:
+        plan = (choices or {}).get("component_plan")
+        if plan is None:
+            plan = getattr(getattr(runner, "player_choices", {}).get(player_id), "component_plan", None)
+        if isinstance(plan, dict) and plan and sum(max(0.0, float(v or 0)) for v in plan.values()) <= 0:
+            warn("rot", "Du kaufst keine Rohstoffe. Ohne Rohstoffe wird nichts gebraut. Leere den Plan für automatischen Einkauf.")
+        elif isinstance(plan, dict) and plan:
+            env = runner.env
+            need_one = env.component_need(player_id, unit)  # Bedarf für 1 Einheit (= unit Flaschen)
+            ratios = [float(plan.get(k, 0) or 0) / v for k, v in need_one.items() if v > 0]
+            planned_bottles = (min(ratios) if ratios else 0.0) * unit
+            hist = list(env.runtimes[player_id].orders_received_history)[-30:]
+            ordered = (sum(hist) / len(hist)) * unit if hist else 0.0
+            if ordered > 0 and planned_bottles > 1.5 * ordered:
+                warn("rot", f"Deine Rohstoffe reichen für {_fmt(planned_bottles)} Flaschen pro Tag, deine Kunden "
+                            f"bestellen aber nur {_fmt(ordered)}. Der Rest liegt teuer im Lager.")
+    except Exception:
+        pass
+
+    try:
         order_qty = _setting(settings, "order_qty")
         if order_qty is not None:
             order_qty = _number(order_qty)
-            sales_bottles = max(1.0, _number(_read(snapshot, "recent_sales", 0.0)) * unit)
+            recent_sales = _number(_read(snapshot, "recent_sales", 0.0))
+            sales_bottles = max(0.0, recent_sales * unit)
             env = _read(runner, "env")
             capacity = 0.0
             try:
                 capacity = _number(env._effective_capacity(player_id)) * unit
             except Exception:
                 capacity = 0.0
-            if order_qty > 3 * sales_bottles or (capacity > 0 and order_qty > 3 * capacity):
-                warn(
-                    "gelb",
-                    "Bestellmenge ist deutlich höher als dein Absatz/deine Kapazität "
-                    f"({order_qty:.0f} Flaschen; Absatz {sales_bottles:.0f}, "
-                    f"Kapazität {capacity:.0f} Flaschen pro Tag)",
+
+            if recent_sales > 0:
+                if (
+                    order_qty > 3 * sales_bottles
+                    or (capacity > 0 and order_qty > 3 * capacity)
+                ):
+                    warn(
+                        "gelb",
+                        "Bestellmenge ist deutlich höher als dein Absatz/deine Kapazität "
+                        f"({ _fmt(order_qty)} Flaschen; Absatz {_fmt(sales_bottles)}, "
+                        f"Kapazität {_fmt(capacity)} Flaschen pro Tag)",
+                    )
+            else:
+                network = _read(runner, "network")
+                firm_method = _read(network, "firm")
+                firm = firm_method(player_id) if callable(firm_method) else None
+                stage = str(_read(firm, "stage", "") or "").lower()
+                capacity_stages = (
+                    "händler",
+                    "haendler",
+                    "dealer",
+                    "retailer",
+                    "wholesaler",
+                    "hersteller",
+                    "manufacturer",
+                    "producer",
+                    "produzent",
+                    "grossist",
+                    "großhandel",
+                    "einzelhandel",
                 )
+                capacity_firm = any(value in stage for value in capacity_stages)
+                if capacity > 0 and (capacity_firm or not stage):
+                    if order_qty > 3 * capacity:
+                        warn(
+                            "gelb",
+                            "Bestellmenge ist deutlich höher als deine Kapazität "
+                            f"({ _fmt(order_qty)} Flaschen; Kapazität "
+                            f"{_fmt(capacity)} Flaschen pro Tag)",
+                        )
+                else:
+                    demand = _number(_read(snapshot, "recent_demand", 0.0)) * unit
+                    if demand > 0 and order_qty > 3 * demand:
+                        warn(
+                            "gelb",
+                            "Bestellmenge ist deutlich höher als die Nachfrage "
+                            f"({ _fmt(order_qty)} Flaschen; Nachfrage {_fmt(demand)} Flaschen)",
+                        )
     except Exception:
         pass
 
@@ -459,8 +523,31 @@ def check_plan(
         pass
 
     try:
+        has_delivery = False
+        try:
+            env = _read(runner, "env")
+            delivery_book = getattr(env, "delivery_book", {})
+            player_deliveries = delivery_book.get(player_id, {})
+            open_deliveries = sum(
+                max(0.0, _number(_read(delivery, "open", 0.0)))
+                for delivery in player_deliveries.values()
+            )
+            if open_deliveries > 0:
+                has_delivery = True
+        except Exception:
+            pass
+        if not has_delivery:
+            try:
+                env = _read(runner, "env")
+                runtimes = _read(env, "runtimes", {})
+                runtime = _read(runtimes, player_id)
+                if _number(_read(runtime, "on_order", 0.0)) > 0:
+                    has_delivery = True
+            except Exception:
+                pass
         if (
-            _number(_read(snapshot, "inventory", 0)) == 0
+            not has_delivery
+            and _number(_read(snapshot, "inventory", 0)) == 0
             and _number(_read(snapshot, "recent_demand", 0)) > 0
         ):
             warn("gelb", "Das Lager ist leer")
@@ -508,8 +595,8 @@ def check_plan(
         if capacity > 0 and expand_qty > 3 * capacity:
             warn(
                 "gelb",
-                f"Der Ausbauauftrag ist mit {expand_qty:.0f} Flaschen höher als "
-                f"das Dreifache der Kapazität ({capacity:.0f} Flaschen pro Tag)",
+                f"Der Ausbauauftrag ist mit {_fmt(expand_qty)} Flaschen höher als "
+                f"das Dreifache der Kapazität ({_fmt(capacity)} Flaschen pro Tag)",
             )
     except Exception:
         pass

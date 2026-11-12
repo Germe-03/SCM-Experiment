@@ -567,6 +567,14 @@ def _calculation(runner, firm_id) -> dict:
     if unit_cost <= 0 and sold_units > 0:
         unit_cost = purchases / sold_units
     purchase_price = unit_cost / unit_size
+    if getattr(firm, "stage", None) == "factory":
+        # Hersteller: Herstellkosten pro Flasche (Rohstoffe + Strom) statt Einkauf ÷ Verkauf,
+        # sonst zählt ein Rohstoffvorrat als Kosten der verkauften Flaschen.
+        try:
+            env = runner.env
+            purchase_price = _number(env.unit_production_cost(firm)) / unit_size
+        except Exception:
+            pass
     procurement_costs = (
         period["handling_cost"] / bottles_sold if bottles_sold > 0 else 0.0
     )

@@ -19,6 +19,7 @@ const REITER_KEYS = [
     'markt',
     'forschung',
     'logistik',
+    'einkauf',
     'finanzen',
     'abschluesse',
     'boerse',
@@ -255,7 +256,7 @@ function setBusy(aktiv, text) {
 
 function updateButtons() {
     const spielBeendet = Boolean(aktuellerStand && aktuellerStand.game_over);
-    const spielKnopfIds = ['runde-btn', 'weiter-btn', 'verkaufen-btn'];
+    const spielKnopfIds = ['runde-btn', 'weiter-btn', 'jahr-btn', 'verkaufen-btn'];
 
     spielKnopfIds.forEach((id) => {
         const knopf = element(id);
@@ -810,6 +811,22 @@ function zeichneEngpassKarte(el, daten) {
     if (daten.transport_per_day !== null && daten.transport_per_day !== undefined) {
         fuegeKpi(raster, 'Transport pro Tag', flaschen(daten.transport_per_day), 'Flaschen', null);
     }
+    const nutzung = Number(daten.utilization_now);
+    if (daten.utilization_now !== null && daten.utilization_now !== undefined && Number.isFinite(nutzung)) {
+        const leerKosten = Number(daten.idle_cost_per_bottle);
+        const kostenText = Number.isFinite(leerKosten) && leerKosten > 0
+            ? `Leerkapazität kostet ${formatierePreis(leerKosten)} pro Flasche`
+            : null;
+        fuegeKpi(raster, 'Auslastung jetzt', formatiereProzent(nutzung), kostenText, null,
+            nutzung < 0.7 ? 'negativ' : (nutzung > 0.95 ? '' : 'positiv'));
+        if (nutzung < 0.7) {
+            const warn = document.createElement('p');
+            warn.className = 'engpass-warnung';
+            warn.setAttribute('role', 'alert');
+            warn.textContent = `Warnung: Nur ${formatiereProzent(nutzung)} der Kapazität sind ausgelastet. Die Fixkosten verteilen sich auf weniger Flaschen${kostenText ? ' (' + kostenText + ')' : ''}.`;
+            karte.appendChild(warn);
+        }
+    }
     const tage = Number(daten.days_of_stock);
     fuegeKpi(raster, 'Lagerdauer', Number.isFinite(tage) ? `${formatiereZahl(tage, 1)} Tage` : '–', null, null);
     karte.appendChild(raster);
@@ -1175,6 +1192,7 @@ function render(state) {
         setzeSichtbar('ansicht-gruendung', true);
         setzeSichtbar('ansicht-cockpit', false);
         setzeSichtbar('speichern-btn', false);
+        setzeSichtbar('neues-spiel-btn', false);
         document.title = 'SCM-Spiel';
         ladeSpielstaende();
         updateButtons();
@@ -1184,6 +1202,7 @@ function render(state) {
     setzeSichtbar('ansicht-gruendung', false);
     setzeSichtbar('ansicht-cockpit', true);
     setzeSichtbar('speichern-btn', true);
+    setzeSichtbar('neues-spiel-btn', true);
 
     const brancheNamen = {
         hersteller: 'Hersteller',
@@ -1219,6 +1238,7 @@ function render(state) {
 
     if (typeof fuelleHolding === 'function') fuelleHolding(state);
     zeigeSpielende(state);
+    if (typeof zeigeDashboardStatus === 'function') zeigeDashboardStatus(state);
     if (typeof zeigeRueckblick === 'function') zeigeRueckblick(state);
     zeichneMeldungen(state.messages || []);
     aktualisiereFilter();
@@ -1325,7 +1345,7 @@ function fragePruefung(warnungen) {
     });
 }
 
-async function rundeBeenden(weiterWieBisher) {
+async function rundeBeenden(weiterWieBisher, ueberspringen) {
     const settings = weiterWieBisher || typeof geaenderteEinstellungen !== 'function'
         ? {}
         : geaenderteEinstellungen();
@@ -1350,9 +1370,9 @@ async function rundeBeenden(weiterWieBisher) {
     if (warnungen.length && !(await fragePruefung(warnungen))) return;
 
     await postAktion(
-        '/api/round',
+        ueberspringen ? '/api/skip_year' : '/api/round',
         { settings, choices, orders },
-        'Rechne …',
+        ueberspringen ? 'Rechne bis zum nächsten Halt im nächsten Jahr …' : 'Rechne …',
         async () => {
             if (typeof leereAuftraegeHolding === 'function') leereAuftraegeHolding();
             if (typeof leereEntwurf === 'function') leereEntwurf();
@@ -1472,6 +1492,12 @@ function verbindeEreignisse() {
 
     const runde = element('runde-btn');
     if (runde) runde.addEventListener('click', () => rundeBeenden(false));
+
+    const jahr = element('jahr-btn');
+    if (jahr) jahr.addEventListener('click', () => rundeBeenden(false, true));
+
+    const neuesSpiel = element('neues-spiel-btn');
+    if (neuesSpiel && typeof neuesSpielStarten === 'function') neuesSpiel.addEventListener('click', neuesSpielStarten);
 
     const weiter = element('weiter-btn');
     if (weiter) weiter.addEventListener('click', () => rundeBeenden(true));
