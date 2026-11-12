@@ -293,6 +293,19 @@
               ? (stats.change >= 0 ? 'rd-positiv' : 'rd-negativ') : 'rd-leise';
             label.appendChild(el('span', 'rb-kurs ' + kursClass, kursText));
             row.appendChild(label);
+            if (firm.listed && typeof window.waehleAktie === 'function') {
+              var handel = el('button', 'rb-handeln', 'Handeln');
+              handel.type = 'button';
+              handel.title = 'Aktien von ' + String(firm.name || '') + ' kaufen oder verkaufen';
+              handel.addEventListener('click', function () {
+                window.waehleAktie(id, ctx);
+                setTimeout(function () {
+                  var ziel = document.querySelector('#tab-boerse .rd-handel, #tab-boerse input[type="number"]');
+                  if (ziel && ziel.scrollIntoView) ziel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }, 600);
+              });
+              row.appendChild(handel);
+            }
             list.appendChild(row);
           });
           if (!list.childNodes.length) list.appendChild(el('p', 'rd-leise', 'Keine Treffer.'));

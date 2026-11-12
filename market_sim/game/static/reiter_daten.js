@@ -43,6 +43,11 @@
   var sortierung = { key: null, richtung: 1 };
   var kreditBetrag = 100000;
   var aktienAuswahl = null;
+  // Von der neuen Börsenliste (reiter_boerse.js) aufrufbar: Firma für Kursverlauf und Handel wählen.
+  window.waehleAktie = function (id, ctx) {
+    aktienAuswahl = id;
+    if (ctx && typeof ctx.neuZeichnen === 'function') ctx.neuZeichnen();
+  };
   var aktienAnzahl = 1;
   var bevoelkerungsStufe = '';
 
