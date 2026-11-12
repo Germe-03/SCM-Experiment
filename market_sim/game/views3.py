@@ -19,6 +19,9 @@ _BRANCH_NAMES = {
     "wholesaler": "Grosshändler",
     "distributor": "Verteiler",
     "retailer": "Detailhandel",
+    "truck_dealer": "Lastwagenhandel",
+    "bank": "Bank",
+    "courier": "Kurier",
 }
 
 

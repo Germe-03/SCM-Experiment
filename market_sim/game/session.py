@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 from dataclasses import dataclass, replace
 import queue
 import threading
@@ -181,7 +183,13 @@ class GameSession:
                 max(1, round(template.machine_capacity * cfg.start_capacity_fraction))
                 if template.machine_capacity else 0
             ),
-            "employees": max(1, round(template.employees * cfg.start_capacity_fraction)),
+            # So viele Leute, wie die Startkapazität braucht: Mehr Personal würde nur Fixkosten für
+            # Kapazität erzeugen, die eine neue Firma noch gar nicht verkaufen kann.
+            "employees": max(1, min(
+                round(template.employees * cfg.start_capacity_fraction),
+                round(max(1, round(template.capacity * cfg.start_capacity_fraction))
+                      / max(0.1, float(template.productivity_per_employee))),
+            )),
             "reputation": (cfg.start_reputation[0] + cfg.start_reputation[1]) / 2,
             "quality_level": template.quality_level * cfg.start_quality_fraction,
             "inventory": 0,
@@ -196,11 +204,22 @@ class GameSession:
         if stage == "factory" and category is not None:
             updates.update(importer=False)
         firm = template.model_copy(deep=True, update=updates)
+        # Startpersonal passend zur Startkapazität (aufgerundet): Die Fixkosten richten sich nach
+        # max(Kapazität, Personal × Produktivität). Zu viel Personal hiesse Fixkosten für Leerkapazität.
+        import math
+        productivity = max(0.1, float(firm.productivity_per_employee))
+        firm.employees = max(1, min(firm.employees, math.ceil(firm.capacity / productivity)))
 
         settings = PlayerSettings.from_strategy(
             FirmPolicy().decide_annual(firm, None, runner.config)
         )
+        settings.hiring_plan = 0  # eingestellt wird nur, wenn der Spieler es will
         runner.add_firm(firm, state, policy=PlayerPolicy(settings), announce=False)
+        # Nach dem Eintritt (Produktivität ist jetzt die der Stufe): Personal auf die Startkapazität kürzen.
+        added = runner.network.firm(firm.id)
+        productivity = max(0.1, float(added.productivity_per_employee))
+        added.employees = max(1, min(added.employees, math.ceil(added.capacity / productivity)))
+        runner.env.runtimes[added.id].employees = added.employees
         runner._entry_year[firm.id] = 0
         if not hasattr(runner, "player_choices"):
             runner.player_choices = {}
