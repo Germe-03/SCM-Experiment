@@ -1488,3 +1488,8 @@ html { scroll-padding-top: calc(var(--kopf-hoehe, 4.25rem) + 3.5rem); }
 .angebote-tabelle { width: 100%; border-collapse: collapse; }
 .angebote-tabelle th, .angebote-tabelle td { padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--rand); text-align: left; }
 .abschluss-summe td { border-top: 1px solid var(--text-leise); }
+
+/* Diagramme dürfen ihren Behälter nie aufblähen (sonst wächst Chart.js in breiten Rastern endlos). */
+.chart { min-width: 0; max-width: 100%; overflow: hidden; }
+.chart canvas { display: block; max-width: 100%; }
+main, section, .karte, .raster > *, [class*="grid"] > * { min-width: 0; }
