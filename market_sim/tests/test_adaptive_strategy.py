@@ -7,6 +7,12 @@ from market_sim.run import run_simulation
 from market_sim.runner import YearSummary
 
 
+def _without_cost_floor(config):
+    """Die Anpassungslogik ohne Preisuntergrenze prüfen (die Untergrenze hat einen eigenen Test)."""
+    adaptive = config.adaptive_strategy.model_copy(update={"cost_floor_margin": None})
+    return config.model_copy(update={"adaptive_strategy": adaptive})
+
+
 def _summary(*, profit: float, price: float, quality: float, share_change: float) -> YearSummary:
     return YearSummary(
         revenue=10_000_000, profit=profit, avg_inventory=5, avg_backlog=0,
@@ -17,7 +23,7 @@ def _summary(*, profit: float, price: float, quality: float, share_change: float
 
 
 def test_feedback_differentiates_a_losing_middle_and_reinforces_success():
-    config = load_market_config()
+    config = _without_cost_floor(load_market_config())
     firm = load_firms().firm("retailer_01")
     policy = FirmPolicy()
     initial = policy.decide_annual(firm, None, config)
@@ -47,7 +53,7 @@ def test_feedback_differentiates_a_losing_middle_and_reinforces_success():
 
 
 def test_attributes_gate_premium_and_discount_adaptation():
-    config = load_market_config()
+    config = _without_cost_floor(load_market_config())
     policy = FirmPolicy()
     high = load_firms().firm("retailer_01")
     low = high.model_copy(update={"quality_level": 0.58, "reputation": 0.55})
@@ -90,3 +96,15 @@ def test_full_run_is_deterministic_and_strategies_stay_bounded(ten_year_results)
             assert band.min <= report.average_sell_price <= band.max
             assert 0 <= report.average_quality <= config.rnd.quality_cap
             assert 0 <= report.capacity_utilization <= 1
+
+
+def test_cost_floor_stops_price_cuts_below_full_cost():
+    config = load_market_config()
+    firm = load_firms().firm("retailer_01")
+    policy = FirmPolicy()
+    initial = policy.decide_annual(firm, None, config)
+    # Verlust von 10 %: Vollkosten liegen 10 % über dem Preis, also darf der Preis nicht sinken.
+    losing = policy.decide_annual(
+        firm, _summary(profit=-1_000_000, price=initial.base_price, quality=0.70, share_change=-0.02), config,
+    )
+    assert losing.base_price >= initial.base_price

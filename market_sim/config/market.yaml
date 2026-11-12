@@ -400,6 +400,8 @@ adaptive_strategy:
   max_price_step_fraction: 0.04
   competitive_pull: 0.30
   undercut_fraction: 0.05
+  # Preisuntergrenze bei den Vollkosten des Vorjahres plus 2 % (kein dauerhafter Preiskampf unter Kosten).
+  cost_floor_margin: 0.02
   share_loss_trigger: 0.01
   rnd_min_multiplier: 0.55
   rnd_max_multiplier: 1.80

@@ -137,6 +137,13 @@ class FirmPolicy:
 
             base = current + max(-cut_step, min(step, target - current))
             base = max(band_low, min(band_high, base))
+            margin = adaptive.cost_floor_margin
+            if margin is not None and last_summary.revenue > 0 and last_summary.avg_sell_price > 0:
+                # Vollkosten pro Flasche = (Umsatz - Gewinn) / Umsatz × Durchschnittspreis.
+                full_cost = last_summary.avg_sell_price * (last_summary.revenue - last_summary.profit) / last_summary.revenue
+                floor = full_cost * (1 + margin)
+                if floor > base:
+                    base = max(band_low, min(band_high, floor))
             if weak_service:
                 stock_days += 1
             elif last_summary.capacity_utilization < 0.40 and last_summary.avg_inventory > 0:

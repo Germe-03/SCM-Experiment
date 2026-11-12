@@ -320,6 +320,9 @@ class AdaptiveStrategyConfig(ConfigModel):
     # Price competition: react to the rivals' average price on the own stage.
     competitive_pull: float = Field(default=0.0, ge=0, le=1)
     undercut_fraction: float = Field(default=0.0, ge=0, le=0.5)
+    # Preisuntergrenze: Eine Firma setzt ihren Preis nicht unter die Vollkosten pro Flasche des Vorjahres
+    # mal (1 + Marge). None = keine Untergrenze (früheres Verhalten).
+    cost_floor_margin: float | None = Field(default=None, ge=0, le=1)
     share_loss_trigger: float = Field(default=0.01, ge=0)
     max_price_step_fraction: float = Field(default=0.0, ge=0, le=0.5)
 
