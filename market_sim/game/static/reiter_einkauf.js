@@ -509,7 +509,17 @@
       return Math.max(0, zahlRoh(catInputs[key] && catInputs[key].value));
     }
 
+    var mischung = {};
+    function merkeMischung(key) {
+      var mix = {};
+      brandRows.forEach(function (row) {
+        if (String(wert(row.brand, 'category', '')) === String(key)) mix[row.id] = menge(row.id);
+      });
+      mischung[key] = mix;
+    }
+
     function verteileKategorie(key) {
+      if (!mischung[key]) merkeMischung(key);
       var ziel = Math.round(katMenge(key));
       var zeilen = brandRows.filter(function (row) {
         return String(wert(row.brand, 'category', '')) === String(key);
@@ -518,12 +528,16 @@
         zeilen.forEach(function (row) { row.feld.value = ''; });
         return;
       }
-      // Nur neu verteilen, wenn der Spieler die Marken nicht selbst angepasst hat (sonst würde beim
-      // Tippen von «75000» schon die «7» verteilt und danach nie mehr nachgeführt).
-      if (zeilen.some(function (row) { return menge(row.id) > 0 && !row.auto; })) return;
+      // Immer auf die neue Menge skalieren: Hat der Spieler schon eine Markenmischung, bleibt deren
+      // Verhältnis; sonst wird nach dem Nachfrageanteil der Marken verteilt.
+      // Mischung von dem Moment, als das Feld angeklickt wurde (sonst verfälschen Zwischenstände
+      // beim Tippen, z.B. «2» von «20000», die Mischung durch Rundung).
+      var mix = mischung[key] || {};
+      var summeJetzt = zeilen.reduce(function (sum, row) { return sum + (mix[row.id] || 0); }, 0);
       var summeAnteil = zeilen.reduce(function (sum, row) { return sum + zahlRoh(row.brand.demand_share); }, 0);
       zeilen.forEach(function (row) {
-        var anteil = summeAnteil > 0 ? zahlRoh(row.brand.demand_share) / summeAnteil : (zeilen.length ? 1 / zeilen.length : 0);
+        var anteil = summeJetzt > 0 ? (mix[row.id] || 0) / summeJetzt
+          : (summeAnteil > 0 ? zahlRoh(row.brand.demand_share) / summeAnteil : (zeilen.length ? 1 / zeilen.length : 0));
         var n = Math.round(ziel * anteil);
         row.feld.value = n > 0 ? String(n) : '';
         row.auto = true;
@@ -592,8 +606,8 @@
       } },
       { key: 'owner_name', label: 'Besitzer', value: function (row) { return wert(row.brand, 'owner_name', '–'); } },
       { key: 'positioning', label: 'Positionierung', value: function (row) { return wert(row.brand, 'positioning', '–'); } },
-      { key: 'quality', label: 'Qualität', value: function (row) { return zahl(ctx, row.brand.quality); } },
-      { key: 'reputation', label: 'Ruf', value: function (row) { return zahl(ctx, row.brand.reputation); } },
+      { key: 'quality', label: 'Qualität', value: function (row) { return prozent(ctx, row.brand.quality); } },
+      { key: 'reputation', label: 'Ruf', value: function (row) { return prozent(ctx, row.brand.reputation); } },
       { key: 'price', label: 'Preis', value: function (row) { return preis(ctx, row.brand.price); } },
       { key: 'demand_share', label: 'Nachfrageanteil', value: function (row) {
         return prozent(ctx, row.brand.demand_share);
@@ -681,6 +695,7 @@
     categorySelect.addEventListener('change', filterMarken);
     categories.forEach(function (category) {
       var key = String(category.key);
+      catInputs[key].addEventListener('focus', function () { merkeMischung(key); });
       catInputs[key].addEventListener('input', function () {
         verteileKategorie(key);
         sendePlan();
