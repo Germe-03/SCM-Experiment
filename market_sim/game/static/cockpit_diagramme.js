@@ -26,6 +26,7 @@ function diagrammZahl(wert, stellen) {
 
 function diagrammFormat(format) {
     if (format === 'chf') return (v) => `${diagrammZahl(v, Math.abs(v) < 100 ? 2 : 0)} CHF`;
+    if (format === 'preis') return (v) => `${diagrammZahl(v, 2)} CHF`;
     if (format === 'pct') return (v) => `${diagrammZahl(v * 100, 1)} %`;
     if (format === 'ganz') return (v) => diagrammZahl(v, 0);
     return (v) => diagrammZahl(v, 2);
@@ -172,6 +173,18 @@ function streuDiagramm(punkte, optionen) {
     }
     const farbe = diagrammFarbe('--c1');
     const letzte = diagrammFarbe('--c2');
+    // Rand um die Daten: Achsen reichen etwas weiter als die Punkte.
+    const rand = (werte) => {
+        const gueltig = werte.map(Number).filter(Number.isFinite);
+        if (!gueltig.length) return {};
+        const lo = Math.min(...gueltig);
+        const hi = Math.max(...gueltig);
+        const luft = (hi - lo) * 0.12 || Math.abs(hi) * 0.1 || 1;
+        return { min: lo - luft, max: hi + luft };
+    };
+    const xRand = rand(punkte.map((p) => p.x));
+    const yRand = rand(punkte.map((p) => p.y));
+    if (yRand.min !== undefined && Math.min(...punkte.map((p) => Number(p.y))) >= 0) yRand.min = Math.max(0, yRand.min);
     const zeichne = () => {
         const chart = new Chart(canvas, {
             type: 'scatter',
@@ -183,13 +196,14 @@ function streuDiagramm(punkte, optionen) {
             }] },
             options: {
                 responsive: true, maintainAspectRatio: false, animation: false,
+                layout: { padding: 8 },
                 plugins: {
                     legend: { display: false },
                     tooltip: { callbacks: { label: (c) => `${c.raw.label ? c.raw.label + ': ' : ''}${optionen.xName || 'x'} ${diagrammFormat(optionen.xFormat)(c.parsed.x)}, ${optionen.yName || 'y'} ${diagrammFormat(optionen.yFormat)(c.parsed.y)}` } },
                 },
                 scales: {
-                    x: { title: { display: true, text: optionen.xTitel || '' }, ticks: { callback: diagrammAchse(optionen.xFormat) } },
-                    y: { title: { display: true, text: optionen.yTitel || '' }, ticks: { callback: diagrammAchse(optionen.yFormat) } },
+                    x: { ...xRand, title: { display: true, text: optionen.xTitel || '' }, ticks: { callback: diagrammAchse(optionen.xFormat) } },
+                    y: { ...yRand, title: { display: true, text: optionen.yTitel || '' }, ticks: { callback: diagrammAchse(optionen.yFormat) } },
                 },
             },
         });

@@ -45,6 +45,7 @@ class Mergers:
             for firm in runner._firms()
             if env.runtimes[firm.id].active
             and firm.id in summaries
+            and firm.id not in (getattr(runner, "player_choices", {}) or {})
             and summaries[firm.id].revenue > 0
             and (groups is None or groups.group_of(firm.id) is None)
             and not (

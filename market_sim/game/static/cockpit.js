@@ -20,6 +20,7 @@ const REITER_KEYS = [
     'forschung',
     'logistik',
     'finanzen',
+    'abschluesse',
     'boerse',
     'rohstoffe',
     'bevoelkerung',
@@ -87,9 +88,11 @@ function setzeSichtbar(id, sichtbar) {
 }
 
 function schalteGruendungsfelder() {
-    // Region und Kategorie sind für alle Branchen wählbar.
+    // Region ist für alle Branchen wählbar, die Kategorie nur für Hersteller.
+    const branche = element('branche-select');
     setzeSichtbar('region-wrap', true);
-    setzeSichtbar('kategorie-wrap', true);
+    setzeSichtbar('kategorie-wrap', Boolean(branche) && branche.value === 'hersteller');
+    setzeSichtbar('dauer-wrap', true);
 }
 
 const KATEGORIE_NAMEN = {
@@ -122,15 +125,45 @@ function fuelleAuswahl(id, werte, mitLabel) {
     });
 }
 
-async function ladeOptionen() {
-    const daten = await api('/api/options');
+function regionName(id, optionen) {
+    const namen = (optionen && optionen.region_labels) || (spielOptionen && spielOptionen.region_labels) || {};
+    return namen[id] || id;
+}
+
+function fuelleGruendung(daten) {
     if (!daten) return;
     if (typeof merkeOptionen === 'function') merkeOptionen(daten);
 
     fuelleAuswahl('branche-select', daten.branches, true);
     fuelleAuswahl('region-select', daten.regions, false);
+    const regionen = element('region-select');
+    if (regionen) {
+        Array.from(regionen.options).forEach((option) => {
+            option.textContent = regionName(option.value, daten);
+        });
+    }
     fuelleAuswahl('kategorie-select', daten.categories, false);
+
+    const dauer = element('dauer-select');
+    if (dauer) {
+        const wahl = Array.isArray(daten.years_choices) && daten.years_choices.length
+            ? daten.years_choices.map(Number).filter(Number.isFinite)
+            : [10];
+        dauer.replaceChildren();
+        wahl.forEach((jahre) => {
+            const option = document.createElement('option');
+            option.value = String(jahre);
+            option.textContent = `${jahre} Jahre`;
+            dauer.appendChild(option);
+        });
+        dauer.value = wahl.includes(10) ? '10' : String(wahl[0]);
+    }
     schalteGruendungsfelder();
+}
+
+async function ladeOptionen() {
+    const daten = await api('/api/options');
+    fuelleGruendung(daten);
 }
 
 function formatiereDatum(wert) {
@@ -226,8 +259,13 @@ function updateButtons() {
 
     spielKnopfIds.forEach((id) => {
         const knopf = element(id);
-        if (knopf) knopf.disabled = beschaeftigt || spielBeendet;
+        if (knopf) {
+            knopf.disabled = beschaeftigt || spielBeendet;
+            knopf.hidden = spielBeendet;
+        }
     });
+    const fuss = element('fussleiste');
+    if (fuss) fuss.hidden = spielBeendet;
 
     const firma = element('tab-firma');
     if (firma) {
@@ -268,9 +306,25 @@ function setzeText(id, text) {
     if (feld) feld.textContent = text;
 }
 
+function formatierePreis(wert) {
+    let zahl = Number(wert);
+    if (!Number.isFinite(zahl) || Math.abs(zahl) < 0.005) zahl = 0;
+    return `${new Intl.NumberFormat('de-CH', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    }).format(zahl)} CHF`;
+}
+
+function messeKopf() {
+    const kopf = element('kopf');
+    if (!kopf) return;
+    document.documentElement.style.setProperty('--kopf-hoehe', `${Math.ceil(kopf.getBoundingClientRect().height)}px`);
+}
+
 function formatiereGeld(wert) {
     const zahl = Number(wert);
-    const gueltig = Number.isFinite(zahl) ? zahl : 0;
+    let gueltig = Number.isFinite(zahl) ? zahl : 0;
+    if (Math.abs(gueltig) < 0.005) gueltig = 0;
     const dezimalen = Math.abs(gueltig) < 100 && !Number.isInteger(gueltig) ? 2 : 0;
     return `${new Intl.NumberFormat('de-CH', {
         minimumFractionDigits: dezimalen,
@@ -311,6 +365,7 @@ function zeigeSpielende(state) {
     const grund = state.reason === null || state.reason === undefined
         ? ''
         : String(state.reason);
+    const klartext = state.end_reason_text ? String(state.end_reason_text) : '';
     const grundKlein = grund.toLowerCase();
     let titel = 'Spiel beendet';
 
@@ -321,12 +376,24 @@ function zeigeSpielende(state) {
     }
 
     setzeText('spielende-titel', titel);
+    const box = element('spielende');
+    if (box) box.classList.toggle('konkurs', grundKlein === 'konkurs' || grundKlein === 'bankruptcy');
 
-    let text = grund ? `Grund: ${grund}` : 'Das Spiel ist beendet.';
+    let text = klartext || (grund ? `Grund: ${grund}` : 'Das Spiel ist beendet.');
     if (state.sale) {
         text += ` Verkaufspreis: ${formatiereGeld(state.sale.price)} (Jahr ${state.sale.year}, Monat ${state.sale.month})`;
     }
     setzeText('spielende-text', text);
+}
+
+function springeZuCeo() {
+    waehleReiter('holding', false);
+    window.setTimeout(() => {
+        const bereich = element('holding-bereich');
+        if (bereich) bereich.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        const knopf = document.querySelector('#holding-bereich .ceo-aktionen button');
+        if (knopf) knopf.focus();
+    }, 50);
 }
 
 function zeichneMeldungen(messages) {
@@ -355,6 +422,14 @@ function zeichneMeldungen(messages) {
         zeit.textContent = `Jahr ${meldung.year}, Tag ${meldung.day}`;
 
         li.append(zeit, document.createTextNode(` ${meldung.text || ''}`));
+        if (meldung.action === 'ceo') {
+            const knopf = document.createElement('button');
+            knopf.type = 'button';
+            knopf.className = 'meldung-knopf';
+            knopf.textContent = 'CEO wählen';
+            knopf.addEventListener('click', springeZuCeo);
+            li.appendChild(knopf);
+        }
         liste.appendChild(li);
     });
 }
@@ -421,6 +496,7 @@ function baueCtx(state) {
             if (typeof entscheidePatch === 'function') entscheidePatch(patch);
         },
         geld: formatiereGeld,
+        preis: formatierePreis,
         zahl: (wert, stellen = 0) => formatiereZahl(wert, stellen),
         prozent: formatiereProzent,
         linien: (series, optionen) => diagramm(series, optionen),
@@ -701,14 +777,14 @@ function zeichnePunktGrafik(karte, history, kpis) {
         const preis = Number(kpis.sell_price);
         const absatz = Number(kpis.recent_sales);
         const text = document.createElement('p');
-        text.textContent = `Sobald du mehrere Runden gespielt hast, siehst du hier, wie dein Preis den Absatz verändert. Aktuell: Preis ${formatiereGeld(preis)}${Number.isFinite(absatz) ? `, Absatz ${formatiereGanzzahl(absatz)}` : ''}.`;
+        text.textContent = `Sobald du mehrere Runden gespielt hast, siehst du hier, wie dein Preis den Absatz verändert. Aktuell: Preis ${formatierePreis(preis)}${Number.isFinite(absatz) ? `, Absatz ${formatiereGanzzahl(absatz)}` : ''}.`;
         karte.appendChild(text);
         return;
     }
 
-    const labels = (history || []).filter((e) => Number.isFinite(Number(e.sell_price))).map((e) => `Jahr ${e.year}, Monat ${e.month}`);
+    const labels = (history || []).filter((e) => Number.isFinite(Number(e.sell_price))).map((e) => `Jahr ${e.year}, ${e.month_name || `Monat ${e.month}`}`);
     karte.appendChild(streuDiagramm(punkte.map((p, i) => ({ x: p.preis, y: p.absatz, label: labels[i] })), {
-        xName: 'Preis', yName: 'Absatz', xFormat: 'chf', yFormat: 'ganz', xTitel: 'Preis (CHF)', yTitel: 'Absatz pro Tag'
+        xName: 'Preis', yName: 'Absatz', xFormat: 'preis', yFormat: 'ganz', xTitel: 'Preis (CHF)', yTitel: 'Absatz pro Tag'
     }));
 }
 
@@ -798,15 +874,44 @@ function zeichneKostenKarte(el, daten, ctx) {
     el.appendChild(karte);
 }
 
+function zeichnePreisKarte(el, preise, ctx) {
+    if (!preise || typeof preise !== 'object') return;
+
+    const karte = baueKarte('Einkaufs- und Verkaufspreis');
+    karte.id = 'karte-preise';
+    const raster = baueKpiRaster();
+    fuegeKpi(raster, 'Einkaufspreis pro Flasche', formatierePreis(preise.purchase_price), null, null);
+    fuegeKpi(raster, 'Verkaufspreis pro Flasche', formatierePreis(preise.sell_price), null, null);
+    fuegeKpi(raster, 'Gewinn pro Flasche', formatierePreis(preise.profit_per_bottle),
+        Number.isFinite(Number(preise.margin_pct)) ? `Marge ${formatiereZahl(preise.margin_pct, 1)} %` : null, null,
+        Number(preise.profit_per_bottle) < 0 ? 'negativ' : 'positiv');
+    fuegeKpi(raster, 'Verlustgrenze', formatierePreis(preise.break_even_price), 'Darunter machst du Verlust.', null);
+    karte.appendChild(raster);
+
+    const verlauf = Array.isArray(preise.history) ? preise.history : [];
+    if (verlauf.length >= 2) {
+        karte.appendChild(ctx.linien([
+            { name: 'Einkaufspreis', werte: verlauf.map((e) => Number(e.purchase)), farbe: 'var(--linie-1)' },
+            { name: 'Verkaufspreis', werte: verlauf.map((e) => Number(e.sell)), farbe: 'var(--linie-2)' }
+        ], { labels: verlauf.map((e) => e.label), hoehe: 220, format: 'preis' }));
+    } else {
+        karte.appendChild(Object.assign(document.createElement('p'), {
+            textContent: 'Die Preiskurve erscheint nach der ersten Runde.'
+        }));
+    }
+    el.appendChild(karte);
+}
+
 async function zeichneUebersicht(el) {
     const state = aktuellerStand || {};
     const kpis = state.kpis || {};
     const ctx = baueCtx(state);
-    const [capacity, classification, engpass, kosten] = await Promise.all([
+    const [capacity, classification, engpass, kosten, preise] = await Promise.all([
         ctx.ansicht('capacity'),
         ctx.ansicht('classification'),
         ctx.ansicht('bottleneck'),
-        ctx.ansicht('costs')
+        ctx.ansicht('costs'),
+        ctx.ansicht('pricing')
     ]);
 
     const raster = baueKpiRaster();
@@ -873,10 +978,18 @@ async function zeichneUebersicht(el) {
         Number.isFinite(kasse) ? (kasse >= 0 ? 'positiv' : 'negativ') : '');
     fuegeKpi(raster, 'Gewinn seit Gründung', formatiereGeld(kpis.profit), null, infos.profit,
         Number.isFinite(gewinn) ? (gewinn >= 0 ? 'positiv' : 'negativ') : '');
-    fuegeKpi(raster, 'Umsatz im Jahr', formatiereGeld(kpis.revenue_year ?? umsatz), null, infos.revenue);
-    if (kpis.profit_year !== undefined && kpis.profit_year !== null) {
-        const gewinnJahr = Number(kpis.profit_year);
-        fuegeKpi(raster, 'Gewinn im Jahr', formatiereGeld(kpis.profit_year), null, infos.profitYear,
+    // Am Jahresanfang ist das laufende Jahr noch leer: dann das letzte volle Jahr zeigen.
+    const jahrLeer = Number(kpis.revenue_year) === 0 || kpis.revenue_year === undefined || kpis.revenue_year === null;
+    const letztesJahrDa = kpis.revenue_last_year !== undefined && kpis.revenue_last_year !== null
+        && Number.isFinite(Number(kpis.revenue_last_year));
+    const nimmLetztes = jahrLeer && letztesJahrDa;
+    const umsatzJahr = nimmLetztes ? kpis.revenue_last_year : (kpis.revenue_year ?? umsatz);
+    const gewinnJahrWert = nimmLetztes ? kpis.profit_last_year : kpis.profit_year;
+    fuegeKpi(raster, nimmLetztes ? 'Umsatz im letzten Jahr' : 'Umsatz im Jahr', formatiereGeld(umsatzJahr),
+        nimmLetztes ? 'Das neue Jahr hat gerade begonnen.' : null, infos.revenue);
+    if (gewinnJahrWert !== undefined && gewinnJahrWert !== null) {
+        const gewinnJahr = Number(gewinnJahrWert);
+        fuegeKpi(raster, nimmLetztes ? 'Gewinn im letzten Jahr' : 'Gewinn im Jahr', formatiereGeld(gewinnJahrWert), null, infos.profitYear,
             Number.isFinite(gewinnJahr) ? (gewinnJahr >= 0 ? 'positiv' : 'negativ') : '');
     }
     fuegeKpi(raster, 'Absatz pro Tag (Flaschen)', formatiereGanzzahl(kpis.recent_sales), null, infos.sales);
@@ -919,6 +1032,7 @@ async function zeichneUebersicht(el) {
 
     el.appendChild(raster);
 
+    zeichnePreisKarte(el, preise, ctx);
     zeichneEngpassKarte(el, engpass);
     zeichneKostenKarte(el, kosten, ctx);
 
@@ -972,15 +1086,16 @@ async function zeichneReiter(key) {
         if (normalisiert === 'uebersicht') {
             await zeichneUebersicht(staging);
         } else if (normalisiert === 'firma') {
-            const [autopilot, einstufung] = await Promise.all([
+            const [autopilot, einstufung, preise] = await Promise.all([
                 ctx.ansicht('autopilot'),
-                ctx.ansicht('classification')
+                ctx.ansicht('classification'),
+                ctx.ansicht('pricing')
             ]);
             if (nr !== zeichnungsNr || normalisiert !== aktiverReiter) return;
             if (typeof zeichneFirma === 'function') {
-                zeichneFirma(staging, state, autopilot, einstufung);
+                zeichneFirma(staging, state, autopilot, einstufung, preise);
             } else {
-                staging.appendChild(bauePlatzhalterkarte('Dieser Bereich kommt gleich.'));
+                staging.appendChild(bauePlatzhalterkarte(PLATZHALTER_TEXT));
             }
         } else if (normalisiert === 'holding') {
             if (typeof fuelleHolding === 'function') fuelleHolding(state);
@@ -988,7 +1103,7 @@ async function zeichneReiter(key) {
         } else if (window.REITER && window.REITER[normalisiert]) {
             await window.REITER[normalisiert].render(staging, ctx);
         } else {
-            staging.appendChild(bauePlatzhalterkarte('Dieser Bereich kommt gleich.'));
+            staging.appendChild(bauePlatzhalterkarte(PLATZHALTER_TEXT));
         }
 
         if (nr !== zeichnungsNr || normalisiert !== aktiverReiter) return;
@@ -1004,6 +1119,8 @@ async function zeichneReiter(key) {
         window.scrollTo(window.scrollX, scrollY);
     }
 }
+
+const PLATZHALTER_TEXT = 'Dieser Reiter konnte nicht geladen werden. Drücke Ctrl + F5.';
 
 function bauePlatzhalterkarte(text) {
     const karte = baueKarte('Hinweis');
@@ -1084,7 +1201,21 @@ function render(state) {
     setzeText('branche-anzeige', branche);
     setzeText('einstufung-anzeige', einstufung || '');
     setzeSichtbar('einstufung-anzeige', Boolean(einstufung));
-    setzeText('zeit-anzeige', `Jahr ${state.year}, Monat ${state.month}`);
+    setzeText('zeit-anzeige', `Jahr ${state.year}, ${state.month_name || `Monat ${state.month}`}`);
+    const verbleibend = Number(state.years_left);
+    const dauerAnzeige = element('dauer-anzeige');
+    if (dauerAnzeige) {
+        const zeigen = state.years_left !== null && state.years_left !== undefined
+            && Number.isFinite(verbleibend) && !state.game_over;
+        dauerAnzeige.hidden = !zeigen;
+        if (zeigen) {
+            dauerAnzeige.textContent = verbleibend <= 0
+                ? 'letztes Jahr'
+                : (verbleibend === 1 ? 'noch 1 Jahr' : `noch ${verbleibend} Jahre`);
+            dauerAnzeige.classList.toggle('knapp', verbleibend <= 1);
+        }
+    }
+    window.setTimeout(messeKopf, 0);
 
     if (typeof fuelleHolding === 'function') fuelleHolding(state);
     zeigeSpielende(state);
@@ -1161,6 +1292,39 @@ async function speichereSpielstand(name) {
     );
 }
 
+function fragePruefung(warnungen) {
+    return new Promise((fertig) => {
+        const dialog = element('check-dialog');
+        const liste = element('check-liste');
+        if (!dialog || !liste || typeof dialog.showModal !== 'function') {
+            fertig(window.confirm(warnungen.map((w) => w.text).join(' ') + ' Trotzdem beenden?'));
+            return;
+        }
+        liste.replaceChildren();
+        warnungen.forEach((w) => {
+            const li = document.createElement('li');
+            li.className = w.level === 'rot' ? 'rot' : 'gelb';
+            li.textContent = String(w.text || '');
+            liste.appendChild(li);
+        });
+        const ja = element('check-ja');
+        const nein = element('check-nein');
+        const aufraeumen = (antwort) => {
+            ja.removeEventListener('click', onJa);
+            nein.removeEventListener('click', onNein);
+            dialog.removeEventListener('cancel', onNein);
+            if (dialog.open) dialog.close();
+            fertig(antwort);
+        };
+        const onJa = (e) => { e.preventDefault(); aufraeumen(true); };
+        const onNein = (e) => { e.preventDefault(); aufraeumen(false); };
+        ja.addEventListener('click', onJa);
+        nein.addEventListener('click', onNein);
+        dialog.addEventListener('cancel', onNein);
+        dialog.showModal();
+    });
+}
+
 async function rundeBeenden(weiterWieBisher) {
     const settings = weiterWieBisher || typeof geaenderteEinstellungen !== 'function'
         ? {}
@@ -1172,6 +1336,18 @@ async function rundeBeenden(weiterWieBisher) {
         ? geplanteAuftraegeHolding()
         : {};
     const orders = { ...(holding || {}), ...geplantReiter };
+
+    if (beschaeftigt) return;
+    setBusy(true, 'Prüfe …');
+    let pruefung = null;
+    try {
+        pruefung = await api('/api/check', { settings, choices, orders });
+    } finally {
+        setBusy(false);
+        updateButtons();
+    }
+    const warnungen = pruefung && Array.isArray(pruefung.warnings) ? pruefung.warnings : [];
+    if (warnungen.length && !(await fragePruefung(warnungen))) return;
 
     await postAktion(
         '/api/round',
@@ -1270,6 +1446,7 @@ function verbindeEreignisse() {
                 region: regionSichtbar && element('region-select')
                     ? element('region-select').value
                     : null,
+                years: element('dauer-select') ? Number(element('dauer-select').value) || 10 : 10,
                 category: kategorieSichtbar && element('kategorie-select')
                     ? element('kategorie-select').value
                     : null
@@ -1366,13 +1543,10 @@ async function start() {
         api('/api/saves')
     ]);
 
-    if (optionen) {
-        if (typeof merkeOptionen === 'function') merkeOptionen(optionen);
-        fuelleAuswahl('branche-select', optionen.branches, true);
-        fuelleAuswahl('region-select', optionen.regions, false);
-        fuelleAuswahl('kategorie-select', optionen.categories, false);
-        schalteGruendungsfelder();
-    }
+    if (optionen) fuelleGruendung(optionen);
+    messeKopf();
+    window.addEventListener('resize', messeKopf);
+    if (window.ResizeObserver && element('kopf')) new ResizeObserver(messeKopf).observe(element('kopf'));
 
     if (spiel) {
         render(spiel);

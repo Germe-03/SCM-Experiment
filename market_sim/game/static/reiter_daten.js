@@ -324,7 +324,7 @@
             { key: 'region', label: 'Region' },
             { key: 'revenue', label: 'Umsatz', value: function (r) { return geld(ctx, r.revenue); } },
             { key: 'market_share', label: 'Marktanteil', value: function (r) { return prozent(ctx, r.market_share); } },
-            { key: 'avg_price', label: 'Ø Preis', value: function (r) { return geld(ctx, r.avg_price); } },
+            { key: 'avg_price', label: 'Ø Preis', value: function (r) { return (ctx.preis ? ctx.preis(r.avg_price) : geld(ctx, r.avg_price)); } },
             { key: 'quality', label: 'Qualität', value: function (r) { return zahl(ctx, r.quality); } },
             { key: 'reputation', label: 'Ruf', value: function (r) { return zahl(ctx, r.reputation); } },
             { key: 'service_level', label: 'Servicegrad', value: function (r) { return prozent(ctx, r.service_level); } },
@@ -377,7 +377,7 @@
         textZeile(mb, 'Firmen in dieser Stufe: ' + zahl(ctx, markt.firms_in_stage));
         var band = markt.price_band;
         textZeile(mb, 'Preisband: ' + (band ? geld(ctx, band.min) + ' – ' + geld(ctx, band.max) : '–'));
-        textZeile(mb, 'Konkurrenzpreis: ' + geld(ctx, markt.rival_price));
+        textZeile(mb, 'Konkurrenzpreis: ' + (ctx.preis ? ctx.preis(markt.rival_price) : geld(ctx, markt.rival_price)));
       }
     });
   }
@@ -420,6 +420,7 @@
     planBox(root, ctx, 'truck', 'Lastwagenauftrag');
     return Promise.all([laden(ctx, 'capacity'), laden(ctx, 'suppliers'), laden(ctx, 'trucks')]).then(function (r) {
       var cap = r[0];
+      var sortimentPromise = null;
       if (!cap) fehlerBlock(root, 'Kapazität und Nachfrage');
       else {
         var block = abschnitt(root, 'Kapazität und Nachfrage');
@@ -449,7 +450,7 @@
             return (current.indexOf(String(s.id)) >= 0 ? '✓ ' : '') + wert(s, 'name', '–');
           } },
           { key: 'region', label: 'Region' },
-          { key: 'price', label: 'Preis', value: function (s) { return geld(ctx, s.price); } },
+          { key: 'price', label: 'Preis', value: function (s) { return (ctx.preis ? ctx.preis(s.price) : geld(ctx, s.price)); } },
           { key: 'quality', label: 'Qualität', value: function (s) { return s.quality ? Math.round(s.quality * 100) + ' %' : '–'; } },
           { key: 'reliability', label: 'Zuverlässigkeit', value: function (s) { return s.reliability ? Math.round(s.reliability * 100) + ' %' : '–'; } },
           { key: 'reputation', label: 'Ruf', value: function (s) { return zahl(ctx, s.reputation); } },
@@ -478,7 +479,7 @@
         var eingaben = {};
         anteilBlock.appendChild(tabelle([
           { key: 'name', label: 'Lieferant', value: function (s) { return wert(s, 'name', '–'); } },
-          { key: 'price', label: 'Preis', value: function (s) { return geld(ctx, s.price); } },
+          { key: 'price', label: 'Preis', value: function (s) { return (ctx.preis ? ctx.preis(s.price) : geld(ctx, s.price)); } },
           { key: 'quality', label: 'Qualität', value: function (s) { return zahl(ctx, s.quality, 2); } },
           { key: 'reliability', label: 'Zuverlässigkeit', value: function (s) { return zahl(ctx, s.reliability, 2); } },
           { key: 'lead_time', label: 'Lieferzeit (Tage)', value: function (s) {
@@ -537,6 +538,14 @@
         label.appendChild(select);
         sb.appendChild(label);
         textZeile(sb, 'Du kannst einen Lieferanten fest wählen oder eine Regel vorgeben. Automatisch wählt die Simulation passend.');
+
+        // Sortiment pro Getränkeart (nur Handelsfirmen) mit Preisvergleich der Lieferanten.
+        var branche = ctx.state && ctx.state.firm ? ctx.state.firm.branch : '';
+        if (branche !== 'hersteller' && typeof window.zeichneSortiment === 'function') {
+          var sortimentHalter = el('div');
+          root.appendChild(sortimentHalter);
+          sortimentPromise = window.zeichneSortiment(sortimentHalter, ctx, candidates);
+        }
       }
 
       var trucks = r[2];
@@ -608,6 +617,7 @@
         ], array(trucks.fleet)));
         textZeile(fleet, 'Transportmodus: ' + (trucks.transport_mode || '–'));
       }
+      return sortimentPromise;
     });
   }
 
@@ -771,7 +781,7 @@
       block.appendChild(tabelle([
         { key: 'name', label: 'Name' },
         { key: 'branch', label: 'Branche' },
-        { key: 'price', label: 'Kurs', value: function (s) { return geld(ctx, s.price); } },
+        { key: 'price', label: 'Kurs', value: function (s) { return (ctx.preis ? ctx.preis(s.price) : geld(ctx, s.price)); } },
         { key: 'change', label: 'Änderung', value: function (s) {
           var span = el('span', zahlRoh(s.change) >= 0 ? 'rd-positiv' : 'rd-negativ', prozent(ctx, s.change));
           return span;

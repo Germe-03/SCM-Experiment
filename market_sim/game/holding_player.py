@@ -6,9 +6,15 @@ from __future__ import annotations
 def _base_firm_value(runner, state, firm_id: str) -> float:
     holdings = getattr(runner, "holdings", None)
     value = getattr(holdings, "value", None)
-    if callable(value):
-        return float(value(runner, state, firm_id))
-    return max(0.0, float(runner.env.runtimes[firm_id].cash))
+    base = float(value(runner, state, firm_id)) if callable(value) else max(0.0, float(runner.env.runtimes[firm_id].cash))
+    # Untergrenze: auch eine Firma mit Verlust hat Läden, Lager und Kunden. Wie bei den Verkaufsangeboten
+    # zählt die Kapazität (sonst wäre eine Verlustfirma gratis zu haben).
+    try:
+        cfg = runner.config.state
+        floor = cfg.price_per_capacity_unit * runner.long_run.price_index * runner.env._effective_capacity(firm_id)
+    except Exception:
+        floor = 0.0
+    return max(base, float(floor))
 
 
 def firm_value(runner, state, firm_id: str) -> float:

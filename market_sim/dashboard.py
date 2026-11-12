@@ -27,11 +27,13 @@ def write_dashboard_html(data: dict, path: str | Path) -> Path:
     rnd = Path(__file__).with_name("dashboard_rnd.js").read_text(encoding="utf-8")
     trucks_file = Path(__file__).with_name("dashboard_trucks.js")
     trucks = trucks_file.read_text(encoding="utf-8") if trucks_file.exists() else ""
+    fin_file = Path(__file__).with_name("dashboard_financials.js")
+    financials = fin_file.read_text(encoding="utf-8") if fin_file.exists() else ""
     html = (_HTML.replace("__DATA__", payload).replace("__CHART_JS__", CHART_JS_URL)
             .replace("__TABLE_FILTERS__", filters).replace("__STOCK_COMPARE__", stocks).replace("__ETFS__", etfs)
             .replace("__RND__", rnd)
             .replace("__HOLDINGS__", Path(__file__).with_name("dashboard_holdings.js").read_text(encoding="utf-8"))
-            .replace("__TRUCKS__", trucks)
+            .replace("__TRUCKS__", trucks).replace("__FINANCIALS__", financials)
             .replace("__CARRIERS__", Path(__file__).with_name("dashboard_carriers.js").read_text(encoding="utf-8")))
     target.write_text(html, encoding="utf-8")
     return target
@@ -129,6 +131,7 @@ body:has(dialog[open]){overflow:hidden}
   <button role="tab" data-tab="compare">Vergleich</button>
   <button role="tab" data-tab="chain">Lieferkette</button>
   <button role="tab" data-tab="finance">Finanzen</button>
+  <button role="tab" data-tab="statements">Abschlüsse</button>
   <button role="tab" data-tab="banks">Banken</button>
   <button role="tab" data-tab="stocks">Börse</button>
   <button role="tab" data-tab="state">Staat</button>
@@ -241,6 +244,17 @@ body:has(dialog[open]){overflow:hidden}
   <div class="card wide"><h3>Forschung, Umsetzung, Patentgebühren und Schadenersatz</h3><p class="hint">Alle Firmen zusammen. Schadenersatz: was Patentverletzer an die Inhaber zahlen. Forschung und Umsetzung geschätzt aus den abgeschlossenen Projekten.</p><div class="chart"><canvas id="fi-rnd"></canvas></div></div>
   <div class="card"><h3>Beteiligungen und Dividenden</h3><div class="chart"><canvas id="fi-stakes"></canvas></div></div>
   <div class="card"><h3>Wer hält was (Ende des Zeitraums)</h3><div class="table-wrap"><table id="fi-holdings"></table></div></div>
+ </div>
+</section>
+<section role="tabpanel" id="tab-statements">
+ <h2>Abschlüsse</h2><p class="lead">Erfolgsrechnung, Bilanz, Geldfluss und Kennzahlen je Firma und Jahr (Abschluss am Jahresende).</p>
+ <div class="filters"><label for="fs-firm">Firma: </label><select id="fs-firm"></select> <label for="fs-year">Jahr: </label><select id="fs-year"></select></div>
+ <div class="grid">
+  <div class="card"><h3>Erfolgsrechnung</h3><div class="table-wrap"><table id="fs-income"></table></div></div>
+  <div class="card"><h3>Bilanz</h3><div class="table-wrap"><table id="fs-balance"></table></div></div>
+  <div class="card"><h3>Geldfluss</h3><div class="table-wrap"><table id="fs-cash"></table></div></div>
+  <div class="card"><h3>Kennzahlen und Kalkulation pro Flasche</h3><div class="table-wrap"><table id="fs-ratios"></table></div></div>
+  <div class="card wide"><h3>Umsatz, Betriebsgewinn und Reingewinn</h3><div class="chart"><canvas id="fs-chart"></canvas></div></div>
  </div>
 </section>
 <section role="tabpanel" id="tab-banks">
@@ -999,7 +1013,7 @@ $('#flow').addEventListener('click',e=>{if(e.target.id==='flow')closeFlow()});
    wait.innerHTML=esc(pretty(a.answer)).replace(/\n/g,'<br>')+(a.sources&&a.sources.length?`<div class="hint" style="margin-top:6px">Quellen: ${a.sources.map(esc).join(' · ')}</div>`:'')}
   catch(err){wait.innerHTML='Keine Antwort vom Chat-Server. Läuft <code>python -m market_sim.serve</code> und ist das Sprachmodell erreichbar?'}
   finally{$('#chat-send').disabled=false;input.focus()}}})();
-const VIEWS={chronicle:renderChronicle,map:renderMap,overview:renderOverview,market:()=>{renderMarket();renderPeople();renderStructure()},firms:renderFirms,compare:renderCompare,chain:renderChain,finance:renderFinance,banks:renderBankTab,stocks:renderStocks,state:renderState,rnd:renderRnd,couriers:renderCouriers,events:renderEvents};
+const VIEWS={chronicle:renderChronicle,map:renderMap,overview:renderOverview,market:()=>{renderMarket();renderPeople();renderStructure()},firms:renderFirms,compare:renderCompare,chain:renderChain,finance:renderFinance,statements:renderStatements,banks:renderBankTab,stocks:renderStocks,state:renderState,rnd:renderRnd,couriers:renderCouriers,events:renderEvents};
 function render(){destroy();VIEWS[S.tab]()}
 showTab(location.hash.slice(1)||'overview');viewHistory.push(viewSnapshot());viewIndex=0;viewReady=true;history.replaceState({dashboardView:0},'', '#'+S.tab);history.scrollRestoration='manual';backState();
 __TABLE_FILTERS__
@@ -1009,6 +1023,7 @@ __RND__
 __CARRIERS__
 __TRUCKS__
 __HOLDINGS__
+__FINANCIALS__
 </script></body></html>'''
 
 

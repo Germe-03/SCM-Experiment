@@ -82,6 +82,7 @@ class Handler(SimpleHTTPRequestHandler):
                     str(body.get("name", "")),
                     region=body.get("region"),
                     category=body.get("category"),
+                    years=(int(body["years"]) if str(body.get("years") or "").lstrip("-").isdigit() else None),
                 )
             elif path == "/api/round":
                 settings = body.get("settings")
@@ -89,6 +90,12 @@ class Handler(SimpleHTTPRequestHandler):
                 result = self.controller.end_round(
                     settings if isinstance(settings, dict) else None,
                     choices if isinstance(choices, dict) else None,
+                    body.get("orders") if isinstance(body.get("orders"), dict) else None,
+                )
+            elif path == "/api/check":
+                result = self.controller.check(
+                    body.get("settings") if isinstance(body.get("settings"), dict) else None,
+                    body.get("choices") if isinstance(body.get("choices"), dict) else None,
                     body.get("orders") if isinstance(body.get("orders"), dict) else None,
                 )
             elif path == "/api/sell":
@@ -120,7 +127,8 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--saves", default="runs/spielstaende")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--years", type=int)
-    parser.add_argument("--days-per-year", type=int)
+    parser.add_argument("--days-per-year", type=int, default=360,
+                        help="Tage pro Jahr (nur zum Testen ändern, Standard 360)")
     args = parser.parse_args(argv)
     controller = GameController(Path(args.saves), seed=args.seed,
                                 years=args.years, days_per_year=args.days_per_year)

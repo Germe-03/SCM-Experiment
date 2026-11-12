@@ -8,6 +8,7 @@ import random
 from statistics import pstdev
 from typing import Callable
 
+from market_sim import financials
 from market_sim.decisions import DecisionLog, exit_analysis
 from market_sim.personas import generate_personas
 from market_sim.region_report import RegionReporter
@@ -96,6 +97,8 @@ class RunResult:
     exit_analysis: dict = field(default_factory=dict)
     # Phase 38: yearly commodity market prices (share of base price) and purchased units.
     commodities: list[dict] = field(default_factory=list)
+    # Spielmodus: Jahresabschluesse {jahr: {firma: bericht}} (siehe market_sim/financials.py).
+    annual_financials: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -222,6 +225,10 @@ class SimulationRunner:
         self.day_hook: Callable[[SimulationRunner, RunState, int, int], None] | None = None
         # Spielmodus Phase 3: player choices per firm id (see market_sim/game/choices.py).
         self.player_choices: dict = {}
+        # Jahresabschluesse (market_sim/financials.py): {jahr: {firma: bericht}} und Stand am Jahresbeginn.
+        self.annual_reports: dict = {}
+        self.fin_start: dict = {}
+        self._fin_unit_cost: dict = {}
         self.env.player_choices = self.player_choices  # same dict, for subsystems that only see env
 
     def _in_maturation(self, firm_id: str, year: int) -> bool:
@@ -316,6 +323,7 @@ class SimulationRunner:
             leasing=self.leasing.export() if self.leasing is not None else {},
             profit_distribution=self.profit_distribution.export() if self.profit_distribution is not None else {},
             offence_ledger=list(self.state_actor.offence_ledger) if self.state_actor is not None else [],
+            annual_financials={y: dict(r) for y, r in self.annual_reports.items()},
         )
 
         if self.config.traceability.enabled:
@@ -513,6 +521,7 @@ class SimulationRunner:
         """Simulate one full year and append its reports to ``state``."""
         year = state.year
         self.env.credit_year = year + 1
+        financials.begin_year(self)
         event_start = len(state.events)
         self.region_reporter.start_year(self)
         summaries, annual_reports, system_kpis = (
@@ -800,6 +809,7 @@ class SimulationRunner:
             now = getattr(self.env.runtimes[firm.id], "cash_flows", {})
             financial_breakdown[firm.id][-1]["cash_flows"] = {
                 k: round(v - begin.get(k, 0.0), 2) for k, v in now.items() if abs(v - begin.get(k, 0.0)) >= 0.5}
+        financials.record_year(self, state.year)
         for event in state.events[event_start:]:
             if event["event"] in ("expand_started", "site_started", "rnd_started", "strategy_change", "transport_switch"):
                 self.decision_log.record(event["year"], event["firm"], event["event"], event["details"], event["details"])

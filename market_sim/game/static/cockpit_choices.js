@@ -17,8 +17,8 @@ const FELD_HILFE = {
         wenn: 'Mehr Vorrat: weniger Risiko, nichts liefern zu können, aber mehr Geld liegt im Lager.'
     },
     order_qty: {
-        wofuer: 'Wie viele Einheiten du pro Tag fest bestellst oder herstellst (1 Einheit = 10’000 Flaschen).',
-        wenn: 'Mehr Einheiten: mehr Vorrat, aber auch mehr Lagerkosten. Leer: die Menge wird automatisch gewählt.'
+        wofuer: 'Wie viele Flaschen du pro Tag fest bestellst oder herstellst.',
+        wenn: 'Mehr Flaschen: mehr Vorrat, aber auch mehr Lagerkosten. Leer: die Menge wird automatisch gewählt.'
     },
     overtime_level: {
         wofuer: 'Wie viele Überstunden dein Team macht.',
@@ -53,7 +53,7 @@ const FELD_HILFE = {
         wenn: 'Ja: sobald genug Geld da ist und die Nachfrage die Kapazität übersteigt, baut die Firma von selbst aus und bezahlt das aus der Kasse. Nein: die Kapazität wächst nur, wenn du unten einen Ausbau planst.'
     },
     expand_order: {
-        wofuer: 'Um wie viele Einheiten pro Tag (1 Einheit = 10’000 Flaschen) du die Kapazität erweitern willst.',
+        wofuer: 'Um wie viele Flaschen pro Tag du die Kapazität erweitern willst.',
         wenn: 'Der Ausbau kostet einmalig Geld und wird nach dem Klick auf «Ausbau planen» in der nächsten Runde bezahlt. Danach kannst du pro Tag entsprechend mehr herstellen oder bearbeiten.'
     },
     site_order: {
@@ -61,8 +61,8 @@ const FELD_HILFE = {
         wenn: 'Ein neuer Standort kann mehr Kunden erreichen, kostet aber Geld.'
     },
     credit_mode: {
-        wofuer: 'Ob die Firma bei Geldknappheit selbst einen Bankkredit aufnimmt.',
-        wenn: 'Nie Kredit: die Firma leiht nie Geld, kann dann aber bei leerer Kasse zahlungsunfähig werden. Kredit, wenn möglich: fehlt Geld, nimmt sie bei der Bank einen Kredit auf und zahlt Zinsen dafür. Autopilot: die Simulation entscheidet nach Kassenlage.'
+        wofuer: 'Ob die Firma bei Geldknappheit selbst einen Bankkredit aufnimmt. Kredite gibt es nur auf deinen Wunsch.',
+        wenn: 'Nie Kredit (Standard): die Firma leiht nie Geld, kann dann aber bei leerer Kasse zahlungsunfähig werden und Investitionen fallen aus. Kredit, wenn möglich: fehlt Geld, nimmt sie bei der Bank einen Kredit auf und zahlt Zinsen dafür. Autopilot: die Simulation entscheidet nach Kassenlage.'
     },
     bank_id: {
         wofuer: 'Bei welcher Bank die Firma ihr Geld verwahrt.',
@@ -193,6 +193,9 @@ function feldWert(feld, wert) {
     if (typ === 'dreifach') return dreifachNachText(wert);
     if (wert === null || wert === undefined) return '';
     const zahl = Number(wert);
+    if (feld.dataset.stellen && Number.isFinite(zahl)) {
+        return String(Number(zahl.toFixed(Number(feld.dataset.stellen))));
+    }
     if (typ === 'prozent') return Number.isFinite(zahl) ? String(Math.round(zahl * 100)) : '';
     if (typ === 'faktor') return Number.isFinite(zahl) ? String(Math.round((zahl - 1) * 100)) : '';
     return String(wert);
@@ -292,6 +295,7 @@ function baueEingabefeld(form, optionen) {
         jahr = false,
         autopilot = null,
         autopilotWert,
+        stellen,
         optionen: listenOptionen,
         leerText,
         min,
@@ -308,6 +312,7 @@ function baueEingabefeld(form, optionen) {
     eingabe.id = id;
     eingabe.dataset[istEinstellung ? 'key' : 'choice'] = key;
     eingabe.dataset.typ = typ;
+    if (stellen !== undefined) eingabe.dataset.stellen = String(stellen);
 
     if (!listenOptionen) {
         eingabe.type = eingabeTyp;
@@ -367,7 +372,7 @@ function bauePlanungsFeld(form, key, label, buttonText) {
     eingabe.dataset.typ = key === 'expand_order' ? 'zahl' : 'text';
     if (key === 'expand_order') {
         eingabe.min = '1';
-        eingabe.step = '1';
+        eingabe.step = '100';
     }
     feld.appendChild(eingabe);
 
@@ -390,7 +395,14 @@ function bauePlanungsFeld(form, key, label, buttonText) {
     form.appendChild(feld);
 }
 
+function firmaPreis(wert) {
+    let zahl = Number(wert);
+    if (!Number.isFinite(zahl) || Math.abs(zahl) < 0.005) zahl = 0;
+    return `${new Intl.NumberFormat('de-CH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(zahl)} CHF`;
+}
+
 function firmaGeld(wert) {
+    if (typeof formatierePreis === 'function') return formatierePreis(wert);
     const zahl = Number(wert);
     return `${new Intl.NumberFormat('de-CH', { maximumFractionDigits: 2 }).format(zahl)} CHF`;
 }
@@ -406,7 +418,7 @@ function setzeGeplant(form, key, wert) {
     if (!aktiv) {
         knoten.textContent = '';
     } else if (key === 'expand_order') {
-        knoten.textContent = `Geplant: +${wert} Einheiten pro Tag`;
+        knoten.textContent = `Geplant: +${wert} Flaschen pro Tag`;
     } else {
         knoten.textContent = `Geplant: Standort in ${wert}`;
     }
@@ -529,7 +541,74 @@ function aktualisiereFokus(form) {
     anzeige.textContent = `${marke} % Marke, ${100 - marke} % Laden`;
 }
 
-function zeichneFirma(el, state, autopilot, einstufung) {
+// Einkaufspreis, Marge und Live-Vorschau beim Tippen eines neuen Preises.
+function zeichnePreisInfo(karte, preise, state) {
+    if (!preise || typeof preise !== 'object') return;
+    const stk = (wert) => firmaPreis(wert);
+    const tabelle = baue('table', 'preis-tabelle');
+    [
+        ['Einkaufspreis pro Flasche', preise.purchase_price],
+        ['Marge pro Flasche (Verkaufs- minus Einkaufspreis)', preise.margin_per_bottle],
+        ['Gewinn pro Flasche (nach Gemeinkosten)', preise.profit_per_bottle],
+        ['Verlustgrenze (darunter machst du Verlust)', preise.break_even_price]
+    ].forEach(([name, wert]) => {
+        const zeile = baue('tr');
+        zeile.append(baue('td', '', name), baue('td', '', stk(wert)));
+        tabelle.appendChild(zeile);
+    });
+    karte.appendChild(tabelle);
+
+    const vorschau = baue('div', 'preis-vorschau');
+    vorschau.id = 'preis-vorschau';
+    vorschau.hidden = true;
+    karte.appendChild(vorschau);
+
+    const eingabe = karte.querySelector('#f-base_price');
+    if (!eingabe) return;
+    const aktualisieren = () => {
+        const neu = Number(String(eingabe.value).replace(',', '.'));
+        const alt = Number(preise.sell_price);
+        const einkauf = Number(preise.purchase_price);
+        const marge = Number(preise.margin_per_bottle);
+        if (eingabe.value.trim() === '' || !Number.isFinite(neu) || !Number.isFinite(einkauf)) {
+            vorschau.hidden = true;
+            return;
+        }
+        vorschau.replaceChildren();
+        const margeNeu = neu - einkauf;
+        const gewinnNeu = Number.isFinite(Number(preise.profit_per_bottle)) && Number.isFinite(alt)
+            ? Number(preise.profit_per_bottle) + (neu - alt) : null;
+        vorschau.appendChild(baue('p', '', `Neue Marge pro Flasche: ${stk(margeNeu)}` +
+            (gewinnNeu === null ? '' : `, Gewinn pro Flasche: ${stk(gewinnNeu)}`)));
+        if (Number.isFinite(marge) && Math.abs(neu - alt) >= 0.005) {
+            let satz;
+            if (margeNeu <= 0) {
+                satz = 'Bei diesem Preis verdienst du an einer Flasche nichts mehr: Mehrabsatz hilft nicht.';
+            } else if (marge > 0) {
+                const faktor = marge / margeNeu - 1;
+                const prozent = formatiereProzent(Math.abs(faktor));
+                const tag = Number((state && state.kpis && state.kpis.recent_sales) || 0);
+                const flaschen = tag > 0 ? ` (rund ${new Intl.NumberFormat('de-CH', { maximumFractionDigits: 0 }).format(Math.abs(faktor) * tag)} Flaschen pro Tag)` : '';
+                satz = faktor > 0.0005
+                    ? `Damit dein Gewinn gleich bleibt, musst du ${prozent} mehr verkaufen${flaschen}.`
+                    : (faktor < -0.0005
+                        ? `Du kannst bis zu ${prozent} weniger verkaufen${flaschen}, ohne weniger zu verdienen.`
+                        : 'Dein Gewinn bleibt bei gleichem Absatz gleich.');
+            } else {
+                satz = 'Mit diesem Preis verdienst du pro Flasche wieder etwas.';
+            }
+            vorschau.appendChild(baue('p', '', satz));
+        }
+        if (Number.isFinite(Number(preise.break_even_price)) && neu < Number(preise.break_even_price)) {
+            vorschau.appendChild(baue('p', 'negativ', 'Achtung: Der Preis liegt unter deiner Verlustgrenze.'));
+        }
+        vorschau.hidden = false;
+    };
+    eingabe.addEventListener('input', aktualisieren);
+    aktualisieren();
+}
+
+function zeichneFirma(el, state, autopilot, einstufung, preise) {
     if (!el) return;
 
     state = state || {};
@@ -542,6 +621,8 @@ function zeichneFirma(el, state, autopilot, einstufung) {
 
     basisEinstellungen = { ...settings };
     basisEntscheide = { ...choices };
+    // Kredite nur auf Wunsch: ohne Angabe gilt «Nie Kredit».
+    if (basisEntscheide.credit_mode === undefined) basisEntscheide.credit_mode = 'never';
 
     const form = document.createElement('form');
     form.id = 'einstellungen-form';
@@ -557,8 +638,10 @@ function zeichneFirma(el, state, autopilot, einstufung) {
         typ: 'zahl',
         min: 0,
         schritt: '0.01',
-        hinweis: `Erlaubt: ${state.price_band ? state.price_band.min : ''} bis ${state.price_band ? state.price_band.max : ''} CHF`
+        stellen: 2,
+        hinweis: `Erlaubt: ${state.price_band ? firmaGeld(state.price_band.min) : ''} bis ${state.price_band ? firmaGeld(state.price_band.max) : ''}`
     });
+    zeichnePreisInfo(verkauf, preise, state);
     const konkurrenz = kpis.rival_price === null || kpis.rival_price === undefined
         ? 'kein Konkurrenzpreis'
         : `${firmaGeld(kpis.rival_price)}`;
@@ -575,12 +658,12 @@ function zeichneFirma(el, state, autopilot, einstufung) {
     });
     baueEingabefeld(produktion, {
         key: 'order_qty',
-        label: 'Feste Menge pro Tag',
+        label: 'Feste Menge pro Tag (Flaschen)',
         istEinstellung: true,
         typ: 'zahl',
         min: 0,
         schritt: '1',
-        hinweis: 'Leer = automatisch'
+        hinweis: 'In Flaschen pro Tag. Leer = automatisch.'
     });
     baueEingabefeld(produktion, {
         key: 'overtime_level',
@@ -692,7 +775,7 @@ function zeichneFirma(el, state, autopilot, einstufung) {
         ],
         autopilot
     });
-    bauePlanungsFeld(form, 'expand_order', 'Kapazität ausbauen', 'Ausbau planen');
+    bauePlanungsFeld(wachstum, 'expand_order', 'Kapazität ausbauen (Flaschen pro Tag)', 'Ausbau planen');
 
     if (['detailhaendler', 'gastro'].includes(branch)) {
         const feld = baue('div', 'feld');
@@ -732,7 +815,8 @@ function zeichneFirma(el, state, autopilot, einstufung) {
             { value: 'never', label: 'Nie Kredit' },
             { value: 'prefer', label: 'Kredit, wenn möglich' }
         ],
-        autopilot
+        autopilot,
+        hinweis: 'Standard ist «Nie Kredit»: Die Firma leiht nur Geld, wenn du es hier erlaubst. Mit «Kredit, wenn möglich» nimmt sie bei Geldknappheit selbst einen Bankkredit auf und zahlt Zinsen dafür.'
     });
 
     const bankOptionen = (spielOptionen.banks || []).map((eintrag) => {

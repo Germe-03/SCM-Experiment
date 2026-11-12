@@ -522,7 +522,7 @@ small.jahr.hinweis,
 
 .reiter-leiste {
   position: sticky;
-  top: 4.25rem;
+  top: var(--kopf-hoehe, 4.25rem);
   z-index: 15;
   display: flex;
   gap: 0.25rem;
@@ -1258,8 +1258,8 @@ meter {
 
   #meldungen {
     position: sticky;
-    top: 8rem;
-    max-height: calc(100vh - 9rem);
+    top: calc(var(--kopf-hoehe, 4.25rem) + 3.75rem);
+    max-height: calc(100vh - var(--kopf-hoehe, 4.25rem) - 5rem);
     overflow: hidden;
   }
 
@@ -1450,3 +1450,41 @@ body { font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; 
 .reiter-btn { font-weight: 500; }
 table { font-variant-numeric: tabular-nums; }
 th { background: var(--soft); color: var(--text-leise); font-size: 12px; font-weight: 600; }
+
+/* Feedback 2 */
+html { scroll-padding-top: calc(var(--kopf-hoehe, 4.25rem) + 3.5rem); }
+#dauer-anzeige {
+  display: inline-flex;
+  min-height: 2rem;
+  align-items: center;
+  padding: 0.2rem 0.7rem;
+  border: 1px solid var(--rand);
+  border-radius: 999px;
+  color: var(--text-leise);
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+#dauer-anzeige.knapp { color: var(--negativ); border-color: var(--negativ); font-weight: 650; }
+#spielende.konkurs {
+  border-color: var(--negativ);
+  background: color-mix(in srgb, var(--negativ) 14%, var(--karte));
+}
+#spielende.konkurs #spielende-titel { color: var(--negativ); }
+#spielende #spielende-titel { font-size: 1.8rem; }
+#spielende #spielende-text { font-size: 1.15rem; font-weight: 600; }
+#rueckblick { font-size: 1.05rem; margin: 1rem 0; }
+#rueckblick h3 { font-size: 1.3rem; }
+#rueckblick .chart { height: 340px; }
+#check-liste { padding-left: 0; list-style: none; }
+#check-liste li { margin: 0.4rem 0; padding: 0.45rem 0.65rem; border-radius: 0.5rem; border-left: 4px solid var(--rand); }
+#check-liste li.rot { border-left-color: var(--negativ); background: color-mix(in srgb, var(--negativ) 10%, var(--karte)); }
+#check-liste li.gelb { border-left-color: #d9a21b; background: color-mix(in srgb, #d9a21b 12%, var(--karte)); }
+.preis-vorschau { margin-top: 0.4rem; padding: 0.5rem 0.7rem; border-radius: 0.5rem; background: color-mix(in srgb, var(--akzent) 8%, var(--karte)); }
+.preis-vorschau p { margin: 0.15rem 0; }
+.preis-tabelle { width: 100%; border-collapse: collapse; margin: 0.4rem 0; }
+.preis-tabelle td { padding: 0.25rem 0.4rem; border-bottom: 1px solid var(--rand); }
+.preis-tabelle td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+.meldung-knopf { margin-left: 0.4rem; }
+.angebote-tabelle { width: 100%; border-collapse: collapse; }
+.angebote-tabelle th, .angebote-tabelle td { padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--rand); text-align: left; }
+.abschluss-summe td { border-top: 1px solid var(--text-leise); }

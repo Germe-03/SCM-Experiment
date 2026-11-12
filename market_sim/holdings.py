@@ -108,8 +108,9 @@ class Holdings:
                 state.events.append({"year": year, "day": day, "firm": owner, "event": "stake_sold",
                                      "details": details})
         # New stakes: rich, profitable firms buy into profitable firms they do not own yet.
+        players = set(getattr(runner, "player_choices", {}) or {})  # never automatic owners or targets
         candidates = [f for f in list(runner._firms()) + dealers if env.runtimes[f.id].active and f.id in summaries
-                      and summaries[f.id].profit > 0]
+                      and summaries[f.id].profit > 0 and f.id not in players]
         for owner in sorted(candidates, key=lambda f: f.id):
             buy_roll, target_roll, size_roll = rolls[owner.id]
             o_rt = env.runtimes[owner.id]

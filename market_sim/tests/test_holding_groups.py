@@ -1,5 +1,7 @@
 """Phase 40: holding groups and consolidated finances."""
 
+from market_sim.tests._voluntary import boost_profit
+
 import pytest
 
 from market_sim.holding_groups import HoldingGroups
@@ -33,6 +35,8 @@ def test_takeover_creates_holding_and_keeps_both_firms():
     runner.config.state.block_share = 1.0
     runner.config.state.max_takeovers_per_stage = 1
     state.summaries.append(_summaries(runner, {}))
+    boost_profit(state)  # voluntary takeovers need a clear gain
+    runner.config.state.takeover_bid_probability = 1.0
     capacity = buyer.capacity
 
     actor.takeovers(runner, state)
@@ -68,6 +72,8 @@ def test_second_takeover_adds_a_daughter_to_same_holding():
     runner.config.state.block_share = 1.0
     runner.config.state.max_takeovers_per_stage = 5
     state.summaries.append(_summaries(runner, {}))
+    boost_profit(state)  # voluntary takeovers need a clear gain
+    runner.config.state.takeover_bid_probability = 1.0
 
     actor.takeovers(runner, state)
 
@@ -141,6 +147,8 @@ def test_switch_off_keeps_old_absorption():
     runner.holdings.stakes = {}
     runner.holding_groups = None
     state.summaries.append(_summaries(runner, {}))
+    boost_profit(state)  # voluntary takeovers need a clear gain
+    runner.config.state.takeover_bid_probability = 1.0
 
     actor.takeovers(runner, state)
 

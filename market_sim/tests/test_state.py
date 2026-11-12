@@ -3,6 +3,7 @@
 import pytest
 
 from market_sim.run import build_runner
+from market_sim.tests._voluntary import boost_profit
 from market_sim.runner import YearSummary
 
 
@@ -75,7 +76,10 @@ def test_takeover_merges_and_antitrust_blocks_dominant_buyers():
     env.runtimes[buyer.id].cash = 1e12
     runner.holdings.stakes = {}  # no stakes that would count for antitrust
     runner.holding_groups = None  # old behaviour: the target is absorbed
-    state.summaries.append(_summaries(runner, {}))
+    summaries = _summaries(runner, {})
+    runner.config.state.takeover_bid_probability = 1.0
+    state.summaries.append(summaries)
+    boost_profit(state, only={buyer.id})  # takeovers are voluntary: the buyer must see a clear gain
     capacity = buyer.capacity + target.capacity
     actor.takeovers(runner, state)
     assert not env.runtimes[target.id].active and buyer.capacity == capacity

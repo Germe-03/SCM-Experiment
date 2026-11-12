@@ -344,6 +344,14 @@ _MESSAGE_TEMPLATES = {
     "holding_cover": lambda own, name, details, names: _holding_cover(own, name, details, names),
     "holding_no_cover": lambda own, name, details, names: _holding_no_cover(own, name, details, names),
     "holding_sweep": lambda own, name, details, names: _holding_sweep(own, name, details, names),
+    "dividend_received": lambda own, name, details, names: _company_event(own, name, "Deine Firma hat eine Dividende erhalten.", "{name} hat eine Dividende erhalten."),
+    "dividend_paid": lambda own, name, details, names: _company_event(own, name, "Deine Firma hat eine Dividende ausgezahlt.", "{name} hat eine Dividende ausgezahlt."),
+}
+
+# Ereignisse, deren Text-Details (Betrag) an die Meldung angehängt werden.
+_AMOUNT_EVENTS = {
+    "loan_granted", "takeover", "holding_takeover", "dividend_received", "dividend_paid",
+    "stake_bought", "stake_sold", "holding_sweep", "holding_cover", "player_sale",
 }
 
 
@@ -368,6 +376,10 @@ def message_for(event: dict, player_id: str, names: dict[str, str]) -> dict | No
         text = f"{name}: {_text(raw_details)}"
     else:
         text = template(own, name, details, names)
+
+    raw = event.get("details")
+    if event_type in _AMOUNT_EVENTS and isinstance(raw, str) and raw.strip() and raw not in text:
+        text = f"{text} ({raw.strip()})"
 
     year = event.get("year", 0)
     day = event.get("day", 0)

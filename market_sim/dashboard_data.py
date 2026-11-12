@@ -103,6 +103,15 @@ def _population_matrix(class_reports: list[dict[str, Any]]) -> list[dict[str, An
     ]
 
 
+def _financials(result: RunResult) -> dict[str, list[dict[str, Any]]]:
+    """Jahresabschluesse je Firma: Liste von annual_report-Dicts, nach Jahr sortiert."""
+    out: dict[str, list[dict[str, Any]]] = {}
+    for year, reports in sorted((getattr(result, "annual_financials", {}) or {}).items()):
+        for firm_id, report in reports.items():
+            out.setdefault(firm_id, []).append(report)
+    return out
+
+
 def build_dashboard_data(
     result: RunResult, network: SupplyNetwork, config: MarketConfig, seed: int,
 ) -> dict[str, Any]:
@@ -205,5 +214,6 @@ def build_dashboard_data(
         "personas": result.personas,
         "leasing": dict(getattr(result, "leasing", {}) or {}),
         "profit_distribution": dict(getattr(result, "profit_distribution", {}) or {}),
+        "financials": _financials(result),
 
     }

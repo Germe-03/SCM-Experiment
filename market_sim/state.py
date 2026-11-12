@@ -14,6 +14,35 @@ if TYPE_CHECKING:
     from market_sim.runner import RunState, SimulationRunner
 
 
+def wants_to_buy(runner, buyer, target, price: float, year: int = 0, seed: int = 0, summary=None) -> bool:
+    """Voluntary takeover decision of one buyer (never a player firm).
+
+    Buys only if the price is below the buyer's value estimate, cash covers the price (credit only
+    with high risk tolerance) and a coin flip from the buyer's own RNG stream says yes.
+    """
+    if buyer.id in (getattr(runner, "player_choices", {}) or {}):
+        return False
+    cfg = runner.config.state
+    env = runner.env
+    rt = env.runtimes[buyer.id]
+    profit = summary.profit if summary is not None else 0.0
+    if profit <= 0:
+        return False
+    own_cap = max(1, env._effective_capacity(buyer.id))
+    value = cfg.takeover_value_multiple * profit / own_cap * max(0, env._effective_capacity(target.id))
+    if price >= value:
+        return False
+    if rt.cash < cfg.cash_cover * price:
+        strategy = getattr(runner, "strategies", {}).get(buyer.id)
+        risk = getattr(strategy, "risk_tolerance", 0.0)
+        if risk < cfg.takeover_credit_risk_tolerance:
+            return False
+        if not env.arrange_funding(buyer.id, price, "takeover", cfg.cash_cover, commit=False):
+            return False
+    rng = random.Random(f"takeover-bid-{seed}-{year}-{buyer.id}")  # own stream, no draws from existing ones
+    return rng.random() < cfg.takeover_bid_probability
+
+
 class StateActor:
     """Collects taxes, detects offences, punishes them and supervises takeovers.
 
@@ -239,6 +268,9 @@ class StateActor:
         year = state.year
         day = runner.config.simulation.days_per_year
         summaries = state.summaries[-1]
+        players = set(getattr(runner, "player_choices", {}) or {})
+        offers: list[dict] = []
+        runner.takeover_offers = offers  # rebuilt every year; player firms never appear (the game handles them)
         for stage in [*STAGES, *EXTRA_STAGES]:
             active = [f for f in runner.network.firms_in(stage) if env.runtimes[f.id].active and f.id in summaries]
             # Producers compete within their category (beer, wine, spirits), not across all drinks.
@@ -248,8 +280,9 @@ class StateActor:
                 totals[group(f)] = totals.get(group(f), 0.0) + summaries[f.id].revenue
             share = {f.id: summaries[f.id].revenue / (totals[group(f)] or 1.0) for f in active}
             targets = sorted(
-                (f for f in active if env.runtimes[f.id].cash < -cfg.distress_fraction * env.runtimes[f.id].credit_limit
-                 or env.runtimes[f.id].consecutive_loss_years >= cfg.distress_loss_years),
+                (f for f in active if f.id not in players
+                 and (env.runtimes[f.id].cash < -cfg.distress_fraction * env.runtimes[f.id].credit_limit
+                      or env.runtimes[f.id].consecutive_loss_years >= cfg.distress_loss_years)),
                 key=lambda f: env.runtimes[f.id].cash,
             )
             done = 0
@@ -270,14 +303,18 @@ class StateActor:
                     # Holding mode: the target stays a firm and keeps its cash and debts; only the capacity is paid.
                     price = max(0.0, cfg.price_per_capacity_unit * runner.long_run.price_index
                                 * env._effective_capacity(target.id))
+                offers.append({"target": target.id, "name": target.name, "stage": stage, "price": price,
+                               "year": year, "reason": "Verlustjahre" if t_rt.consecutive_loss_years
+                               >= cfg.distress_loss_years else "Zahlungsnot"})
                 buyers = sorted(
                     (f for f in active if f.id != target.id and summaries[f.id].profit > 0
+                     and f.id not in players
                      and (f.category == target.category
                           or (groups is not None and stage == "factory"
                               and category_allows_buy(f.category, target.category)))
                      and f.channel == target.channel
-                     and (env.runtimes[f.id].cash >= cfg.cash_cover * price
-                          or env.arrange_funding(f.id, price, "takeover", cfg.cash_cover, commit=False))),
+                     and wants_to_buy(runner, f, target, price, year=year, seed=self.seed,
+                                      summary=summaries[f.id])),
                     key=lambda f: (-env.runtimes[f.id].cash, f.id),
                 )
                 for buyer in buyers:

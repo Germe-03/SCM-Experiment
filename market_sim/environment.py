@@ -827,6 +827,18 @@ class MarketEnvironment:
             delivered_prices=delivered,
         )
 
+    def stock_by_category(self, firm_id: str) -> dict[str, int]:
+        """Units in stock per category (brand stock summed by brand category)."""
+        result: dict[str, int] = {}
+        book = self.brand_book
+        if book is None:
+            return result
+        for brand_id, units in self.runtimes[firm_id].stock.items():
+            brand = book.brands.get(brand_id)
+            if brand is not None and units > 0:
+                result[brand.category] = result.get(brand.category, 0) + units
+        return result
+
     def _split_by_category(self, firm: Firm, candidates: list[Firm], quantity: int) -> dict[str, int]:
         """Phase 4: a distributor splits its order by category and buys each from its producers."""
         book = self.brand_book
@@ -836,6 +848,11 @@ class MarketEnvironment:
         for candidate in candidates:
             groups.setdefault(candidate.category, []).append(candidate)
         weights = {c: book.global_weight.get(c, 0.0) for c in groups}
+        chosen = book.player_category_shares(firm.id)
+        if chosen is not None:
+            picked = {c: chosen[c] for c in groups if c in chosen}
+            if picked:
+                weights = picked
         allocations: dict[str, int] = {}
         for category, units in largest_remainder(quantity, weights).items():
             if units:

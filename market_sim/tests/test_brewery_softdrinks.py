@@ -1,5 +1,7 @@
 """Breweries cannot make soft drinks themselves, but may buy a soft drink firm as a subsidiary."""
 
+from market_sim.tests._voluntary import boost_profit
+
 from market_sim.holding_groups import category_allows_buy
 from market_sim.run import build_runner
 from market_sim.runner import YearSummary
@@ -37,6 +39,8 @@ def test_brewery_buys_softdrink_firm_as_subsidiary():
         if firm.id not in (buyer.id, target.id):
             env.runtimes[firm.id].consecutive_loss_years = 0
     state.summaries.append(_summaries(runner, {}))
+    boost_profit(state)  # voluntary takeovers need a clear gain
+    runner.config.state.takeover_bid_probability = 1.0
 
     actor.takeovers(runner, state)
 
@@ -54,6 +58,8 @@ def test_no_merger_across_categories():
     soft = runner.network.firm("softdrink_01")
     # compatible() is local to year_end; check via a forced run that no merged firm mixes categories
     state.summaries.append(_summaries(runner, {}))
+    boost_profit(state)  # voluntary takeovers need a clear gain
+    runner.config.state.takeover_bid_probability = 1.0
     mergers.year_end(runner, state)
     for entry in mergers.log:
         ids = [entry.get(k) for k in ("a", "b") if entry.get(k)]

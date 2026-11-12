@@ -279,7 +279,22 @@ class BrandBook:
         total = sum(raw.values()) or 1.0
         return {k: v / total for k, v in raw.items()}
 
+    def player_category_shares(self, firm_id: str) -> dict[str, float] | None:
+        """Normalised category shares chosen by a player firm (Spielmodus), or None."""
+        choice = self.player_choices.get(firm_id)
+        shares = getattr(choice, "category_shares", None) if choice is not None else None
+        if not shares:
+            return None
+        clean = {c: float(v) for c, v in shares.items() if c in self.base_share and float(v) > 0}
+        total = sum(clean.values())
+        if total <= 0:
+            return None
+        return {c: v / total for c, v in clean.items()}
+
     def customer_weights(self, firm: Firm) -> dict[str, float]:
+        chosen = self.player_category_shares(firm.id)
+        if chosen is not None:
+            return chosen
         if firm.stage != "retailer":
             return self.global_weight
         own = self.retail_weight.get(firm.id, self.global_weight)

@@ -6,6 +6,66 @@ function holdingBranche(key) { return HOLDING_BRANCHEN[key] || key || ''; }
 
 let holdingAuftraege = {};
 let holdingState = null;
+let holdingAngebote = [];
+let holdingAngeboteFuer = null;
+let holdingAngeboteLaedt = false;
+
+async function ladeHoldingAngebote(state) {
+    const schluessel = `${state.year}|${state.month}|${state.firm ? state.firm.id : ''}`;
+    if (holdingAngeboteLaedt || holdingAngeboteFuer === schluessel) return;
+    holdingAngeboteLaedt = true;
+    try {
+        const res = await fetch('/api/view/takeover_offers');
+        const daten = res.ok ? await res.json() : null;
+        holdingAngeboteFuer = schluessel;
+        const neu = daten && !daten.error && Array.isArray(daten.offers) ? daten.offers : [];
+        const geaendert = JSON.stringify(neu) !== JSON.stringify(holdingAngebote);
+        holdingAngebote = neu;
+        if (geaendert) fuelleHolding(holdingState || state);
+    } catch (err) {
+        holdingAngeboteFuer = schluessel;
+    } finally {
+        holdingAngeboteLaedt = false;
+    }
+}
+
+function holdingAngeboteBereich(parent) {
+    const abschnitt = holdingElement('section');
+    abschnitt.appendChild(holdingElement('h3', 'Verkaufsangebote'));
+    abschnitt.appendChild(holdingElement('p', 'Angeschlagene Firmen stehen zum Verkauf. Der Kauf wird mit der nächsten Runde ausgeführt, wenn deine Kasse reicht.'));
+    if (!holdingAngebote.length) {
+        abschnitt.appendChild(holdingElement('p', 'Zurzeit gibt es keine Verkaufsangebote.'));
+        parent.appendChild(abschnitt);
+        return;
+    }
+    const tabelle = document.createElement('table');
+    tabelle.className = 'holding-tabelle angebote-tabelle';
+    const kopf = document.createElement('thead');
+    const kopfzeile = document.createElement('tr');
+    ['Firma', 'Lage', 'Grund', 'Preis', ''].forEach((text) => kopfzeile.appendChild(holdingElement('th', text)));
+    kopf.appendChild(kopfzeile);
+    tabelle.appendChild(kopf);
+    const koerper = document.createElement('tbody');
+    holdingAngebote.forEach((angebot) => {
+        const zeile = document.createElement('tr');
+        [angebot.name, angebot.stage, angebot.reason, holdingGeld(angebot.price)].forEach((text) => {
+            zeile.appendChild(holdingElement('td', text));
+        });
+        const aktion = document.createElement('td');
+        const kaufen = holdingKnopf('Kaufen', () => {
+            if (!window.confirm(`${angebot.name} für ${holdingGeld(angebot.price)} kaufen? Der Kauf wird mit der nächsten Runde ausgeführt.`)) return;
+            holdingAuftraege.buy = angebot.target;
+            fuelleHolding(holdingState || {});
+        });
+        kaufen.disabled = Boolean(holdingAuftraege.buy);
+        aktion.appendChild(kaufen);
+        zeile.appendChild(aktion);
+        koerper.appendChild(zeile);
+    });
+    tabelle.appendChild(koerper);
+    abschnitt.appendChild(tabelle);
+    parent.appendChild(abschnitt);
+}
 
 function holdingElement(tag, text, klasse) {
     const knoten = document.createElement(tag);
@@ -117,7 +177,8 @@ function holdingKaufbereich(parent, targets) {
     abschnitt.appendChild(holdingElement('h3', 'Firmen kaufen'));
 
     if (holdingAuftraege.buy) {
-        const ziel = (targets || []).find((firma) => String(firma.id) === String(holdingAuftraege.buy));
+        const ziel = (targets || []).find((firma) => String(firma.id) === String(holdingAuftraege.buy))
+            || holdingAngebote.find((a) => String(a.target) === String(holdingAuftraege.buy));
         const geplant = holdingElement('p', `Geplant: Kauf von ${ziel ? ziel.name : holdingAuftraege.buy}`, 'geplant');
         geplant.appendChild(document.createTextNode(' '));
         geplant.appendChild(holdingKnopf('Rückgängig', () => {
@@ -353,7 +414,9 @@ function fuelleHolding(state) {
     while (container.firstChild) container.removeChild(container.firstChild);
 
     holdingErgebnisse(container, holdingState.order_results || []);
+    holdingAngeboteBereich(container);
     holdingKaufbereich(container, holdingState.targets || []);
+    ladeHoldingAngebote(holdingState);
 
     if (!holdingState.holding) {
         container.appendChild(holdingElement(

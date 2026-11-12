@@ -168,8 +168,8 @@ class StockMarket:
             for fid in active:
                 choice = (getattr(runner, "player_choices", None) or {}).get(fid)
                 wish = choice.listing if choice is not None else None
-                if wish is False:
-                    continue
+                if wish is False or (choice is not None and wish is not True):
+                    continue  # Spielerfirmen gehen nur an die Börse, wenn der Spieler es will
                 if (fid not in self.listed and fid not in self._ever
                         and (wish is True or fid in self._exempt
                              or year - self._first_active[fid] >= cfg.listing_min_years)):

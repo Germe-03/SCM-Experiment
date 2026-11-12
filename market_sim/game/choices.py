@@ -18,7 +18,8 @@ class PlayerChoices:
     # Research: name of the next stage to research; "" = no research at all. None = autopilot.
     research_target: str | None = None
     # Money: "auto" (autopilot), "never" (pay from cash only), "prefer" (take a loan whenever offered).
-    credit_mode: str = "auto"
+    # Feedback 2: the player never gets a loan without asking, so the default is "never".
+    credit_mode: str = "never"
     # Preferred bank id for new loans and the main account. None = autopilot.
     bank_id: str | None = None
     # Share of the free profit paid out as dividend (0..1). None = autopilot.
@@ -53,6 +54,9 @@ class PlayerChoices:
     # patent suits True/False. None = neutral middle (as risk 0.5).
     courier_preference: str | None = None
     patent_lawsuits: bool | None = None
+    # Feedback 2: assortment of trading firms, category -> share (beer, wine, spirits, softdrinks,
+    # water; any positive numbers, normalised). None = as the market buys.
+    category_shares: dict | None = None
 
     def offence_intensity(self, name: str) -> float:
         """Intensity 0..1 of an offence the player chose (0 = not committed)."""

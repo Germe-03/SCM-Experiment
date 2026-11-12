@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, fields, replace
 from datetime import datetime
 from pathlib import Path
+import math
 import re
 import threading
 
@@ -13,6 +14,8 @@ from market_sim.game.player import PlayerSettings
 from market_sim.game.saves import SaveGame, list_saves, read_save, replay, write_save
 from market_sim.game.session import BRANCHES, GameSession, RoundSnapshot
 from market_sim.game.world_firm import year_baseline
+
+YEARS_CHOICES = (5, 10, 20, 30)
 
 ROHSTOFFE_DE = {
     "co2": "CO2", "cork": "Kork", "fruit": "Früchte", "grapes": "Trauben", "hops": "Hopfen",
@@ -64,6 +67,14 @@ def _german_view(name: str, data: dict) -> dict:
         for category in data.get("categories", []):
             if isinstance(category, dict) and isinstance(category.get("name"), str):
                 category["name"] = KATEGORIEN_DE.get(category["name"], category["name"])
+    if name == "reports" and isinstance(data, dict):
+        for firm in data.get("firms", []):
+            if isinstance(firm, dict):
+                firm["stage"] = STUFEN_DE.get(firm.get("stage"), firm.get("stage"))
+    if name == "takeover_offers" and isinstance(data, dict):
+        for offer in data.get("offers", []):
+            if isinstance(offer, dict):
+                offer["stage"] = STUFEN_DE.get(offer.get("stage"), offer.get("stage"))
     # Allgemein: jede Ansicht mit einer Kategorienliste aus Dicts mit "name" übersetzen.
     if isinstance(data, dict):
         for category in data.get("categories", []) or []:
@@ -94,15 +105,19 @@ class GameController:
         self.save_dir = Path(save_dir)
         self.seed = seed
         self.years = years
+        self.game_years = self.years or 10
         self.days_per_year = days_per_year
         self.session: GameSession | None = None
         self.snapshot: RoundSnapshot | None = None
         self.protocol: SaveGame | None = None
         self.history: list[dict] = []
+        self.price_history: list[dict] = []
         self.messages: list[dict] = []
         self.macro_history: list[dict] = []
         self.effects: list[dict] = []
         self._pending_changes: list[str] = []
+        self._year_totals: dict[int, tuple[float, float]] = {}
+        self._seen_notices: set = set()
         self.sale: dict | None = None
         self._options_cache: dict | None = None
 
@@ -110,14 +125,20 @@ class GameController:
         """Gibt Branchen, Regionen und Kategorien zurück."""
         with self._lock:
             if self._options_cache is not None:
-                return {**self._options_cache, "research": self._research_options()}
+                regions = self._options_cache.get("regions", [])
+                return {
+                    **self._options_cache,
+                    "research": self._research_options(),
+                    "years_choices": list(YEARS_CHOICES),
+                    "region_labels": {region: REGIONEN_DE.get(region, region) for region in regions},
+                }
 
             regions = []
             categories = []
             banks = []
             offences = []
             try:
-                session = GameSession(self.seed, self.years, self.days_per_year)
+                session = GameSession(self.seed, self.game_years, self.days_per_year)
                 config = session.runner.config
                 geography = getattr(config, "geography", None)
                 if geography is not None and getattr(geography, "enabled", False):
@@ -159,7 +180,12 @@ class GameController:
                 "banks": banks,
                 "offences": offences,
             }
-            return {**self._options_cache, "research": self._research_options()}
+            return {
+                **self._options_cache,
+                "research": self._research_options(),
+                "years_choices": list(YEARS_CHOICES),
+                "region_labels": {region: REGIONEN_DE.get(region, region) for region in regions},
+            }
 
     def new_game(
         self,
@@ -167,16 +193,20 @@ class GameController:
         name: str,
         region: str | None = None,
         category: str | None = None,
+        years: int | None = None,
     ) -> dict:
         """Gründet eine Firma und startet ein neues Spiel."""
         with self._lock:
             try:
-                session = GameSession(self.seed, self.years, self.days_per_year)
+                if years is not None and years not in YEARS_CHOICES:
+                    raise ValueError("Ungültige Spieldauer")
+                game_years = years if years is not None else (self.years if self.years is not None else 10)
+                session = GameSession(self.seed, game_years, self.days_per_year)
                 session.found(branch, name, region, category)
                 snapshot = session.start()
                 protocol = SaveGame(
                     seed=self.seed,
-                    years=self.years,
+                    years=game_years,
                     days_per_year=self.days_per_year,
                     branch=branch,
                     name=name,
@@ -185,14 +215,18 @@ class GameController:
                     rounds=[],
                 )
 
+                self.game_years = game_years
                 self.session = session
                 self.snapshot = snapshot
                 self.protocol = protocol
                 self.history = []
+                self.price_history = []
                 self.messages = []
                 self.macro_history = []
                 self.effects = []
                 self._pending_changes = []
+                self._year_totals = {}
+                self._seen_notices = set()
                 self.sale = None
                 self._process(snapshot)
                 return self._state()
@@ -210,6 +244,7 @@ class GameController:
                     raise RuntimeError("Das Spiel ist bereits beendet")
 
                 current = self.snapshot.settings
+                unit_size = self._unit_size()
                 updates = {}
                 allowed = {item.name for item in fields(PlayerSettings)}
                 for key, value in (settings or {}).items():
@@ -228,28 +263,49 @@ class GameController:
                         elif key in {"target_safety_stock_days", "hiring_plan"}:
                             updates[key] = int(value)
                         elif key == "order_qty":
-                            updates[key] = (
-                                None
-                                if value is None or str(value).strip() == ""
-                                else int(value)
-                            )
+                            if value is None or str(value).strip() == "":
+                                updates[key] = None
+                            else:
+                                bottles = int(value)
+                                updates[key] = (
+                                    math.ceil(bottles / unit_size) if bottles > 0 else bottles
+                                )
                         else:
                             updates[key] = str(value)
                     except (TypeError, ValueError) as exc:
                         raise ValueError(f"Ungültige Einstellung: {key}") from exc
 
                 new_settings = replace(current, **updates)
-                self._pending_changes = describe_changes(current, updates, choices or {}, orders or {})
-                snapshot = self.session.end_round(new_settings, choices or None, orders or None)
+                choices_copy = dict(choices or {})
+                orders_copy = dict(orders or {})
+                if "expand" in orders_copy:
+                    choices_copy["expand_order"] = self._bottles_to_units(
+                        orders_copy["expand"], unit_size
+                    )
+                elif "expand_order" in choices_copy:
+                    choices_copy["expand_order"] = self._bottles_to_units(
+                        choices_copy["expand_order"], unit_size
+                    )
+                session_orders = dict(orders_copy)
+                session_orders.pop("expand", None)
+
+                self._pending_changes = describe_changes(
+                    current, updates, choices or {}, orders or {}
+                )
+                snapshot = self.session.end_round(
+                    new_settings,
+                    choices_copy or None,
+                    session_orders or None,
+                )
                 if self.protocol is not None:
                     # Alte Spielstände ohne "choices": auf gleiche Länge auffüllen.
                     while len(self.protocol.choices) < len(self.protocol.rounds):
                         self.protocol.choices.append({})
                     self.protocol.rounds.append(asdict(new_settings))
-                    self.protocol.choices.append(dict(choices or {}))
+                    self.protocol.choices.append(dict(choices_copy))
                     while len(self.protocol.orders) < len(self.protocol.rounds) - 1:
                         self.protocol.orders.append({})
-                    self.protocol.orders.append(dict(orders or {}))
+                    self.protocol.orders.append(dict(session_orders))
                 self.snapshot = snapshot
                 self._process(snapshot)
                 return self._state()
@@ -328,11 +384,15 @@ class GameController:
                 self.session = session
                 self.snapshot = snapshot
                 self.protocol = save
+                self.game_years = save.years or self.years or 10
                 self.history = []
+                self.price_history = []
                 self.messages = []
                 self.macro_history = []
                 self.effects = []
                 self._pending_changes = []
+                self._year_totals = {}
+                self._seen_notices = set()
                 self.sale = None
                 for item in snapshots:
                     self._process(item)
@@ -369,6 +429,33 @@ class GameController:
             except (ValueError, RuntimeError, KeyError, OSError) as exc:
                 return {"error": str(exc)}
 
+    def check(
+        self,
+        settings: dict | None = None,
+        choices: dict | None = None,
+        orders: dict | None = None,
+    ) -> dict:
+        """Prüft Einstellungen und Entscheide für die nächste Runde."""
+        with self._lock:
+            if self.session is None or self.snapshot is None:
+                return {"error": "Kein Spiel aktiv"}
+            try:
+                from market_sim.game import views2
+
+                warnings = views2.check_plan(
+                    self.session.runner,
+                    self.session.state,
+                    self.snapshot.firm_id,
+                    settings or {},
+                    choices or {},
+                    orders or {},
+                    self._unit_size(),
+                    self.snapshot,
+                )
+                return {"warnings": warnings}
+            except Exception:
+                return {"warnings": []}
+
     def _unit_size(self) -> int:
         """Anzahl Flaschen pro Simulationseinheit (mindestens 1)."""
         try:
@@ -376,6 +463,22 @@ class GameController:
         except Exception:
             size = 1
         return max(1, size)
+
+    @staticmethod
+    def _bottles_to_units(value, unit_size: int):
+        """Wandelt eine Flaschenmenge in Simulationseinheiten um."""
+        if value is None or str(value).strip() == "":
+            return None
+        if isinstance(value, dict):
+            converted = dict(value)
+            for key in ("quantity", "amount", "bottles", "capacity"):
+                if key in converted:
+                    bottles = float(converted[key])
+                    converted[key] = math.ceil(bottles / unit_size) if bottles > 0 else bottles
+                    return converted
+            return converted
+        bottles = float(value)
+        return math.ceil(bottles / unit_size) if bottles > 0 else bottles
 
     def _process(self, snapshot: RoundSnapshot) -> None:
         """Übernimmt Verlauf und Meldungen eines Snapshots."""
@@ -394,7 +497,7 @@ class GameController:
                 "month": int(snapshot.month),
                 "cash": float(snapshot.cash),
                 "profit": float(snapshot.profit),
-                "sell_price": float(snapshot.sell_price),
+                "sell_price": round(float(snapshot.sell_price), 2),
                 "sales": float(snapshot.recent_sales) * unit_size,
                 "demand": float(snapshot.recent_demand) * unit_size,
                 "inventory": int(snapshot.inventory) * unit_size,
@@ -403,15 +506,107 @@ class GameController:
         )
         if self.session is None:
             return
+
+        try:
+            runtime = self.session.runner.env.runtimes.get(snapshot.firm_id)
+            base = year_baseline(
+                self.session.runner, snapshot.firm_id, int(snapshot.year)
+            )
+            if runtime is not None:
+                revenue_year = float(runtime.revenue) - base["revenue"]
+                profit_year = float(runtime.profit) - base["profit"]
+                self._year_totals[int(snapshot.year)] = (revenue_year, profit_year)
+        except Exception:
+            pass
+
+        try:
+            from market_sim.game import views2
+
+            calculation = views2.calculation(
+                self.session.runner,
+                self.session.state,
+                snapshot.firm_id,
+            )
+            purchase_price = calculation.get("purchase_price") if isinstance(calculation, dict) else None
+            purchase_price = None if purchase_price is None else round(float(purchase_price), 2)
+        except Exception:
+            purchase_price = None
+        try:
+            sell_price = round(float(snapshot.sell_price), 2)
+        except Exception:
+            sell_price = None
+        self.price_history.append({
+            "label": f"Jahr {snapshot.year}, Monat {snapshot.month}",
+            "purchase": purchase_price,
+            "sell": sell_price,
+        })
+
         self._record_macro(snapshot)
         self._record_effect()
-        names = {
-            firm.id: firm.name
-            for firm in self.session.runner._firms()
-        }
-        self.messages.extend(
-            messages_for(snapshot.events, snapshot.firm_id, names)
-        )
+        try:
+            names = {
+                firm.id: firm.name
+                for firm in self.session.runner._firms()
+            }
+        except Exception:
+            names = {}
+        try:
+            for message in messages_for(snapshot.events, snapshot.firm_id, names):
+                # Gleiche Meldung höchstens einmal pro Jahr (z.B. «Kapazitätsgrenze erreicht»).
+                key = ("text", message.get("year"), message.get("text"))
+                if key in self._seen_notices:
+                    continue
+                self._seen_notices.add(key)
+                self.messages.append(message)
+        except Exception:
+            pass
+
+        try:
+            years_left = (
+                None
+                if snapshot.game_over
+                else max(0, self.game_years - snapshot.year + 1)
+            )
+            from market_sim.game.notices import build_notices
+
+            self.messages.extend(build_notices(
+                self.session.runner,
+                self.session.state,
+                snapshot.firm_id,
+                snapshot.year,
+                int(getattr(self.session, "_last_day", 0)),
+                self._seen_notices,
+                self.session.ceo_book,
+                years_left,
+            ))
+        except Exception:
+            pass
+
+    def _last_year_totals(self, year: int, firm_id) -> tuple[float, float]:
+        """Liest den veröffentlichten Umsatz und Nettogewinn des Vorjahres."""
+        try:
+            annual_reports = getattr(self.session.runner, "annual_reports", {})
+            reports = annual_reports.get(year, annual_reports.get(str(year), {}))
+            report = reports.get(firm_id) if isinstance(reports, dict) else None
+            if report is not None:
+                if not isinstance(report, dict):
+                    report = vars(report)
+                income = report.get("income_statement")
+                income = income if isinstance(income, dict) else {}
+                revenue = report.get("revenue", income.get("revenue"))
+                net_income = report.get("net_income", income.get("net_income"))
+                if revenue is not None or net_income is not None:
+                    return (
+                        round(float(revenue or 0.0), 2),
+                        round(float(net_income or 0.0), 2),
+                    )
+        except Exception:
+            pass
+        try:
+            revenue, profit = self._year_totals.get(year, (0.0, 0.0))
+            return round(float(revenue), 2), round(float(profit), 2)
+        except Exception:
+            return 0.0, 0.0
 
     def _state(self) -> dict:
         """Baut das JSON für den aktuellen Spielzustand."""
@@ -436,18 +631,61 @@ class GameController:
         except Exception:
             revenue_year = 0.0
             profit_year = 0.0
+        try:  # gleiche Rechnung wie im Reiter Abschlüsse (Lageraufbau ist kein Aufwand)
+            from market_sim import financials
+            statement = financials.income_statement(runner, snapshot.firm_id, None)
+            if statement and statement.get("revenue"):
+                revenue_year = float(statement["revenue"])
+                profit_year = float(statement["net_income"])
+        except Exception:
+            pass
 
         try:
             capacity_per_day = float(runner.env._effective_capacity(snapshot.firm_id)) * unit_size
         except Exception:
             capacity_per_day = 0.0
 
+        try:
+            revenue_last_year, profit_last_year = self._last_year_totals(
+                int(snapshot.year) - 1, snapshot.firm_id
+            )
+        except Exception:
+            revenue_last_year, profit_last_year = 0.0, 0.0
+
+        month_names = (
+            "Januar", "Februar", "März", "April", "Mai", "Juni",
+            "Juli", "August", "September", "Oktober", "November", "Dezember",
+        )
+        month = int(snapshot.month)
+        month_name = month_names[month - 1] if 1 <= month <= 12 else f"Monat {month}"
+        years_total = self.game_years
+        years_left = max(0, years_total - int(snapshot.year) + 1)
+        if not snapshot.game_over:
+            end_reason_text = None
+        elif snapshot.reason == "konkurs":
+            end_reason_text = "Deine Firma ist in Konkurs gegangen: Das Geld reichte nicht mehr für Rechnungen und Löhne."
+        elif snapshot.reason == "verkauft":
+            end_reason_text = "Du hast deine Firma verkauft. Das Spiel ist zu Ende."
+        else:
+            end_reason_text = f"Die {years_total} Jahre sind um. Das Spiel ist zu Ende."
+
+        settings_data = asdict(snapshot.settings)
+        if settings_data.get("order_qty") is not None:
+            try:
+                settings_data["order_qty"] = int(settings_data["order_qty"]) * unit_size
+            except Exception:
+                pass
+
         return {
             "running": True,
             "game_over": bool(snapshot.game_over),
             "reason": snapshot.reason,
+            "end_reason_text": end_reason_text,
             "year": int(snapshot.year),
-            "month": int(snapshot.month),
+            "month": month,
+            "month_name": month_name,
+            "years_total": years_total,
+            "years_left": years_left,
             "unit_size": unit_size,
             "firm": {
                 "id": snapshot.firm_id,
@@ -455,27 +693,29 @@ class GameController:
                 "branch": self.protocol.branch,
             },
             "kpis": {
-                "cash": float(snapshot.cash),
+                "cash": round(float(snapshot.cash), 2),
                 "inventory": int(snapshot.inventory) * unit_size,
                 "backlog": int(snapshot.backlog) * unit_size,
                 "employees": int(snapshot.employees),
-                "sell_price": float(snapshot.sell_price),
+                "sell_price": round(float(snapshot.sell_price), 2),
                 "profit": float(snapshot.profit),
                 "recent_demand": float(snapshot.recent_demand) * unit_size,
                 "recent_sales": float(snapshot.recent_sales) * unit_size,
                 "revenue_year": revenue_year,
                 "profit_year": profit_year,
+                "revenue_last_year": revenue_last_year,
+                "profit_last_year": profit_last_year,
                 "capacity_per_day": capacity_per_day,
                 "rival_price": (
                     None
                     if snapshot.rival_price is None
-                    else float(snapshot.rival_price)
+                    else round(float(snapshot.rival_price), 2)
                 ),
             },
-            "settings": asdict(snapshot.settings),
+            "settings": settings_data,
             "choices": self._choices_dict(),
             **self._holding_dict(),
-            "price_band": {"min": float(band.min), "max": float(band.max)},
+            "price_band": {"min": round(float(band.min), 2), "max": round(float(band.max), 2)},
             "messages": self.messages[::-1][:200],
             "history": list(self.history),
             "sale": self.sale,
@@ -498,6 +738,9 @@ class GameController:
         "autopilot": ("world_firm", "autopilot"), "classification": ("world_firm", "classification"),
         "costs": ("world_firm", "costs"), "bottleneck": ("world_firm", "bottleneck"),
         "glossary": ("world_firm", "glossary"),
+        "financials": ("views2", "financials"), "reports": ("views2", "reports"),
+        "calculation": ("views2", "calculation"), "pricing": ("views2", "pricing"),
+        "takeover_offers": ("views2", "takeover_offers"), "assortment": ("views2", "assortment"),
     }
 
     def view(self, name: str, **query) -> dict:
@@ -513,10 +756,14 @@ class GameController:
             extra: dict = {}
             if name in ("macro", "commodities"):
                 extra["history"] = list(self.macro_history)
+            elif name in ("financials", "calculation", "pricing"):
+                extra["year"] = int(self.snapshot.year)
             elif name == "costs":
                 extra["year"] = int(self.snapshot.year)
             elif name == "stocks":
                 extra["depot"] = getattr(self.session, "depot", None)
+            elif name == "pricing":
+                extra["price_history"] = list(self.price_history)
             elif name == "banks" and query.get("amount"):
                 try:
                     extra["amount"] = float(query["amount"])
@@ -634,6 +881,11 @@ class GameController:
         try:
             targets = sorted(holding_player.buy_targets(runner, state, snap.firm_id),
                              key=lambda t: t["price"])[:30] if not snap.game_over else []
+            targets = [
+                {**target, "price": round(float(target["price"]), 2)}
+                if isinstance(target, dict) and target.get("price") is not None else target
+                for target in targets
+            ]
             holding = holding_player.holding_info(runner, state, snap.firm_id)
         except Exception:  # Holding-Logik aus oder Firma weg
             targets, holding = [], None
@@ -665,7 +917,13 @@ class GameController:
     def _choices_dict(self) -> dict:
         """Aktuelle Entscheide der Spielerfirma (None = Autopilot)."""
         choice = self.session.runner.player_choices.get(self.snapshot.firm_id)
-        return (choice or PlayerChoices()).to_dict()
+        result = (choice or PlayerChoices()).to_dict()
+        if result.get("expand_order") is not None:
+            try:
+                result["expand_order"] = result["expand_order"] * self._unit_size()
+            except Exception:
+                pass
+        return result
 
     def _research_options(self) -> list[dict]:
         """Forschungsstufen, die die Spielerfirma jetzt wählen könnte."""

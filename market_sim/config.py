@@ -747,6 +747,12 @@ class StateConfig(ConfigModel):
     price_per_capacity_unit: float = Field(default=1_500_000.0, ge=0)
     cash_cover: float = Field(default=1.5, ge=0)
     max_takeovers_per_stage: int = Field(default=1, ge=0)
+    # Voluntary takeovers: a buyer bids with this chance if the price is below its value estimate.
+    takeover_bid_probability: float = Field(default=0.5, ge=0, le=1)
+    # Value estimate = this many years of the buyer's profit per capacity unit times the target's capacity.
+    takeover_value_multiple: float = Field(default=6.0, ge=0)
+    # Buying on credit only with at least this risk tolerance.
+    takeover_credit_risk_tolerance: float = Field(default=0.6, ge=0, le=1)
     block_share: float = Field(default=0.35, ge=0, le=1)
     breakup_share: float = Field(default=0.5, ge=0, le=1)
     breakup_fraction: float = Field(default=0.3, gt=0, lt=1)
