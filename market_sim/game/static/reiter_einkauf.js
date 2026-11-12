@@ -518,12 +518,15 @@
         zeilen.forEach(function (row) { row.feld.value = ''; });
         return;
       }
-      if (zeilen.some(function (row) { return menge(row.id) > 0; })) return;
+      // Nur neu verteilen, wenn der Spieler die Marken nicht selbst angepasst hat (sonst würde beim
+      // Tippen von «75000» schon die «7» verteilt und danach nie mehr nachgeführt).
+      if (zeilen.some(function (row) { return menge(row.id) > 0 && !row.auto; })) return;
       var summeAnteil = zeilen.reduce(function (sum, row) { return sum + zahlRoh(row.brand.demand_share); }, 0);
       zeilen.forEach(function (row) {
         var anteil = summeAnteil > 0 ? zahlRoh(row.brand.demand_share) / summeAnteil : (zeilen.length ? 1 / zeilen.length : 0);
         var n = Math.round(ziel * anteil);
         row.feld.value = n > 0 ? String(n) : '';
+        row.auto = true;
       });
     }
 
@@ -549,6 +552,10 @@
         return categoryValues[String(category.key)].coverage;
       } }
     ], categories));
+    var totalZeile = document.createElement('p');
+    totalZeile.className = 'rd-total';
+    totalZeile.style.fontWeight = '600';
+    nachfrageBlock.appendChild(totalZeile);
 
     var filter = el('div', 're-filter');
     var searchLabel = el('label', '', 'Marke suchen');
@@ -645,6 +652,16 @@
         }
         categoryValues[key].coverage.textContent = prozent(ctx, demand > 0 ? planned / demand : 0);
       });
+      if (totalZeile) {
+        var sumDemand = 0, sumZiel = 0, sumPlan = 0;
+        categories.forEach(function (category) {
+          sumDemand += zahlRoh(category.demand_per_day);
+          sumZiel += Math.round(katMenge(String(category.key)));
+          sumPlan += planNachKategorie(category.key);
+        });
+        totalZeile.textContent = 'Total: Nachfrage im Markt ' + zahl(ctx, sumDemand) + ' Flaschen/Tag · deine Menge '
+          + zahl(ctx, sumZiel) + ' · auf Marken verteilt ' + zahl(ctx, sumPlan) + ' Flaschen/Tag';
+      }
       var totalCost = brandRows.reduce(function (sum, row) {
         return sum + menge(row.id) * zahlRoh(row.brand.price);
       }, 0);
@@ -672,6 +689,7 @@
     });
     brandRows.forEach(function (row) {
       row.feld.addEventListener('input', function () {
+        row.auto = false;  // vom Spieler angepasst: nicht mehr automatisch überschreiben
         var key = String(wert(row.brand, 'category', ''));
         if (catInputs[key] && katMenge(key) <= 0) {
           var summe = planNachKategorie(key);
