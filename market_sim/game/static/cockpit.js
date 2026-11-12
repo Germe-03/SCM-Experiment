@@ -412,7 +412,7 @@ function baueCtx(state) {
         geld: formatiereGeld,
         zahl: (wert, stellen = 0) => formatiereZahl(wert, stellen),
         prozent: formatiereProzent,
-        linien: baueLinienGrafik,
+        linien: (series, optionen) => diagramm(series, optionen),
         neuZeichnen: () => zeichneReiter(aktiverReiter)
     };
 }
@@ -695,67 +695,10 @@ function zeichnePunktGrafik(karte, history, kpis) {
         return;
     }
 
-    const grafik = document.createElementNS(svgNs, 'svg');
-    grafik.setAttribute('class', 'punkt-grafik');
-    grafik.setAttribute('viewBox', '0 0 600 220');
-    grafik.setAttribute('width', '100%');
-    grafik.setAttribute('role', 'img');
-    grafik.setAttribute('aria-label', 'Preis und Absatz');
-
-    const minX = Math.min(...punkte.map((punkt) => punkt.preis));
-    const maxX = Math.max(...punkte.map((punkt) => punkt.preis));
-    const minY = Math.min(...punkte.map((punkt) => punkt.absatz));
-    const maxY = Math.max(...punkte.map((punkt) => punkt.absatz));
-    const xDiff = maxX === minX ? 1 : maxX - minX;
-    const yDiff = maxY === minY ? 1 : maxY - minY;
-    const xFuer = (wert) => 70 + ((wert - minX) / xDiff) * 500;
-    const yFuer = (wert) => 178 - ((wert - minY) / yDiff) * 145;
-
-    const achsen = document.createElementNS(svgNs, 'path');
-    achsen.setAttribute('d', 'M70 20 V178 H570');
-    achsen.setAttribute('class', 'grafik-achse');
-    grafik.appendChild(achsen);
-
-    [
-        { x: 4, y: 24, text: formatiereGanzzahl(maxY), klasse: 'achsen-beschriftung' },
-        { x: 4, y: 178, text: formatiereGanzzahl(minY), klasse: 'achsen-beschriftung' },
-        { x: 70, y: 198, text: formatiereZahl(minX, 2), klasse: 'achsen-beschriftung' },
-        { x: 520, y: 198, text: formatiereZahl(maxX, 2), klasse: 'achsen-beschriftung' }
-    ].forEach((angabe) => {
-        const text = document.createElementNS(svgNs, 'text');
-        text.setAttribute('x', String(angabe.x));
-        text.setAttribute('y', String(angabe.y));
-        text.setAttribute('class', angabe.klasse);
-        text.textContent = angabe.text;
-        grafik.appendChild(text);
-    });
-
-    const titelX = document.createElementNS(svgNs, 'text');
-    titelX.setAttribute('x', '320');
-    titelX.setAttribute('y', '216');
-    titelX.setAttribute('text-anchor', 'middle');
-    titelX.setAttribute('class', 'achsen-titel');
-    titelX.textContent = 'Preis (CHF)';
-    grafik.appendChild(titelX);
-
-    const titelY = document.createElementNS(svgNs, 'text');
-    titelY.setAttribute('x', '16');
-    titelY.setAttribute('y', '12');
-    titelY.setAttribute('class', 'achsen-titel');
-    titelY.textContent = 'Absatz';
-    grafik.appendChild(titelY);
-
-    punkte.forEach((punkt, index) => {
-        const kreis = document.createElementNS(svgNs, 'circle');
-        kreis.setAttribute('cx', String(xFuer(punkt.preis)));
-        kreis.setAttribute('cy', String(yFuer(punkt.absatz)));
-        kreis.setAttribute('r', index === punkte.length - 1 ? '7' : '5');
-        kreis.setAttribute('class', `punkt${index === punkte.length - 1 ? ' aktuell' : ''}`);
-        kreis.setAttribute('aria-label', `Preis ${formatiereGeld(punkt.preis)}, Absatz ${formatiereGanzzahl(punkt.absatz)}`);
-        grafik.appendChild(kreis);
-    });
-
-    karte.appendChild(grafik);
+    const labels = (history || []).filter((e) => Number.isFinite(Number(e.sell_price))).map((e) => `Jahr ${e.year}, Monat ${e.month}`);
+    karte.appendChild(streuDiagramm(punkte.map((p, i) => ({ x: p.preis, y: p.absatz, label: labels[i] })), {
+        xName: 'Preis', yName: 'Absatz', xFormat: 'chf', yFormat: 'ganz', xTitel: 'Preis (CHF)', yTitel: 'Absatz pro Tag'
+    }));
 }
 
 async function zeichneUebersicht(el) {

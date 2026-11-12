@@ -2,82 +2,130 @@
   color-scheme: light;
   --bg: #f4f6f8;
   --karte: #ffffff;
-  --text: #263442;
-  --text-leise: #667584;
-  --rand: #d8e0e6;
-  --akzent: #287b91;
-  --gut: #34805a;
-  --schlecht: #b84444;
-  --warn: #a56c18;
-  --eigen: #287b91;
-  --markt: #8a6a9d;
-  --linie-1: #287b91;
-  --linie-2: #8a6a9d;
-  --linie-3: #34805a;
-  --linie-4: #c17b2d;
-  --schatten: 0 0.25rem 0.9rem color-mix(in srgb, var(--text) 8%, transparent);
+  --text: #16202a;
+  --text-leise: #5b6876;
+  --rand: #dfe5ea;
+  --akzent: #0b6b57;
+  --gut: #15803d;
+  --schlecht: #b42318;
+  --warn: #c48a12;
+  --eigen: #0b6b57;
+  --markt: #315ca8;
+  --linie-1: #0b6b57;
+  --linie-2: #d65f3c;
+  --linie-3: #315ca8;
+  --linie-4: #c48a12;
+  
+  --c1:#0b6b57;
+  --c2:#d65f3c;
+  --c3:#315ca8;
+  --c4:#c48a12;
+  --c5:#7b4fab;
+  --c6:#168da3;
+  --c7:#b3446c;
+  --c8:#55752d;
+  --soft:#eef2f5;
+  --schatten:0 1px 2px #10203010,0 4px 14px #1020300c;
+  --muted: var(--text-leise);
+  --line: var(--rand);
 }
 
 :root[data-theme="light"] {
   color-scheme: light;
   --bg: #f4f6f8;
   --karte: #ffffff;
-  --text: #263442;
-  --text-leise: #667584;
-  --rand: #d8e0e6;
-  --akzent: #287b91;
-  --gut: #34805a;
-  --schlecht: #b84444;
-  --warn: #a56c18;
-  --eigen: #287b91;
-  --markt: #8a6a9d;
-  --linie-1: #287b91;
-  --linie-2: #8a6a9d;
-  --linie-3: #34805a;
-  --linie-4: #c17b2d;
-  --schatten: 0 0.25rem 0.9rem color-mix(in srgb, var(--text) 8%, transparent);
+  --text: #16202a;
+  --text-leise: #5b6876;
+  --rand: #dfe5ea;
+  --akzent: #0b6b57;
+  --gut: #15803d;
+  --schlecht: #b42318;
+  --warn: #c48a12;
+  --eigen: #0b6b57;
+  --markt: #315ca8;
+  --linie-1: #0b6b57;
+  --linie-2: #d65f3c;
+  --linie-3: #315ca8;
+  --linie-4: #c48a12;
+  
+  --c1:#0b6b57;
+  --c2:#d65f3c;
+  --c3:#315ca8;
+  --c4:#c48a12;
+  --c5:#7b4fab;
+  --c6:#168da3;
+  --c7:#b3446c;
+  --c8:#55752d;
+  --soft:#eef2f5;
+  --schatten:0 1px 2px #10203010,0 4px 14px #1020300c;
+  --muted: var(--text-leise);
+  --line: var(--rand);
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #182129;
-  --karte: #222e38;
-  --text: #e3ebf0;
-  --text-leise: #a5b3be;
-  --rand: #3b4a56;
-  --akzent: #75c1d2;
-  --gut: #79c994;
-  --schlecht: #ed8585;
-  --warn: #e3b763;
-  --eigen: #75c1d2;
-  --markt: #c5a4d6;
-  --linie-1: #75c1d2;
-  --linie-2: #c5a4d6;
-  --linie-3: #79c994;
-  --linie-4: #e3b763;
-  --schatten: 0 0.25rem 0.9rem color-mix(in srgb, var(--text) 12%, transparent);
+  --bg: #0f1418;
+  --karte: #171e24;
+  --text: #e6edf2;
+  --text-leise: #9aa8b5;
+  --rand: #2a343d;
+  --akzent: #3fb68f;
+  --gut: #4ade80;
+  --schlecht: #f87171;
+  --warn: #e0b04a;
+  --eigen: #3fb68f;
+  --markt: #7aa2f7;
+  --linie-1: #3fb68f;
+  --linie-2: #f08a5d;
+  --linie-3: #7aa2f7;
+  --linie-4: #e0b04a;
+  
+  --c1:#3fb68f;
+  --c2:#f08a5d;
+  --c3:#7aa2f7;
+  --c4:#e0b04a;
+  --c5:#b48ef0;
+  --c6:#4cc3d9;
+  --c7:#e07aa0;
+  --c8:#9bc46a;
+  --soft:#1e272e;
+  --schatten:none;
+  --muted: var(--text-leise);
+  --line: var(--rand);
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --bg: #182129;
-    --karte: #222e38;
-    --text: #e3ebf0;
-    --text-leise: #a5b3be;
-    --rand: #3b4a56;
-    --akzent: #75c1d2;
-    --gut: #79c994;
-    --schlecht: #ed8585;
-    --warn: #e3b763;
-    --eigen: #75c1d2;
-    --markt: #c5a4d6;
-    --linie-1: #75c1d2;
-    --linie-2: #c5a4d6;
-    --linie-3: #79c994;
-    --linie-4: #e3b763;
-    --schatten: 0 0.25rem 0.9rem color-mix(in srgb, var(--text) 12%, transparent);
-  }
+    --bg: #0f1418;
+    --karte: #171e24;
+    --text: #e6edf2;
+    --text-leise: #9aa8b5;
+    --rand: #2a343d;
+    --akzent: #3fb68f;
+    --gut: #4ade80;
+    --schlecht: #f87171;
+    --warn: #e0b04a;
+    --eigen: #3fb68f;
+    --markt: #7aa2f7;
+    --linie-1: #3fb68f;
+    --linie-2: #f08a5d;
+    --linie-3: #7aa2f7;
+    --linie-4: #e0b04a;
+    
+    --c1:#3fb68f;
+  --c2:#f08a5d;
+  --c3:#7aa2f7;
+  --c4:#e0b04a;
+  --c5:#b48ef0;
+  --c6:#4cc3d9;
+  --c7:#e07aa0;
+  --c8:#9bc46a;
+  --soft:#1e272e;
+  --schatten:none;
+  --muted: var(--text-leise);
+  --line: var(--rand);
+}
 }
 
 * {
@@ -1391,3 +1439,14 @@ meter {
   --negativ: var(--schlecht);
   --warnung: var(--warn);
 }
+
+/* Angleichung an das Beobachter-Dashboard */
+body { font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+.karte { border-radius: 12px; padding: 16px; border: 1px solid var(--rand); box-shadow: var(--schatten); background: var(--karte); }
+.karte h2 { font-size: 16px; margin: 0 0 10px; }
+.karte h3 { font-size: 14px; margin: 0 0 8px; }
+.chart { position: relative; height: 260px; margin: 6px 0 4px; }
+.chart-leer { display: grid; place-items: center; color: var(--text-leise); border: 1px dashed var(--rand); border-radius: 10px; }
+.reiter-btn { font-weight: 500; }
+table { font-variant-numeric: tabular-nums; }
+th { background: var(--soft); color: var(--text-leise); font-size: 12px; font-weight: 600; }
