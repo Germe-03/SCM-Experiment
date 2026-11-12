@@ -567,6 +567,15 @@ def _calculation(runner, firm_id) -> dict:
     if unit_cost <= 0 and sold_units > 0:
         unit_cost = purchases / sold_units
     purchase_price = unit_cost / unit_size
+    if purchase_price <= 0 and getattr(firm, "stage", None) != "factory":
+        # Noch nichts eingekauft (Spielbeginn): Durchschnittspreis der möglichen Lieferanten zeigen.
+        try:
+            candidates = runner.env.supplier_candidates(firm_id)
+            prices = [float(c.sell_price) for c in candidates if getattr(c, "sell_price", 0) > 0]
+            if prices:
+                purchase_price = sum(prices) / len(prices)
+        except Exception:
+            pass
     if getattr(firm, "stage", None) == "factory":
         # Hersteller: Herstellkosten pro Flasche (Rohstoffe + Strom) statt Einkauf ÷ Verkauf,
         # sonst zählt ein Rohstoffvorrat als Kosten der verkauften Flaschen.

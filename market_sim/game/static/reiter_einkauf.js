@@ -492,12 +492,40 @@
     }
 
     var categoryValues = {};
+    var catInputs = {};
     categories.forEach(function (category) {
-      categoryValues[String(category.key)] = {
+      var key = String(category.key);
+      var summe = planNachKategorie(key);
+      var f = eingabefeld('Meine Menge (Flaschen/Tag): ' + wert(category, 'name', key), summe > 0 ? summe : '', 0, 1);
+      catInputs[key] = f.input;
+      categoryValues[key] = {
         plan: el('span'),
-        coverage: el('span')
+        coverage: el('span'),
+        verteilt: el('span')
       };
     });
+
+    function katMenge(key) {
+      return Math.max(0, zahlRoh(catInputs[key] && catInputs[key].value));
+    }
+
+    function verteileKategorie(key) {
+      var ziel = Math.round(katMenge(key));
+      var zeilen = brandRows.filter(function (row) {
+        return String(wert(row.brand, 'category', '')) === String(key);
+      });
+      if (ziel <= 0) {
+        zeilen.forEach(function (row) { row.feld.value = ''; });
+        return;
+      }
+      if (zeilen.some(function (row) { return menge(row.id) > 0; })) return;
+      var summeAnteil = zeilen.reduce(function (sum, row) { return sum + zahlRoh(row.brand.demand_share); }, 0);
+      zeilen.forEach(function (row) {
+        var anteil = summeAnteil > 0 ? zahlRoh(row.brand.demand_share) / summeAnteil : (zeilen.length ? 1 / zeilen.length : 0);
+        var n = Math.round(ziel * anteil);
+        row.feld.value = n > 0 ? String(n) : '';
+      });
+    }
 
     nachfrageBlock.appendChild(tabelle([
       { key: 'name', label: 'Getränkeart', value: function (category) { return wert(category, 'name', '–'); } },
@@ -507,6 +535,12 @@
       { key: 'rival_cover', label: 'Abdeckung durch Konkurrenz', value: function (category) {
         var cover = zahlRoh(category.rival_cover);
         return prozent(ctx, cover >= 0 && cover <= 1 ? cover : cover / 100);
+      } },
+      { key: 'eingabe', label: 'Meine Menge (Flaschen/Tag)', value: function (category) {
+        return catInputs[String(category.key)];
+      } },
+      { key: 'verteilt', label: 'Auf Marken verteilt', value: function (category) {
+        return categoryValues[String(category.key)].verteilt;
       } },
       { key: 'plan', label: 'Meine Planmenge', value: function (category) {
         return categoryValues[String(category.key)].plan;
@@ -600,6 +634,15 @@
         var planned = planNachKategorie(category.key);
         var demand = zahlRoh(category.demand_per_day);
         categoryValues[key].plan.textContent = zahl(ctx, planned);
+        var ziel = Math.round(katMenge(key));
+        var v = categoryValues[key].verteilt;
+        if (ziel > 0 || planned > 0) {
+          v.textContent = 'verteilt ' + zahl(ctx, planned) + ' von ' + zahl(ctx, ziel) + ' Flaschen';
+          v.className = Math.round(planned) !== ziel ? 'rd-negativ' : '';
+        } else {
+          v.textContent = 'nicht geführt';
+          v.className = 'rd-leise';
+        }
         categoryValues[key].coverage.textContent = prozent(ctx, demand > 0 ? planned / demand : 0);
       });
       var totalCost = brandRows.reduce(function (sum, row) {
@@ -619,8 +662,21 @@
 
     search.addEventListener('input', filterMarken);
     categorySelect.addEventListener('change', filterMarken);
+    categories.forEach(function (category) {
+      var key = String(category.key);
+      catInputs[key].addEventListener('input', function () {
+        verteileKategorie(key);
+        sendePlan();
+        aktualisieren();
+      });
+    });
     brandRows.forEach(function (row) {
       row.feld.addEventListener('input', function () {
+        var key = String(wert(row.brand, 'category', ''));
+        if (catInputs[key] && katMenge(key) <= 0) {
+          var summe = planNachKategorie(key);
+          catInputs[key].value = summe > 0 ? String(summe) : '';
+        }
         sendePlan();
         aktualisieren();
       });

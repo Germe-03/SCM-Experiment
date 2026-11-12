@@ -647,33 +647,41 @@ function zeichneFirma(el, state, autopilot, einstufung, preise) {
         : `${firmaGeld(kpis.rival_price)}`;
     verkauf.appendChild(baue('small', 'hinweis', `Konkurrenzpreis: ${konkurrenz}`));
 
-    const produktion = firmaKarte(form, 'Produktion');
-    baueEingabefeld(produktion, {
-        key: 'target_safety_stock_days',
-        label: 'Lagerziel in Tagen',
-        istEinstellung: true,
-        typ: 'zahl',
-        min: 0,
-        schritt: '1'
-    });
-    baueEingabefeld(produktion, {
-        key: 'order_qty',
-        label: 'Feste Menge pro Tag (Flaschen)',
-        istEinstellung: true,
-        typ: 'zahl',
-        min: 0,
-        schritt: '1',
-        hinweis: 'In Flaschen pro Tag. Leer = automatisch.'
-    });
-    baueEingabefeld(produktion, {
-        key: 'overtime_level',
-        label: 'Überstunden %',
-        istEinstellung: true,
-        typ: 'prozent',
-        min: 0,
-        max: 100,
-        schritt: '1'
-    });
+    if (branch === 'hersteller') {
+        const produktion = firmaKarte(form, 'Produktion');
+        baueEingabefeld(produktion, {
+            key: 'target_safety_stock_days',
+            label: 'Lagerziel in Tagen',
+            istEinstellung: true,
+            typ: 'zahl',
+            min: 0,
+            schritt: '1'
+        });
+        baueEingabefeld(produktion, {
+            key: 'order_qty',
+            label: 'Feste Menge pro Tag (Flaschen)',
+            istEinstellung: true,
+            typ: 'zahl',
+            min: 0,
+            schritt: '1',
+            hinweis: 'In Flaschen pro Tag. Leer = automatisch.'
+        });
+        baueEingabefeld(produktion, {
+            key: 'overtime_level',
+            label: 'Überstunden %',
+            istEinstellung: true,
+            typ: 'prozent',
+            min: 0,
+            max: 100,
+            schritt: '1'
+        });
+    } else {
+        verkauf.appendChild(baue('small', 'hinweis', 'Wie viel du einkaufst, legst du im Reiter Einkauf fest.'));
+        const zumEinkauf = baue('button', '', 'Zum Reiter Einkauf');
+        zumEinkauf.type = 'button';
+        zumEinkauf.addEventListener('click', () => { window.location.hash = '#einkauf'; });
+        verkauf.appendChild(zumEinkauf);
+    }
 
     const mitarbeiter = firmaKarte(form, 'Mitarbeiter');
     baueEingabefeld(mitarbeiter, {
