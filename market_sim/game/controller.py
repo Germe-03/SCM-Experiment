@@ -15,7 +15,7 @@ from market_sim.game.saves import SaveGame, list_saves, read_save, replay, write
 from market_sim.game.session import BRANCHES, GameSession, RoundSnapshot
 from market_sim.game.world_firm import year_baseline
 
-YEARS_CHOICES = (5, 10, 20, 30)
+YEARS_CHOICES = (5, 10, 20, 30, 40, 50)
 
 ROHSTOFFE_DE = {
     "co2": "CO2", "cork": "Kork", "fruit": "Früchte", "grapes": "Trauben", "hops": "Hopfen",

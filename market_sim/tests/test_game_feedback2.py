@@ -37,7 +37,7 @@ def test_state_contains_yearly_kpis_and_game_metadata(game):
 def test_options_include_year_choices_and_regions(game):
     options = game.options()
 
-    assert options["years_choices"] == [5, 10, 20, 30]
+    assert options["years_choices"] == [5, 10, 20, 30, 40, 50]
     assert isinstance(options["region_labels"], dict)
 
 
