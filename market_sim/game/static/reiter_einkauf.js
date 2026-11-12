@@ -566,10 +566,22 @@
         return categoryValues[String(category.key)].coverage;
       } }
     ], categories));
-    var totalZeile = document.createElement('p');
-    totalZeile.className = 'rd-total';
-    totalZeile.style.fontWeight = '600';
-    nachfrageBlock.appendChild(totalZeile);
+    // Totalzeile direkt in der Tabelle, Spalte für Spalte (Summen; bei Prozenten der gewichtete Schnitt).
+    var totalZeile = null;
+    var totalZellen = [];
+    var nachfrageTabelle = nachfrageBlock.querySelector('table:last-of-type');
+    if (nachfrageTabelle) {
+      var fuss = document.createElement('tfoot');
+      totalZeile = document.createElement('tr');
+      totalZeile.style.fontWeight = '700';
+      for (var spalte = 0; spalte < 7; spalte++) {
+        var zelle = document.createElement('td');
+        totalZellen.push(zelle);
+        totalZeile.appendChild(zelle);
+      }
+      fuss.appendChild(totalZeile);
+      nachfrageTabelle.appendChild(fuss);
+    }
 
     var filter = el('div', 're-filter');
     var searchLabel = el('label', '', 'Marke suchen');
@@ -673,8 +685,23 @@
           sumZiel += Math.round(katMenge(String(category.key)));
           sumPlan += planNachKategorie(category.key);
         });
-        totalZeile.textContent = 'Total: Nachfrage im Markt ' + zahl(ctx, sumDemand) + ' Flaschen/Tag · deine Menge '
-          + zahl(ctx, sumZiel) + ' · auf Marken verteilt ' + zahl(ctx, sumPlan) + ' Flaschen/Tag';
+        var sumCover = 0;
+        categories.forEach(function (category) {
+          var cover = zahlRoh(category.rival_cover);
+          cover = cover >= 0 && cover <= 1 ? cover : cover / 100;
+          sumCover += cover * zahlRoh(category.demand_per_day);
+        });
+        var texte = [
+          'Total',
+          zahl(ctx, sumDemand),
+          prozent(ctx, sumDemand > 0 ? sumCover / sumDemand : 0) + ' (Schnitt)',
+          zahl(ctx, sumZiel),
+          'verteilt ' + zahl(ctx, sumPlan) + ' von ' + zahl(ctx, sumZiel),
+          zahl(ctx, sumPlan),
+          prozent(ctx, sumDemand > 0 ? sumPlan / sumDemand : 0) + ' (Schnitt)'
+        ];
+        totalZellen.forEach(function (zelle, i) { zelle.textContent = texte[i]; });
+        if (totalZellen[4]) totalZellen[4].className = Math.round(sumPlan) !== sumZiel ? 'rd-negativ' : '';
       }
       var totalCost = brandRows.reduce(function (sum, row) {
         return sum + menge(row.id) * zahlRoh(row.brand.price);
