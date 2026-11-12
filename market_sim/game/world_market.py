@@ -423,9 +423,9 @@ def suppliers(runner, state, player_id, **extra) -> dict:
             "id": fid,
             "name": _firm_name(firm, fid),
             "price": _number(price),
-            "quality": _summary_value(summary, "quality"),
-            "reliability": _summary_value(summary, "service_level"),
-            "reputation": _number(_get(report, "reputation", 0.0)),
+            "quality": _summary_value(summary, "quality") or _number(_get(firm, "quality_level", 0.0)),
+            "reliability": _summary_value(summary, "service_level") or _number(_get(firm, "reliability", 0.0)),
+            "reputation": _number(_get(report, "reputation", 0.0)) or _number(_get(firm, "reputation", 0.0)),
             "lead_time_days": _get(firm, "lead_time_days"),
             "region": _get(firm, "region"),
         })

@@ -70,7 +70,8 @@ class StateActor:
             choice = getattr(runner, "player_choices", {}).get(firm.id)
             if choice is None and not self.willing(firm.id):
                 continue
-            risk = runner.strategies[firm.id].risk_tolerance if firm.id in runner.strategies else 0.5
+            risk = 0.5 if choice is not None else (
+                runner.strategies[firm.id].risk_tolerance if firm.id in runner.strategies else 0.5)
             last_revenue = max(1.0, runtime.last_year_revenue)
             for offence in self.cfg.offences:
                 if offence.kind == "material" and firm.stage != "factory":

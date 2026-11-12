@@ -116,8 +116,6 @@ class GameSession:
             raise ValueError(f"Unbekannte Region: {region}")
 
         if category is not None:
-            if branch != "hersteller":
-                raise ValueError("Eine Kategorie ist nur für Hersteller erlaubt")
             categories = getattr(self.runner.config, "categories", None)
             names = [item.name for item in categories.categories] if categories is not None else []
             if category not in names:
@@ -147,16 +145,12 @@ class GameSession:
         if stage == "retailer":
             channel = BRANCHES[branch][1]
             pool = [firm for firm in pool if firm.channel == channel]
-        elif stage == "factory" and category is not None:
-            pool = [
+        if category is not None:
+            same = [
                 firm for firm in pool
-                if firm.category == category and not firm.importer
+                if firm.category == category and not (stage == "factory" and firm.importer)
             ]
-            if not pool:
-                pool = [
-                    firm for firm in runner.network.firms_in(stage)
-                    if runner.env.runtimes[firm.id].active
-                ]
+            pool = same or pool
 
         if not pool:
             raise ValueError(f"Keine aktive Vorlage für die Branche {branch}")
@@ -185,8 +179,10 @@ class GameSession:
             "extra_regions": [],
             "transport_mode": "service" if runner.config.trucks.enabled else "own",
         }
-        if stage == "factory" and category is not None and template.category != category:
-            updates.update(category=category, importer=False)
+        if category is not None and template.category != category:
+            updates.update(category=category)
+        if stage == "factory" and category is not None:
+            updates.update(importer=False)
         firm = template.model_copy(deep=True, update=updates)
 
         settings = PlayerSettings.from_strategy(

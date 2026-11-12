@@ -119,9 +119,27 @@ class StockMarket:
             if fid not in self._first_active:
                 self._first_active[fid] = year
 
-        if year >= cfg.tradable_from_year and not self._opened:
+        # Spielmodus: grosse Firmen sind schon ab Jahr 1 kotiert (Option initial_listings, sonst
+        # automatisch an, sobald Spielerentscheidungen existieren).
+        game_mode = bool(getattr(runner, "player_choices", None))
+        initial = getattr(cfg, "initial_listings", None)
+        if initial is None:
+            initial = game_mode
+        per_stage = int(getattr(cfg, "initial_listings_per_stage", 4))
+        tradable_from = 1 if initial else cfg.tradable_from_year
+
+        if year >= tradable_from and not self._opened:
             self._opened = True
-            self._exempt = set(active)
+            if initial and tradable_from < cfg.tradable_from_year:
+                by_stage: dict[str, list[str]] = {}
+                for fid in active:
+                    by_stage.setdefault(runner.network.firm(fid).stage, []).append(fid)
+                self._exempt = set()
+                for fids in by_stage.values():
+                    fids.sort(key=lambda f: (-runner.network.firm(f).capacity, f))
+                    self._exempt.update(fids[:per_stage])
+            else:
+                self._exempt = set(active)
 
         old_listed = set(self.listed)
         for fid in sorted(self.listed - set(active)):
@@ -146,9 +164,9 @@ class StockMarket:
                                  "reason": reason, "successor": successor})
 
         new_listings = []
-        if year >= cfg.tradable_from_year:
+        if year >= tradable_from:
             for fid in active:
-                choice = getattr(runner, "player_choices", {}).get(fid)
+                choice = (getattr(runner, "player_choices", None) or {}).get(fid)
                 wish = choice.listing if choice is not None else None
                 if wish is False:
                     continue

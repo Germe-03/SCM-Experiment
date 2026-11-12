@@ -1268,7 +1268,10 @@ class SimulationRunner:
         firm.r_and_d_budget = strategy.r_and_d_budget
         firm.overtime_level = strategy.overtime_level
         firm.supplier_priority = strategy.supplier_priority
-        self.env.commodity_courage[firm.id] = strategy.risk_tolerance
+        if firm.id in self.player_choices:
+            self.env.commodity_courage[firm.id] = 0.5  # Spieler: nur commodity_courage aus den Entscheidungen
+        else:
+            self.env.commodity_courage[firm.id] = strategy.risk_tolerance
         if self.labor is None:
             firm.employees = max(self.config.workforce.min_employees, firm.employees + strategy.hiring_plan)
         # With a labour market, hiring happens in LaborMarket.year_start, best payers first.

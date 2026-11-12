@@ -46,6 +46,13 @@ class PlayerChoices:
     # Suppliers: a fixed supplier firm id, or a rule "price" | "quality" | "reliability" | "lead_time".
     supplier_id: str | None = None
     supplier_rule: str | None = None
+    # Suppliers (Feedback 1): split of the order between suppliers, firm id -> share (any positive
+    # numbers, normalised). Unknown or inactive ids are ignored. Wins over supplier_id/supplier_rule.
+    supplier_shares: dict | None = None
+    # Replaces the hidden "Risikobereitschaft" (Feedback 1): couriers "cheap" | "reliable",
+    # patent suits True/False. None = neutral middle (as risk 0.5).
+    courier_preference: str | None = None
+    patent_lawsuits: bool | None = None
 
     def offence_intensity(self, name: str) -> float:
         """Intensity 0..1 of an offence the player chose (0 = not committed)."""

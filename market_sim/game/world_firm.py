@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import math
 
+from market_sim.game.world_market import _day_stats, _recent, _runtime_total
 from market_sim.kpi import ARCHETYPE_DE, PROJECT_DE
 from market_sim.models import behaviour_of
 from market_sim.research_tree import tree_key
 
 
-__all__ = ["research_tree", "autopilot", "classification", "glossary"]
+__all__ = ["research_tree", "autopilot", "classification", "glossary", "costs", "bottleneck", "year_baseline"]
 
 
 GLOSSARY = [
@@ -46,6 +47,22 @@ GLOSSARY = [
     {"term": "Autopilot", "text": "Die Simulation trifft bestimmte Entscheide für die Firma. Die genaue Regel hängt vom jeweiligen Bereich ab."},
     {"term": "Einstufung", "text": "Ein Typ, den die Simulation aus dem Verhalten der Firma ableitet. Sie wird jedes Jahr neu geprüft."},
 ]
+
+
+COST_FIELDS = (
+    "revenue",
+    "purchase_cost",
+    "wage_cost",
+    "fixed_cost",
+    "handling_cost",
+    "cumulative_holding_cost",
+    "cumulative_backlog_cost",
+    "hiring_cost",
+    "rnd_spend",
+    "marketing_cost",
+    "interest_cost",
+    "profit",
+)
 
 
 def _text(value, default: str = "") -> str:
@@ -511,8 +528,8 @@ def classification(runner, state, player_id, **extra) -> dict:
         explanation = "Die Simulation ordnet die Firma nach ihrem beobachteten Verhalten ein."
 
     explanation += (
-        " Dabei beobachtet sie jedes Jahr sieben Dinge: Preis im Preisband, Lohn im Vergleich zum Start, "
-        "Forschungsausgaben, angestrebte Qualität, Lagerziel in Tagen, Risikobereitschaft und Überstunden. "
+        " Dabei beobachtet sie jedes Jahr sechs Dinge: Preis im Preisband, Lohn im Vergleich zum Start, "
+        "Forschungsausgaben, angestrebte Qualität, Lagerziel in Tagen und Überstunden. "
         "Die Einstufung wird jedes Jahr neu geprüft und kann sich durch deine Entscheide ändern."
     )
 
@@ -556,3 +573,206 @@ def glossary(runner, state, player_id, **extra) -> dict:
         return {"terms": [dict(item) for item in GLOSSARY]}
     except Exception:
         return {"terms": []}
+
+
+def year_baseline(runner, player_id, year) -> dict:
+    """Speichert und liefert die Laufzeitwerte vom Jahresbeginn."""
+    empty_values = {field: 0.0 for field in COST_FIELDS}
+    try:
+        try:
+            year = int(year)
+        except Exception:
+            year = 1
+
+        env = _read(runner, "env")
+        runtime = _read_map(_read(env, "runtimes", {}), player_id)
+        marks = _read(runner, "_game_year_marks", None)
+        if not isinstance(marks, dict):
+            marks = {}
+            try:
+                setattr(runner, "_game_year_marks", marks)
+            except Exception:
+                pass
+
+        record = _read_map(marks, player_id)
+        if not isinstance(record, dict) or record.get("year") != year:
+            values = {
+                field: _number(_read(runtime, field, 0.0))
+                for field in COST_FIELDS
+            }
+            record = {"year": year, "values": values}
+            try:
+                marks[player_id] = record
+            except Exception:
+                pass
+            return values
+
+        stored_values = record.get("values")
+        if not isinstance(stored_values, dict):
+            stored_values = {}
+        values = {
+            field: _number(stored_values.get(field, 0.0))
+            for field in COST_FIELDS
+        }
+        record["values"] = values
+        try:
+            marks[player_id] = record
+        except Exception:
+            pass
+        return values
+    except Exception:
+        return empty_values
+
+
+def costs(runner, state, player_id, **extra) -> dict:
+    """Zeigt die Kosten und den Gewinn des laufenden Jahres."""
+    try:
+        try:
+            year = int(extra.get("year") or _read(state, "year", 1))
+        except Exception:
+            year = 1
+        try:
+            config = _read(runner, "config")
+            unit_size = int(_read_path(config, "unit_scale", "real_units_per_sim_unit", default=1))
+        except Exception:
+            unit_size = 1
+
+        env = _read(runner, "env")
+        runtime = _read_map(_read(env, "runtimes", {}), player_id)
+        baseline = year_baseline(runner, player_id, year)
+
+        def annual_value(field, costs_field=False):
+            current = _number(_read(runtime, field, 0.0))
+            start = _number(_read_map(baseline, field, 0.0))
+            value = current - start
+            if costs_field:
+                value = max(0.0, value)
+            return _number(value, digits=2)
+
+        revenue_year = annual_value("revenue")
+        profit_year = _number(
+            _number(_read(runtime, "profit", 0.0))
+            - _number(_read_map(baseline, "profit", 0.0)),
+            digits=2,
+        )
+
+        entries = [
+            ("purchase", "Wareneinkauf", "purchase_cost"),
+            ("wages", "Löhne", "wage_cost"),
+            ("fixed", "Miete und Fixkosten", "fixed_cost"),
+            ("handling", "Umschlag", "handling_cost"),
+            ("holding", "Lagerkosten", "cumulative_holding_cost"),
+            ("backlog", "Lieferrückstand", "cumulative_backlog_cost"),
+            ("hiring", "Einstellungen", "hiring_cost"),
+            ("rnd", "Forschung", "rnd_spend"),
+            ("marketing", "Marketing", "marketing_cost"),
+            ("interest", "Zinsen", "interest_cost"),
+        ]
+        items = []
+        marketing_year = annual_value("marketing_cost", costs_field=True)
+        for key, label, field in entries:
+            chf_year = annual_value(field, costs_field=True)
+            if key == "fixed":
+                chf_year = _number(max(0.0, chf_year - marketing_year), digits=2)
+            share = chf_year / revenue_year if revenue_year > 0 else 0.0
+            items.append({
+                "key": _text(key),
+                "label": _text(label),
+                "chf_year": _number(chf_year, digits=2),
+                "share": _number(share, digits=2),
+            })
+        items.sort(key=lambda item: item["chf_year"], reverse=True)
+        return {
+            "year": year,
+            "unit_size": unit_size,
+            "revenue_year": _number(revenue_year, digits=2),
+            "profit_year": _number(profit_year, digits=2),
+            "items": items,
+        }
+    except Exception:
+        return {
+            "year": 1,
+            "unit_size": 1,
+            "revenue_year": 0.0,
+            "profit_year": 0.0,
+            "items": [],
+        }
+
+
+def bottleneck(runner, state, player_id, **extra) -> dict:
+    """Ermittelt den wahrscheinlichsten Engpass der Firma."""
+    texts = {
+        "lager": "Dein Engpass ist das Lager: Der Vorrat reicht nicht einmal für einen Tag, bestelle mehr Rohstoffe oder erhöhe das Lagerziel.",
+        "personal": "Dein Engpass ist das Personal: Du verkaufst fast alles, was du herstellen kannst, stelle mehr Mitarbeitende ein.",
+        "transport": "Dein Engpass ist der Transport: Deine Lastwagen schaffen nicht mehr als dein heutiger Absatz, ein weiterer Lastwagen kann sich lohnen.",
+        "nachfrage": "Dein Engpass ist die Nachfrage: Du könntest mehr herstellen, als gekauft wird, senke den Preis oder wirb mehr.",
+    }
+    result = {
+        "kind": "nachfrage",
+        "text": texts["nachfrage"],
+        "capacity_per_day": 0.0,
+        "demand_per_day": 0.0,
+        "sales_per_day": 0.0,
+        "transport_per_day": None,
+        "days_of_stock": 999.0,
+    }
+    try:
+        try:
+            config = _read(runner, "config")
+            unit_size = int(_read_path(config, "unit_scale", "real_units_per_sim_unit", default=1))
+        except Exception:
+            unit_size = 1
+        if unit_size <= 0:
+            unit_size = 1
+
+        env = _read(runner, "env")
+        try:
+            capacity = _number(env._effective_capacity(player_id))
+        except Exception:
+            capacity = 0.0
+
+        demand = _day_stats(_recent(state, "recent_demand", player_id))["avg"]
+        sales = _day_stats(_recent(state, "recent_sales", player_id))["avg"]
+
+        runtimes = _read(env, "runtimes", {})
+        runtime = _read_map(runtimes, player_id)
+        inventory = _runtime_total(runtime, ("inventory", "stock"))
+        days_of_stock = inventory / sales if sales > 0 else 999.0
+
+        transport = None
+        try:
+            geography = _read(env, "geography")
+            trucks = _read(geography, "trucks")
+            lookup = _read(trucks, "capacity")
+            if callable(lookup):
+                truck_capacity = _number(lookup(player_id), None)
+                if truck_capacity is not None and truck_capacity > 0:
+                    transport = truck_capacity * unit_size
+        except Exception:
+            transport = None
+
+        capacity_per_day = capacity * unit_size
+        demand_per_day = demand * unit_size
+        sales_per_day = sales * unit_size
+
+        if days_of_stock < 1 and sales < demand:
+            kind = "lager"
+        elif sales >= 0.95 * capacity and demand > capacity and capacity > 0:
+            kind = "personal"
+        elif transport is not None and transport < sales_per_day * 1.05:
+            kind = "transport"
+        else:
+            kind = "nachfrage"
+
+        result = {
+            "kind": kind,
+            "text": texts[kind],
+            "capacity_per_day": _number(capacity_per_day, digits=2),
+            "demand_per_day": _number(demand_per_day, digits=2),
+            "sales_per_day": _number(sales_per_day, digits=2),
+            "transport_per_day": _number(transport, digits=2) if transport is not None else None,
+            "days_of_stock": _number(days_of_stock, digits=2),
+        }
+    except Exception:
+        pass
+    return result

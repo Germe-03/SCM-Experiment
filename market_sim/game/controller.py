@@ -12,7 +12,7 @@ from market_sim.game.messages import messages_for
 from market_sim.game.player import PlayerSettings
 from market_sim.game.saves import SaveGame, list_saves, read_save, replay, write_save
 from market_sim.game.session import BRANCHES, GameSession, RoundSnapshot
-
+from market_sim.game.world_firm import year_baseline
 
 ROHSTOFFE_DE = {
     "co2": "CO2", "cork": "Kork", "fruit": "Früchte", "grapes": "Trauben", "hops": "Hopfen",
@@ -23,6 +23,16 @@ ROHSTOFFE_DE = {
 }
 STUFEN_DE = {"factory": "Hersteller", "wholesaler": "Grosshändler", "distributor": "Verteiler",
              "retailer": "Detailhandel"}
+
+REGIONEN_DE = {"genfersee": "Genferseeregion", "bern": "Bern", "jura_freiburg": "Jura/Freiburg",
+               "nordwestschweiz": "Nordwestschweiz", "zuerich": "Zürich", "ostschweiz": "Ostschweiz",
+               "zentralschweiz": "Zentralschweiz", "tessin": "Tessin"}
+BRANCHEN_DE = {**STUFEN_DE, "truck_dealer": "Lastwagenhandel", "bank": "Bank", "courier": "Kurier"}
+
+KATEGORIEN_DE = {
+    "beer": "Bier", "wine": "Wein", "spirits": "Spirituosen",
+    "softdrinks": "Softdrinks", "water": "Wasser",
+}
 
 
 def _german_view(name: str, data: dict) -> dict:
@@ -35,9 +45,30 @@ def _german_view(name: str, data: dict) -> dict:
         data["history"] = [{ROHSTOFFE_DE.get(k, k): (round(v * 100, 1) if k not in
                             ("label", "policy_rate", "inflation", "fx_rate") and isinstance(v, (int, float)) else v)
                             for k, v in row.items()} for row in data.get("history", [])]
+    if name == "suppliers" and isinstance(data, dict):
+        for row in data.get("candidates", []):
+            row["region"] = REGIONEN_DE.get(row.get("region"), row.get("region"))
+    if name == "stocks" and isinstance(data, dict):
+        for row in data.get("listed", []):
+            row["branch"] = BRANCHEN_DE.get(row.get("branch"), row.get("branch"))
     if name == "swiss_map" and isinstance(data, dict):
         for firm in data.get("firms", []):
             firm["stage"] = STUFEN_DE.get(firm.get("stage"), firm.get("stage"))
+            if isinstance(firm.get("category"), str):
+                firm["category"] = KATEGORIEN_DE.get(firm["category"], firm["category"])
+    if name == "compare" and isinstance(data, dict):
+        for row in data.get("rows", []):
+            if isinstance(row, dict) and isinstance(row.get("category"), str):
+                row["category"] = KATEGORIEN_DE.get(row["category"], row["category"])
+    if name == "market" and isinstance(data, dict):
+        for category in data.get("categories", []):
+            if isinstance(category, dict) and isinstance(category.get("name"), str):
+                category["name"] = KATEGORIEN_DE.get(category["name"], category["name"])
+    # Allgemein: jede Ansicht mit einer Kategorienliste aus Dicts mit "name" übersetzen.
+    if isinstance(data, dict):
+        for category in data.get("categories", []) or []:
+            if isinstance(category, dict) and isinstance(category.get("name"), str):
+                category["name"] = KATEGORIEN_DE.get(category["name"], category["name"])
     return data
 
 
@@ -338,8 +369,23 @@ class GameController:
             except (ValueError, RuntimeError, KeyError, OSError) as exc:
                 return {"error": str(exc)}
 
+    def _unit_size(self) -> int:
+        """Anzahl Flaschen pro Simulationseinheit (mindestens 1)."""
+        try:
+            size = int(self.session.runner.config.unit_scale.real_units_per_sim_unit)
+        except Exception:
+            size = 1
+        return max(1, size)
+
     def _process(self, snapshot: RoundSnapshot) -> None:
         """Übernimmt Verlauf und Meldungen eines Snapshots."""
+        unit_size = self._unit_size()  # ohne laufende Session gilt Groesse 1
+        if self.session is not None:
+            # Stand zu Jahresbeginn merken: der erste Halt eines Jahres legt ihn an.
+            try:
+                year_baseline(self.session.runner, snapshot.firm_id, int(snapshot.year))
+            except Exception:
+                pass
         if not self.history:
             self._start_price = float(snapshot.settings.base_price)
         self.history.append(
@@ -349,10 +395,10 @@ class GameController:
                 "cash": float(snapshot.cash),
                 "profit": float(snapshot.profit),
                 "sell_price": float(snapshot.sell_price),
-                "sales": float(snapshot.recent_sales),
-                "demand": float(snapshot.recent_demand),
-                "inventory": int(snapshot.inventory),
-                "backlog": int(snapshot.backlog),
+                "sales": float(snapshot.recent_sales) * unit_size,
+                "demand": float(snapshot.recent_demand) * unit_size,
+                "inventory": int(snapshot.inventory) * unit_size,
+                "backlog": int(snapshot.backlog) * unit_size,
             }
         )
         if self.session is None:
@@ -375,12 +421,34 @@ class GameController:
         snapshot = self.snapshot
         stage = BRANCHES[self.protocol.branch][0]
         band = self.session.runner.config.stage_prices[stage]
+        runner = self.session.runner
+        unit_size = self._unit_size()
+
+        # Umsatz und Gewinn des laufenden Jahres: Laufzeitwerte minus Stand zu Jahresbeginn.
+        revenue_year = 0.0
+        profit_year = 0.0
+        try:
+            runtime = runner.env.runtimes.get(snapshot.firm_id)
+            base = year_baseline(runner, snapshot.firm_id, int(snapshot.year))
+            if runtime is not None:
+                revenue_year = float(runtime.revenue) - base["revenue"]
+                profit_year = float(runtime.profit) - base["profit"]
+        except Exception:
+            revenue_year = 0.0
+            profit_year = 0.0
+
+        try:
+            capacity_per_day = float(runner.env._effective_capacity(snapshot.firm_id)) * unit_size
+        except Exception:
+            capacity_per_day = 0.0
+
         return {
             "running": True,
             "game_over": bool(snapshot.game_over),
             "reason": snapshot.reason,
             "year": int(snapshot.year),
             "month": int(snapshot.month),
+            "unit_size": unit_size,
             "firm": {
                 "id": snapshot.firm_id,
                 "name": snapshot.name,
@@ -388,15 +456,16 @@ class GameController:
             },
             "kpis": {
                 "cash": float(snapshot.cash),
-                "inventory": int(snapshot.inventory),
-                "backlog": int(snapshot.backlog),
+                "inventory": int(snapshot.inventory) * unit_size,
+                "backlog": int(snapshot.backlog) * unit_size,
                 "employees": int(snapshot.employees),
                 "sell_price": float(snapshot.sell_price),
                 "profit": float(snapshot.profit),
-                "recent_demand": float(snapshot.recent_demand),
-                "recent_sales": float(snapshot.recent_sales),
-                "revenue_year": float(snapshot.sell_price) * float(snapshot.recent_sales)
-                * self.session.runner.config.simulation.days_per_year,
+                "recent_demand": float(snapshot.recent_demand) * unit_size,
+                "recent_sales": float(snapshot.recent_sales) * unit_size,
+                "revenue_year": revenue_year,
+                "profit_year": profit_year,
+                "capacity_per_day": capacity_per_day,
                 "rival_price": (
                     None
                     if snapshot.rival_price is None
@@ -427,6 +496,7 @@ class GameController:
         "stocks": ("world_finance", "stocks"), "commodities": ("world_finance", "commodities"),
         "trucks": ("world_finance", "trucks"), "research_tree": ("world_firm", "research_tree"),
         "autopilot": ("world_firm", "autopilot"), "classification": ("world_firm", "classification"),
+        "costs": ("world_firm", "costs"), "bottleneck": ("world_firm", "bottleneck"),
         "glossary": ("world_firm", "glossary"),
     }
 
@@ -443,6 +513,8 @@ class GameController:
             extra: dict = {}
             if name in ("macro", "commodities"):
                 extra["history"] = list(self.macro_history)
+            elif name == "costs":
+                extra["year"] = int(self.snapshot.year)
             elif name == "stocks":
                 extra["depot"] = getattr(self.session, "depot", None)
             elif name == "banks" and query.get("amount"):
@@ -453,6 +525,15 @@ class GameController:
             try:
                 data = getattr(module, function_name)(
                     self.session.runner, self.session.state, self.snapshot.firm_id, **extra)
+                if name == "capacity" and isinstance(data, dict):
+                    unit = int(self.session.runner.config.unit_scale.real_units_per_sim_unit)
+                    for key in ("capacity_per_day", "inventory", "backlog"):
+                        if isinstance(data.get(key), (int, float)):
+                            data[key] = data[key] * unit
+                    for key in ("demand", "sales", "stage_demand"):
+                        if isinstance(data.get(key), dict):
+                            data[key] = {k: (v * unit if isinstance(v, (int, float)) else v)
+                                         for k, v in data[key].items()}
                 return _german_view(name, data)
             except Exception as exc:  # eine kaputte Ansicht darf das Spiel nicht stoppen
                 return {"error": f"Ansicht {name} nicht verfügbar ({exc.__class__.__name__}: {exc})"}

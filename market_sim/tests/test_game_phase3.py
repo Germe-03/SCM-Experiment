@@ -45,6 +45,9 @@ def test_player_choices_update_unknown_key_and_to_dict_fields():
         "marketing_target",
         "supplier_id",
         "supplier_rule",
+        "supplier_shares",
+        "courier_preference",
+        "patent_lawsuits",
     }
 
     with pytest.raises(ValueError):

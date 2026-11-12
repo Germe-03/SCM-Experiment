@@ -74,7 +74,7 @@ class PlayerPolicy(FirmPolicy):
             target_quality=self.settings.target_quality,
             supplier_priority=self.settings.supplier_priority,
             target_safety_stock_days=self.settings.target_safety_stock_days,
-            risk_tolerance=self.settings.risk_tolerance,
+            risk_tolerance=0.5,  # Risiko wirkt nie verdeckt; settings.risk_tolerance nur für Spielstände
             hiring_plan=self.settings.hiring_plan,
             overtime_level=self.settings.overtime_level,
         ).validate_for_config(config)

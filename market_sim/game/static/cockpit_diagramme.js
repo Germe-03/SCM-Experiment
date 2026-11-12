@@ -102,10 +102,15 @@ function diagramm(serien, optionen) {
             _format: s.format || (s.achse === 'y2' ? (optionen.y2Format || 'zahl') : format),
         };
     });
-    const scales = {
-        x: { grid: { display: false }, stacked: !!optionen.gestapelt },
-        y: { stacked: !!optionen.gestapelt, ticks: { callback: diagrammAchse(format) } },
-    };
+    const scales = optionen.horizontal
+        ? {
+            x: { stacked: !!optionen.gestapelt, ticks: { callback: diagrammAchse(format) } },
+            y: { grid: { display: false }, stacked: !!optionen.gestapelt },
+        }
+        : {
+            x: { grid: { display: false }, stacked: !!optionen.gestapelt },
+            y: { stacked: !!optionen.gestapelt, ticks: { callback: diagrammAchse(format) } },
+        };
     if (datasets.some((d) => d.yAxisID === 'y2')) {
         scales.y2 = { position: 'right', grid: { display: false }, ticks: { callback: diagrammAchse(optionen.y2Format || 'zahl') } };
     }
@@ -120,13 +125,14 @@ function diagramm(serien, optionen) {
                 responsive: true,
                 maintainAspectRatio: false,
                 animation: false,
+                indexAxis: optionen.horizontal ? 'y' : 'x',
                 interaction: { mode: 'index', intersect: false },
                 plugins: {
                     legend: { display: datasets.length > 1, labels: { boxWidth: 12, usePointStyle: true } },
                     tooltip: {
                         itemSort: (a, b) => (b.parsed.y ?? 0) - (a.parsed.y ?? 0),
                         callbacks: {
-                            label: (c) => `${c.dataset.label}: ${diagrammFormat(c.dataset._format)(c.parsed.y)}`,
+                            label: (c) => `${c.dataset.label}: ${diagrammFormat(c.dataset._format)(optionen.horizontal ? c.parsed.x : c.parsed.y)}`,
                         },
                     },
                 },

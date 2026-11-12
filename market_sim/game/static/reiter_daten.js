@@ -365,7 +365,9 @@
         if (!categories.length) textZeile(mb, 'Keine Daten');
         var maxShare = Math.max.apply(null, categories.map(function (c) { return zahlRoh(c.share); }).concat([1]));
         categories.forEach(function (c) {
-          balken(mb, wert(c, 'name', '–'), prozent(ctx, c.share), zahlRoh(c.share) / maxShare * 100);
+          var kategorienDe = { beer: 'Bier', wine: 'Wein', spirits: 'Spirituosen', softdrinks: 'Softdrinks', water: 'Wasser' };
+          var kname = wert(c, 'name', '–');
+          balken(mb, kategorienDe[kname] || kname,prozent(ctx, c.share), zahlRoh(c.share) / maxShare * 100);
         });
         var cap = zahlRoh(markt.stage_capacity_per_day);
         var dem = zahlRoh(markt.stage_demand_per_day);
@@ -381,6 +383,37 @@
   }
 
   REITER.markt = { async render(elm, ctx) { return marktRender(elm, ctx); } };
+
+  // Anteile je Lieferant: erst der Entwurf dieser Runde, sonst der gespeicherte Stand.
+  function aktuelleAnteile(ctx) {
+    var quelle = null;
+    try {
+      if (typeof entwurfEntscheide !== 'undefined' &&
+          Object.prototype.hasOwnProperty.call(entwurfEntscheide, 'supplier_shares')) {
+        quelle = entwurfEntscheide.supplier_shares;
+      } else if (ctx.state && ctx.state.choices) {
+        quelle = ctx.state.choices.supplier_shares;
+      }
+    } catch (e) {
+      quelle = null;
+    }
+    return quelle && typeof quelle === 'object' ? quelle : {};
+  }
+
+  function sendeAnteileAnzeige(knoten, eingaben, ctx) {
+    var summeWert = 0;
+    var anzahl = 0;
+    Object.keys(eingaben).forEach(function (id) {
+      var n = Number(String(eingaben[id].value).replace(',', '.'));
+      if (Number.isFinite(n) && n > 0) {
+        summeWert += n;
+        anzahl += 1;
+      }
+    });
+    knoten.textContent = anzahl
+      ? 'Summe der Eingaben: ' + zahl(ctx, summeWert, 1) + ' % (wird auf 100 % umgerechnet)'
+      : 'Keine Anteile gesetzt: es gilt die Regel unten.';
+  }
 
   function logistikRender(elm, ctx) {
     var root = container(elm);
@@ -417,13 +450,62 @@
           } },
           { key: 'region', label: 'Region' },
           { key: 'price', label: 'Preis', value: function (s) { return geld(ctx, s.price); } },
-          { key: 'quality', label: 'Qualität', value: function (s) { return zahl(ctx, s.quality); } },
-          { key: 'reliability', label: 'Zuverlässigkeit', value: function (s) { return zahl(ctx, s.reliability); } },
+          { key: 'quality', label: 'Qualität', value: function (s) { return s.quality ? Math.round(s.quality * 100) + ' %' : '–'; } },
+          { key: 'reliability', label: 'Zuverlässigkeit', value: function (s) { return s.reliability ? Math.round(s.reliability * 100) + ' %' : '–'; } },
           { key: 'reputation', label: 'Ruf', value: function (s) { return zahl(ctx, s.reputation); } },
-          { key: 'lead_time_days', label: 'Lieferzeit in Tagen', value: function (s) { return zahl(ctx, s.lead_time_days); } }
+          { key: 'lead_time_days', label: 'Lieferzeit in Tagen', value: function (s) {
+            var tage = s.lead_time_days !== undefined && s.lead_time_days !== null ? s.lead_time_days : s.lead_time;
+            return tage === undefined || tage === null ? '–' : zahl(ctx, tage);
+          } }
         ], candidates));
+
+        // Einkauf nach Anteilen: je Lieferant ein Feld «Anteil %».
+        var anteile = aktuelleAnteile(ctx);
+        var anteilBlock = abschnitt(root, 'Einkauf nach Anteilen');
+        anteilBlock.appendChild(el('p', '', 'Lege fest, wie viel Prozent deiner Bestellung bei welchem Lieferanten eingekauft wird. Die Prozente werden auf 100 umgerechnet, du musst nicht genau 100 eingeben. Leer lassen = kein Anteil.'));
+        anteilBlock.appendChild(el('p', 'rd-note', 'Wichtig: Sobald du hier mindestens einen Anteil einträgst, haben die Anteile Vorrang vor der Regel und dem festen Lieferanten unten.'));
+        var summe = el('p', 'rd-leise', '');
+        function sendeAnteile(eingaben) {
+          var ergebnis = {};
+          Object.keys(eingaben).forEach(function (id) {
+            var text = String(eingaben[id].value).trim().replace(',', '.');
+            var n = Number(text);
+            if (text !== '' && Number.isFinite(n) && n > 0) ergebnis[id] = n;
+          });
+          sendeAnteileAnzeige(summe, eingaben, ctx);
+          ctx.entscheide({ supplier_shares: Object.keys(ergebnis).length ? ergebnis : null });
+        }
+        var eingaben = {};
+        anteilBlock.appendChild(tabelle([
+          { key: 'name', label: 'Lieferant', value: function (s) { return wert(s, 'name', '–'); } },
+          { key: 'price', label: 'Preis', value: function (s) { return geld(ctx, s.price); } },
+          { key: 'quality', label: 'Qualität', value: function (s) { return zahl(ctx, s.quality, 2); } },
+          { key: 'reliability', label: 'Zuverlässigkeit', value: function (s) { return zahl(ctx, s.reliability, 2); } },
+          { key: 'lead_time', label: 'Lieferzeit (Tage)', value: function (s) {
+            var tage = s.lead_time !== undefined && s.lead_time !== null ? s.lead_time : s.lead_time_days;
+            return tage === undefined || tage === null ? '–' : zahl(ctx, tage);
+          } },
+          { key: 'anteil', label: 'Anteil %', value: function (s) {
+            var input = el('input');
+            input.type = 'number';
+            input.min = '0';
+            input.max = '100';
+            input.step = '1';
+            input.className = 'anteil-feld';
+            input.dataset.lieferant = String(s.id);
+            input.setAttribute('aria-label', 'Anteil in Prozent: ' + wert(s, 'name', ''));
+            var bisher = anteile[String(s.id)];
+            input.value = bisher !== undefined && bisher !== null ? String(bisher) : '';
+            input.addEventListener('input', function () { sendeAnteile(eingaben); });
+            eingaben[String(s.id)] = input;
+            return input;
+          } }
+        ], candidates));
+        anteilBlock.appendChild(summe);
+        sendeAnteileAnzeige(summe, eingaben, ctx);
+
         var label = el('label', 'rd-form');
-        label.appendChild(document.createTextNode('Lieferant wählen '));
+        label.appendChild(document.createTextNode('Lieferant wählen (nur ohne Anteile) '));
         var select = el('select');
         [
           ['', 'Automatisch'],
@@ -470,13 +552,29 @@
             capacity: zahl(ctx, offer.capacity),
             price: geld(ctx, offer.price),
             annual_cost: geld(ctx, offer.annual_cost),
-            life_years: zahl(ctx, offer.life_years)
+            life_years: zahl(ctx, offer.life_years),
+            extra_sales: offer.extra_sales_per_day === undefined || offer.extra_sales_per_day === null
+              ? '–' : zahl(ctx, offer.extra_sales_per_day) + ' Flaschen',
+            extra_profit: offer.extra_profit_year === undefined || offer.extra_profit_year === null
+              ? '–' : geld(ctx, offer.extra_profit_year),
+            payback: offer.extra_profit_year === undefined && offer.payback_years === undefined
+              ? '–'
+              : (offer.payback_years === null || offer.payback_years === undefined
+                ? 'lohnt sich nie' : zahl(ctx, offer.payback_years, 1) + ' Jahre'),
+            advice: offer.advice || ''
           };
         });
         var columns = [
           { key: 'label', label: 'Typ' }, { key: 'capacity', label: 'Kapazität' },
           { key: 'price', label: 'Preis' }, { key: 'annual_cost', label: 'Jahreskosten' },
           { key: 'life_years', label: 'Lebensdauer' },
+          { key: 'extra_sales', label: 'Mehr Absatz pro Tag' },
+          { key: 'extra_profit', label: 'Mehr Gewinn pro Jahr', value: function (row) {
+            var n = Number(row.offer.extra_profit_year);
+            return Number.isFinite(n) ? el('span', n >= 0 ? 'rd-positiv' : 'rd-negativ', row.extra_profit) : row.extra_profit;
+          } },
+          { key: 'payback', label: 'Amortisation' },
+          { key: 'advice', label: 'Rat' },
           { key: 'offer', label: 'Aktion', value: function (row) {
             var actions = el('span');
             ['buy', 'lease'].forEach(function (mode) {
@@ -485,7 +583,12 @@
               button.type = 'button';
               button.addEventListener('click', function () {
                 var verb = mode === 'buy' ? 'kaufen' : 'leasen';
-                if (window.confirm(row.label + ' ' + verb + '?')) {
+                var frage = row.label + ' ' + verb + '?';
+                if (Number(row.offer.extra_sales_per_day) === 0 && row.offer.extra_sales_per_day !== null) {
+                  frage = (row.offer.advice ? row.offer.advice + '\n\n' : 'Dieser Lastwagen erhöht deinen Absatz nicht.\n\n') +
+                    'Trotzdem ' + row.label + ' ' + verb + '?';
+                }
+                if (window.confirm(frage)) {
                   ctx.plane('truck', { type: row.offer.type, mode: mode });
                   ctx.neuZeichnen();
                 }
@@ -657,6 +760,12 @@
       }
       listedCache = array(data.listed);
       depotCache = array(data.depot);
+      if (data.note) {
+        var hinweisBox = el('div', 'rd-plan boerse-hinweis', '');
+        hinweisBox.setAttribute('role', 'note');
+        hinweisBox.appendChild(el('strong', '', String(data.note)));
+        root.appendChild(hinweisBox);
+      }
       var block = abschnitt(root, 'Börse');
       var rows = listedCache;
       block.appendChild(tabelle([
@@ -698,6 +807,17 @@
       var grid = el('div', 'rd-grid');
       kachel(grid, 'Index', zahl(ctx, data.index));
       indexBlock.appendChild(grid);
+      var indexVerlauf = array(data.index_history);
+      if (indexVerlauf.length) {
+        linien(indexBlock, ctx, [{
+          name: 'Index',
+          werte: indexVerlauf.map(function (p) { return p.value; }),
+          farbe: 'var(--akzent)',
+          format: 'zahl'
+        }], { labels: indexVerlauf.map(function (p) { return p.label; }), hoehe: 200, format: 'zahl' });
+      } else {
+        textZeile(indexBlock, 'Noch kein Indexverlauf.', 'rd-leise');
+      }
 
       var selected = listedCache.find(function (s) { return String(s.id) === String(aktienAuswahl); });
       if (selected) {

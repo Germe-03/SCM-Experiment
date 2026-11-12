@@ -337,7 +337,7 @@ class MarketEnvironment:
         # Phase 39: stock per firm and commodity, risk appetite and this year's purchase prices.
         self.commodity_stock: dict[str, dict[str, float]] = {}
         self.commodity_courage: dict[str, float] = {}
-        self._player_choices: dict = {}
+        self._player_choices: dict = self.__dict__.get("_player_choices", {})  # keep the runner's dict across reset()
         self.commodity_spend: dict[str, dict[str, list[float]]] = {}
         self.material_cost_multiplier = 1.0
         # Electricity: own price index (own random stream), samples of the year, yearly rows.
@@ -787,6 +787,22 @@ class MarketEnvironment:
         choice = getattr(self, "player_choices", {}).get(firm.id)
         weights = self.config.supplier_score_weights
         if choice is not None:
+            shares = getattr(choice, "supplier_shares", None)
+            if shares and quantity > 0:
+                valid: dict[str, float] = {}
+                for cand in candidates:
+                    runtime = self.runtimes.get(cand.id)
+                    if runtime is None or not runtime.active or cand.id not in shares:
+                        continue
+                    try:
+                        share = float(shares[cand.id])
+                    except (TypeError, ValueError):
+                        continue
+                    if share > 0:
+                        valid[cand.id] = share
+                if valid:
+                    parts = largest_remainder(quantity, valid)
+                    return {sid: units for sid, units in parts.items() if units > 0}
             fixed = getattr(choice, "supplier_id", None)
             if fixed and any(c.id == fixed for c in candidates):
                 candidates = [c for c in candidates if c.id == fixed]

@@ -10,15 +10,15 @@ let basisEntscheide = {};
 const FELD_HILFE = {
     base_price: {
         wofuer: 'Der Preis, zu dem du verkaufst.',
-        wenn: 'Höher: mehr Gewinn pro Stück, aber meist weniger Kunden. Tiefer: mehr Kunden, aber weniger Gewinn pro Stück.'
+        wenn: 'Höher: mehr Gewinn pro Flasche, aber meist weniger Kunden. Tiefer: mehr Kunden, aber weniger Gewinn pro Flasche.'
     },
     target_safety_stock_days: {
         wofuer: 'Wie viele Tage Vorrat du als Ziel hast.',
         wenn: 'Mehr Vorrat: weniger Risiko, nichts liefern zu können, aber mehr Geld liegt im Lager.'
     },
     order_qty: {
-        wofuer: 'Wie viele Stück du pro Tag fest herstellen lässt.',
-        wenn: 'Mehr Stück: mehr Vorrat, aber auch mehr Lagerkosten. Leer: die Menge wird automatisch gewählt.'
+        wofuer: 'Wie viele Einheiten du pro Tag fest bestellst oder herstellst (1 Einheit = 10’000 Flaschen).',
+        wenn: 'Mehr Einheiten: mehr Vorrat, aber auch mehr Lagerkosten. Leer: die Menge wird automatisch gewählt.'
     },
     overtime_level: {
         wofuer: 'Wie viele Überstunden dein Team macht.',
@@ -49,20 +49,20 @@ const FELD_HILFE = {
         wenn: 'Eine gewählte Gruppe reagiert stärker auf dein Marketing.'
     },
     auto_invest: {
-        wofuer: 'Ob die Firma automatisch investiert.',
-        wenn: 'Ja: die Firma investiert selbst, wenn es passt. Nein: es gibt keine automatischen Investitionen.'
+        wofuer: 'Ob die Firma ihre Kapazität selbst ausbaut (neue Maschinen, Lager, Personalplätze).',
+        wenn: 'Ja: sobald genug Geld da ist und die Nachfrage die Kapazität übersteigt, baut die Firma von selbst aus und bezahlt das aus der Kasse. Nein: die Kapazität wächst nur, wenn du unten einen Ausbau planst.'
     },
     expand_order: {
-        wofuer: 'Wie viel zusätzliche Kapazität du planst.',
-        wenn: 'Mehr Kapazität: du kannst mehr herstellen oder bearbeiten, aber der Ausbau kostet Geld.'
+        wofuer: 'Um wie viele Einheiten pro Tag (1 Einheit = 10’000 Flaschen) du die Kapazität erweitern willst.',
+        wenn: 'Der Ausbau kostet einmalig Geld und wird nach dem Klick auf «Ausbau planen» in der nächsten Runde bezahlt. Danach kannst du pro Tag entsprechend mehr herstellen oder bearbeiten.'
     },
     site_order: {
         wofuer: 'In welcher Region du einen neuen Standort planst.',
         wenn: 'Ein neuer Standort kann mehr Kunden erreichen, kostet aber Geld.'
     },
     credit_mode: {
-        wofuer: 'Wann die Firma einen Kredit aufnehmen darf.',
-        wenn: 'Kredit kann helfen, wenn Geld fehlt, muss aber mit Zinsen zurückgezahlt werden.'
+        wofuer: 'Ob die Firma bei Geldknappheit selbst einen Bankkredit aufnimmt.',
+        wenn: 'Nie Kredit: die Firma leiht nie Geld, kann dann aber bei leerer Kasse zahlungsunfähig werden. Kredit, wenn möglich: fehlt Geld, nimmt sie bei der Bank einen Kredit auf und zahlt Zinsen dafür. Autopilot: die Simulation entscheidet nach Kassenlage.'
     },
     bank_id: {
         wofuer: 'Bei welcher Bank die Firma ihr Geld verwahrt.',
@@ -81,16 +81,20 @@ const FELD_HILFE = {
         wenn: 'Eigener Transport kostet Geld, kann aber mehr Kontrolle geben. Ein Dienst nutzt fremde Fahrzeuge.'
     },
     commodity_courage: {
-        wofuer: 'Wie stark du auf Rohstoffe setzt.',
-        wenn: 'Mehr Einsatz kann sich lohnen, bringt aber auch mehr Risiko.'
+        wofuer: 'Wie viel Rohstoff-Vorrat die Firma auf Vorrat einkauft.',
+        wenn: 'Hoch: du kaufst viel auf Vorrat ein. Das schützt vor Engpässen und Preissprüngen, bindet aber Geld im Lager und kostet Lagerkosten. Tief: du kaufst nur, was du brauchst, und bist bei Engpässen verwundbar.'
     },
     markup_factor: {
         wofuer: 'Wie viel Aufschlag du auf deine Kosten rechnest.',
         wenn: 'Mehr Aufschlag: mehr Gewinn pro Verkauf, aber meist weniger Kunden.'
     },
-    risk_tolerance: {
-        wofuer: 'Wie viel Risiko deine Firma eingeht.',
-        wenn: 'Mehr Risiko: grössere Chancen, aber auch grössere mögliche Verluste.'
+    courier_preference: {
+        wofuer: 'Welchen Kurier deine Firma für Lieferungen bucht.',
+        wenn: 'Günstig: die Lieferung kostet weniger, aber Verspätungen und Ausfälle sind häufiger. Zuverlässig: der Kurier kostet mehr, liefert aber pünktlicher. Automatisch: ein Mittelweg.'
+    },
+    patent_lawsuits: {
+        wofuer: 'Ob deine Firma Konkurrenten verklagt, die deine Patente nachahmen.',
+        wenn: 'Ja: Nachahmer werden verklagt, das bringt Schadenersatz, kostet aber Anwaltskosten und kann Streit auslösen. Nein: du klagst nie. Automatisch: die Simulation entscheidet von Fall zu Fall.'
     }
 };
 
@@ -255,7 +259,7 @@ function macheAutopilotZeile(key, feld, autopilot, format) {
 
     let text = `Wenn an: ${eintrag.text}`;
     if (eintrag.value !== null && eintrag.value !== undefined) {
-        text += ` (aktuell: ${format ? format(eintrag.value) : String(eintrag.value)})`;
+        { const anzeige = format ? format(eintrag.value) : eintrag.value; if (anzeige !== undefined && anzeige !== null) text += ` (aktuell: ${anzeige === true ? "ja" : anzeige === false ? "nein" : anzeige})`; }
     }
 
     return { zeile, text: baue('small', 'autopilot-text', text) };
@@ -402,7 +406,7 @@ function setzeGeplant(form, key, wert) {
     if (!aktiv) {
         knoten.textContent = '';
     } else if (key === 'expand_order') {
-        knoten.textContent = `Geplant: +${wert} Einheiten`;
+        knoten.textContent = `Geplant: +${wert} Einheiten pro Tag`;
     } else {
         knoten.textContent = `Geplant: Standort in ${wert}`;
     }
@@ -807,15 +811,26 @@ function zeichneFirma(el, state, autopilot, einstufung) {
         });
     }
 
-    const risiko = firmaKarte(form, 'Risiko');
-    baueEingabefeld(risiko, {
-        key: 'risk_tolerance',
-        label: 'Risikobereitschaft %',
-        istEinstellung: true,
-        typ: 'prozent',
-        min: 0,
-        max: 100,
-        schritt: '1'
+    const kurier = firmaKarte(form, 'Kurier und Patente');
+    baueEingabefeld(kurier, {
+        key: 'courier_preference',
+        label: 'Kurier',
+        typ: 'kurier',
+        optionen: [
+            { value: 'cheap', label: 'Günstig' },
+            { value: 'reliable', label: 'Zuverlässig' }
+        ],
+        leerText: 'Automatisch'
+    });
+    baueEingabefeld(kurier, {
+        key: 'patent_lawsuits',
+        label: 'Patente: gegen Nachahmer klagen',
+        typ: 'dreifach',
+        optionen: [
+            { value: 'auto', label: 'Automatisch' },
+            { value: 'ja', label: 'Ja, klagen' },
+            { value: 'nein', label: 'Nein, nicht klagen' }
+        ]
     });
 
     form.querySelectorAll('[data-geplant]').forEach((knoten) => {
@@ -842,7 +857,7 @@ function geaenderteEinstellungen() {
         let wert = entwurfEinstellungen[key];
         if (typeof wert === 'number' && !Number.isFinite(wert)) return;
         if (key === 'order_qty' && wert === '') wert = null;
-        if (['target_quality', 'risk_tolerance', 'overtime_level'].includes(key)
+        if (['target_quality', 'overtime_level'].includes(key)
             && typeof wert === 'number') {
             wert = rundeProzent(wert);
         }
@@ -857,6 +872,9 @@ function geaenderteEntscheide() {
     Object.keys(entwurfEntscheide).forEach((key) => {
         let wert = entwurfEntscheide[key];
         if (typeof wert === 'number' && !Number.isFinite(wert)) return;
+        if (key === 'courier_preference' && wert === '') wert = null;
+        if (key === 'supplier_shares' && wert && typeof wert === 'object'
+            && Object.keys(wert).length === 0) wert = null;
         if (['marketing_focus', 'payout_ratio', 'commodity_courage'].includes(key)
             && typeof wert === 'number') {
             wert = rundeProzent(wert);
@@ -867,6 +885,9 @@ function geaenderteEntscheide() {
 
     Object.assign(geaendert, geplanteAuftraege);
     Object.assign(geaendert, entwurfEntscheide);
+    if (geaendert.courier_preference === '') geaendert.courier_preference = null;
+    if (geaendert.supplier_shares && typeof geaendert.supplier_shares === 'object'
+        && Object.keys(geaendert.supplier_shares).length === 0) geaendert.supplier_shares = null;
     return geaendert;
 }
 

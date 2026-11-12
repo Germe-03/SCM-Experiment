@@ -192,7 +192,8 @@ class Geography:
         else:
             mean_paid_km = mean_km
         unit_value = runner.config.stage_prices[firm.stage].base * runner.config.unit_scale.real_units_per_sim_unit
-        risk = runner.strategies.get(firm.id).risk_tolerance if firm.id in runner.strategies else 0.5
+        is_player = firm.id in getattr(runner, "player_choices", {})
+        risk = 0.5 if is_player or firm.id not in runner.strategies else runner.strategies[firm.id].risk_tolerance
         damage = cfg.damage_probability * cfg.damage_share * unit_value * (1 + (1 - risk) * cfg.risk_aversion)
         rate = self.carriers.service_rate(firm) if self.carriers is not None else cfg.service_rate
         service = shipped * mean_paid_km * rate * self.fuel_index

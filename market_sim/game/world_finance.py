@@ -242,11 +242,18 @@ def banks(runner, state, player_id, amount=None):
     }
 
 
-def stocks(runner, state, player_id, depot=None):
+def stocks(runner, state, player_id, depot=None, history=None):
     """Liefert Börsenkurse, Kursverläufe und das eigene Depot."""
     sm = _get(runner, "stock_market")
     if sm is None:
-        return {"listed": [], "index": None, "depot": [], "fee": 0.0}
+        return {
+            "listed": [],
+            "index": None,
+            "depot": [],
+            "fee": 0.0,
+            "index_history": [],
+            "note": "Keine Börse aktiv.",
+        }
 
     cfg = _get(sm, "cfg")
     shares_per_firm = _number(_get(cfg, "shares_per_firm"))
@@ -261,6 +268,45 @@ def stocks(runner, state, player_id, depot=None):
         daily_rows = list(_get(sm, "daily_rows", []))
     except Exception:
         daily_rows = []
+
+    index_history = []
+    try:
+        history_rows = list(history) if history is not None else []
+    except Exception:
+        history_rows = []
+    if history_rows and all(
+        isinstance(row, dict) and "value" in row for row in history_rows
+    ):
+        for row in history_rows:
+            index_history.append(
+                {
+                    "label": _text(_lookup(row, "label")),
+                    "value": _r(_lookup(row, "value")),
+                }
+            )
+    else:
+        simulation = _get(_get(runner, "config"), "simulation")
+        dpm = _number(_get(simulation, "days_per_month"))
+        if dpm is None or dpm <= 0:
+            dpm = 30
+        monthly_values = {}
+        for row in daily_rows:
+            if not isinstance(row, dict):
+                continue
+            year = _number(_lookup(row, "year"))
+            day = _number(_lookup(row, "day"))
+            if year is None or day is None:
+                continue
+            month = int((day - 1) // dpm) + 1
+            monthly_values[(year, month)] = _lookup(row, "index")
+        for (year, month), value in sorted(monthly_values.items()):
+            year_label = int(year) if year.is_integer() else year
+            index_history.append(
+                {
+                    "label": f"Jahr {year_label}, Monat {month}",
+                    "value": _r(value, 2),
+                }
+            )
 
     listed = []
     for firm_id in listed_ids:
@@ -331,11 +377,36 @@ def stocks(runner, state, player_id, depot=None):
         except Exception:
             depot_positions = []
 
+    current_year = _number(_get(state, "year"))
+    if current_year is None:
+        for row in reversed(daily_rows):
+            if isinstance(row, dict):
+                current_year = _number(_lookup(row, "year"))
+                if current_year is not None:
+                    break
+    if current_year is None:
+        current_year = 1
+    tradable_from_year = _number(_get(cfg, "tradable_from_year"))
+    if listed:
+        note = None
+    elif tradable_from_year is not None and tradable_from_year > current_year:
+        note = (
+            f"Die Börse eröffnet erst ab Jahr {int(tradable_from_year)}, "
+            "vorher ist niemand kotiert."
+        )
+    else:
+        note = (
+            "Zurzeit ist keine Firma kotiert. Neue Firmen kommen frühestens "
+            "nach einem vollen Jahr im Markt an die Börse."
+        )
+
     return {
         "listed": listed,
         "index": _r(_get(sm, "index")),
         "depot": depot_positions,
         "fee": fee,
+        "index_history": index_history,
+        "note": note,
     }
 
 
@@ -414,6 +485,179 @@ def commodities(runner, state, player_id, history=None):
     }
 
 
+def _truck_context(runner, state, player_id):
+    """Berechnet einmalig die Absatz- und Transportlage für Lastwagenangebote."""
+    env = _get(runner, "env")
+    config = _get(runner, "config")
+    scale = _number(
+        _get(_get(config, "unit_scale"), "real_units_per_sim_unit")
+    )
+    if scale is None:
+        scale = 1.0
+    dpy = _number(_get(_get(config, "simulation"), "days_per_year"))
+    if dpy is None:
+        dpy = 360.0
+
+    recent_demand = _get(state, "recent_demand")
+    try:
+        demand_values = _lookup(recent_demand, player_id, [])
+        demand_values = list(demand_values) if demand_values is not None else []
+    except Exception:
+        demand_values = []
+    numeric_demand = [
+        value
+        for value in (_number(item) for item in demand_values)
+        if value is not None
+    ]
+    demand = sum(numeric_demand) / len(numeric_demand) if numeric_demand else 0.0
+
+    personnel_cap = None
+    effective_capacity = _get(env, "_effective_capacity")
+    if callable(effective_capacity):
+        try:
+            personnel_cap = _number(effective_capacity(player_id))
+        except Exception:
+            personnel_cap = None
+    if personnel_cap is None:
+        personnel_cap = 0.0
+
+    firm = _firm(runner, player_id)
+    own_transport = firm is not None and _get(firm, "transport_mode") == "own"
+    tm = _get(_get(env, "geography"), "trucks")
+    transport_now = math.inf
+    if own_transport:
+        transport_now = 0.0
+        capacity = _get(tm, "capacity")
+        ref_km = _number(_get(tm, "REF_KM"))
+        if ref_km is None or ref_km == 0:
+            ref_km = 100.0
+        if callable(capacity):
+            try:
+                current_capacity = _number(capacity(player_id))
+                if current_capacity is not None:
+                    transport_now = current_capacity / ref_km
+            except Exception:
+                pass
+
+    price = _number(_get(firm, "sell_price"))
+    if price is None:
+        price = 0.0
+    runtime = _lookup(_get(env, "runtimes"), player_id)
+    revenue = _number(_get(runtime, "revenue"))
+    purchase_cost = _number(_get(runtime, "purchase_cost"))
+    if revenue is not None and revenue > 0:
+        if purchase_cost is None:
+            purchase_cost = 0.0
+        margin = price * max(0.0, 1.0 - purchase_cost / revenue)
+    else:
+        margin = 0.3 * price
+
+    return {
+        "scale": scale,
+        "dpy": dpy,
+        "demand": demand,
+        "personnel_cap": personnel_cap,
+        "transport_now": transport_now,
+        "own_transport": own_transport,
+        "price": price,
+        "margin": margin,
+    }
+
+
+def _truck_advice(offer, ctx):
+    """Berechnet Mehrabsatz, Wirtschaftlichkeit und Engpassrat für ein Angebot."""
+    try:
+        demand = _number(ctx.get("demand"))
+        personnel_cap = _number(ctx.get("personnel_cap"))
+        demand = demand if demand is not None else 0.0
+        personnel_cap = personnel_cap if personnel_cap is not None else 0.0
+        transport_now = ctx.get("transport_now")
+        if transport_now is None:
+            transport_now = 0.0
+        own_transport = bool(ctx.get("own_transport"))
+
+        demand_limited = min(demand, personnel_cap)
+        truck_cap = _number(_lookup(offer, "capacity"))
+        if truck_cap is None:
+            truck_cap = 0.0
+        extra_units = 0.0
+        if own_transport:
+            extra_units = max(0.0, demand_limited - transport_now)
+            extra_units = min(extra_units, max(0.0, truck_cap))
+
+        scale = _number(ctx.get("scale"))
+        if scale is None:
+            scale = 1.0
+        extra_sales_per_day = _r(extra_units * scale)
+        if extra_sales_per_day is None:
+            extra_sales_per_day = 0.0
+
+        margin = _number(ctx.get("margin"))
+        if margin is None:
+            margin = 0.0
+        dpy = _number(ctx.get("dpy"))
+        if dpy is None:
+            dpy = 360.0
+        annual_cost = _number(_lookup(offer, "annual_cost"))
+        if annual_cost is None:
+            annual_cost = 0.0
+        extra_profit_year = _r(
+            extra_sales_per_day * margin * dpy - annual_cost, 2
+        )
+        if extra_profit_year is None:
+            extra_profit_year = 0.0
+
+        price = _number(_lookup(offer, "price"))
+        payback_years = None
+        if extra_profit_year > 0 and price is not None:
+            payback_years = _r(price / extra_profit_year, 2)
+
+        if not own_transport:
+            advice = (
+                "Du lieferst über Kurier oder Post, ein eigener Lastwagen "
+                "ändert deinen Absatz nicht."
+            )
+        elif (
+            personnel_cap <= min(demand, transport_now)
+            and demand_limited < transport_now
+        ):
+            advice = (
+                "Dein Engpass ist Personal, nicht Transport. Dieser Lastwagen "
+                "erhöht deinen Absatz nicht."
+            )
+        elif demand < transport_now and demand <= personnel_cap:
+            advice = (
+                "Dein Engpass ist die Nachfrage, nicht Transport. Dieser "
+                "Lastwagen erhöht deinen Absatz nicht."
+            )
+        elif extra_units > 0:
+            advice = (
+                f"Dein Engpass ist der Transport. Dieser Lastwagen bringt etwa "
+                f"{extra_sales_per_day:.0f} Flaschen mehr Absatz pro Tag."
+            )
+            if extra_profit_year <= 0:
+                advice += (
+                    " Er lohnt sich trotzdem nicht, weil die Kosten den "
+                    "Mehrertrag übersteigen."
+                )
+        else:
+            advice = "Dieser Lastwagen erhöht deinen Absatz nicht."
+
+        return {
+            "extra_sales_per_day": extra_sales_per_day,
+            "extra_profit_year": extra_profit_year,
+            "payback_years": payback_years,
+            "advice": advice,
+        }
+    except Exception:
+        return {
+            "extra_sales_per_day": 0.0,
+            "extra_profit_year": 0.0,
+            "payback_years": None,
+            "advice": "",
+        }
+
+
 def trucks(runner, state, player_id):
     """Liefert Lastwagenangebote, die eigene Flotte und Händler."""
     env = _get(runner, "env")
@@ -443,6 +687,11 @@ def trucks(runner, state, player_id):
             offers = []
     except Exception:
         offers = []
+
+    context = _truck_context(runner, state, player_id)
+    for offer in offers:
+        if isinstance(offer, dict):
+            offer.update(_truck_advice(offer, context))
 
     fleet = []
     fleet_items = _lookup(_get(tm, "fleets"), player_id, [])

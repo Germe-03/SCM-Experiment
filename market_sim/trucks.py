@@ -680,7 +680,8 @@ class TruckMarket:
                 price, _, _, dealer, used, source = offer
                 lease = None
                 strategy = runner.strategies.get(firm.id) if hasattr(runner, "strategies") else None
-                risk = strategy.risk_tolerance if strategy is not None else 0.5
+                is_player = firm.id in getattr(runner, "player_choices", {})
+                risk = strategy.risk_tolerance if strategy is not None and not is_player else 0.5
                 if self.leasing is not None and not used and runtime.cash < self.LEASE_CASH_MULTIPLE * price:
                     # Phase 57: a firm with little cash leases a new truck instead of tying up its cash.
                     lease = self.leasing.offer(env, firm.id, price, self.types[type_name].life_years,

@@ -87,10 +87,21 @@ function setzeSichtbar(id, sichtbar) {
 }
 
 function schalteGruendungsfelder() {
-    const branche = element('branche-select');
-    const hersteller = branche && branche.value === 'hersteller';
-    setzeSichtbar('region-wrap', Boolean(hersteller));
-    setzeSichtbar('kategorie-wrap', Boolean(hersteller));
+    // Region und Kategorie sind für alle Branchen wählbar.
+    setzeSichtbar('region-wrap', true);
+    setzeSichtbar('kategorie-wrap', true);
+}
+
+const KATEGORIE_NAMEN = {
+    beer: 'Bier',
+    wine: 'Wein',
+    spirits: 'Spirituosen',
+    softdrinks: 'Softdrinks',
+    water: 'Wasser'
+};
+
+function kategorieName(name) {
+    return KATEGORIE_NAMEN[name] || name;
 }
 
 function fuelleAuswahl(id, werte, mitLabel) {
@@ -105,7 +116,7 @@ function fuelleAuswahl(id, werte, mitLabel) {
             option.textContent = wert.label;
         } else {
             option.value = wert;
-            option.textContent = wert;
+            option.textContent = id === 'kategorie-select' ? kategorieName(wert) : wert;
         }
         auswahl.appendChild(option);
     });
@@ -701,13 +712,101 @@ function zeichnePunktGrafik(karte, history, kpis) {
     }));
 }
 
+function zeichneEngpassKarte(el, daten) {
+    if (!daten || typeof daten !== 'object' || !daten.text) return;
+
+    const karte = baueKarte('Engpass');
+    karte.id = 'karte-engpass';
+    const text = document.createElement('p');
+    text.className = 'engpass-text';
+    text.style.fontSize = '1.25rem';
+    text.style.fontWeight = '600';
+    text.textContent = String(daten.text);
+    karte.appendChild(text);
+
+    const raster = baueKpiRaster();
+    const flaschen = (wert) => (wert === null || wert === undefined || !Number.isFinite(Number(wert))
+        ? '–'
+        : formatiereGanzzahl(wert));
+    fuegeKpi(raster, 'Kapazität pro Tag', flaschen(daten.capacity_per_day), 'Flaschen', null);
+    fuegeKpi(raster, 'Nachfrage pro Tag', flaschen(daten.demand_per_day), 'Flaschen', null);
+    fuegeKpi(raster, 'Absatz pro Tag', flaschen(daten.sales_per_day), 'Flaschen', null);
+    if (daten.transport_per_day !== null && daten.transport_per_day !== undefined) {
+        fuegeKpi(raster, 'Transport pro Tag', flaschen(daten.transport_per_day), 'Flaschen', null);
+    }
+    const tage = Number(daten.days_of_stock);
+    fuegeKpi(raster, 'Lagerdauer', Number.isFinite(tage) ? `${formatiereZahl(tage, 1)} Tage` : '–', null, null);
+    karte.appendChild(raster);
+    el.appendChild(karte);
+}
+
+function zeichneKostenKarte(el, daten, ctx) {
+    if (!daten || !Array.isArray(daten.items) || !daten.items.length) return;
+
+    const karte = baueKarte('Wofür geht das Geld weg');
+    karte.id = 'karte-kosten';
+    const items = daten.items.filter((eintrag) => Number.isFinite(Number(eintrag.chf_year)));
+
+    const kopf = document.createElement('p');
+    kopf.textContent = `Kosten im Jahr ${daten.year ?? ''}: Umsatz ${formatiereGeld(daten.revenue_year)}, Gewinn ${formatiereGeld(daten.profit_year)}.`;
+    karte.appendChild(kopf);
+
+    try {
+        karte.appendChild(ctx.linien([{
+            name: 'Kosten in CHF',
+            werte: items.map((eintrag) => Number(eintrag.chf_year)),
+            farbe: 'var(--linie-1)',
+            typ: 'bar',
+            format: 'chf'
+        }], {
+            labels: items.map((eintrag) => eintrag.label || eintrag.key),
+            typ: 'bar',
+            format: 'chf',
+            hoehe: Math.max(200, 38 * items.length),
+            horizontal: true
+        }));
+    } catch (err) {
+        // Die Tabelle unten zeigt dieselben Werte.
+    }
+
+    const tabelle = document.createElement('table');
+    tabelle.className = 'rd-tabelle kosten-tabelle';
+    const kopfZeile = document.createElement('tr');
+    ['Posten', 'CHF im Jahr', 'Anteil am Umsatz'].forEach((titel) => {
+        const th = document.createElement('th');
+        th.textContent = titel;
+        kopfZeile.appendChild(th);
+    });
+    const thead = document.createElement('thead');
+    thead.appendChild(kopfZeile);
+    const tbody = document.createElement('tbody');
+    items.forEach((eintrag) => {
+        const zeile = document.createElement('tr');
+        [
+            eintrag.label || eintrag.key || '',
+            formatiereGeld(eintrag.chf_year),
+            formatiereProzent(eintrag.share)
+        ].forEach((text) => {
+            const td = document.createElement('td');
+            td.textContent = text;
+            zeile.appendChild(td);
+        });
+        tbody.appendChild(zeile);
+    });
+    tabelle.append(thead, tbody);
+    karte.appendChild(tabelle);
+    el.appendChild(karte);
+}
+
 async function zeichneUebersicht(el) {
     const state = aktuellerStand || {};
     const kpis = state.kpis || {};
     const ctx = baueCtx(state);
-    const [capacity, classification] = await Promise.all([
+    const [capacity, classification, engpass, kosten] = await Promise.all([
         ctx.ansicht('capacity'),
-        ctx.ansicht('classification')
+        ctx.ansicht('classification'),
+        ctx.ansicht('bottleneck'),
+        ctx.ansicht('costs')
     ]);
 
     const raster = baueKpiRaster();
@@ -733,15 +832,19 @@ async function zeichneUebersicht(el) {
             wenn: 'Ein höherer Gewinn stärkt die Firma; Verluste belasten ihre Kasse.'
         },
         revenue: {
-            wofuer: 'Der geschätzte oder gemeldete Umsatz deiner Firma.',
-            wenn: 'Der Umsatz ergibt sich aus verkauften Produkten und ihrem Preis.'
+            wofuer: 'Dein Umsatz im laufenden Jahr in CHF.',
+            wenn: 'Der Umsatz ergibt sich aus verkauften Flaschen und ihrem Preis.'
+        },
+        profitYear: {
+            wofuer: 'Dein Gewinn im laufenden Jahr in CHF (Umsatz minus alle Kosten).',
+            wenn: 'Ist er negativ, verlierst du in diesem Jahr Geld.'
         },
         sales: {
-            wofuer: 'Wie viele Produkte deine Firma zuletzt verkauft hat.',
+            wofuer: 'Wie viele Flaschen deine Firma zuletzt verkauft hat.',
             wenn: 'Der Absatz hängt unter anderem von Preis, Nachfrage und Lieferfähigkeit ab.'
         },
         inventory: {
-            wofuer: 'Wie viele Produkte aktuell auf Lager liegen.',
+            wofuer: 'Wie viele Flaschen aktuell auf Lager liegen.',
             wenn: 'Mehr Lager kann Lieferungen sichern, bindet aber Geld.'
         },
         backlog: {
@@ -757,7 +860,7 @@ async function zeichneUebersicht(el) {
             wenn: 'Die Spanne zeigt mögliche Werte; der Durchschnitt hilft bei der Planung.'
         },
         capacity: {
-            wofuer: 'Wie viele Einheiten deine Firma pro Tag liefern kann.',
+            wofuer: 'Wie viele Flaschen deine Firma pro Tag liefern kann.',
             wenn: 'Eine hohe Auslastung lässt wenig Spielraum für zusätzliche Nachfrage.'
         },
         classification: {
@@ -768,12 +871,17 @@ async function zeichneUebersicht(el) {
 
     fuegeKpi(raster, 'Kasse', formatiereGeld(kpis.cash), null, infos.cash,
         Number.isFinite(kasse) ? (kasse >= 0 ? 'positiv' : 'negativ') : '');
-    fuegeKpi(raster, 'Gewinn eigener Firma', formatiereGeld(kpis.profit), null, infos.profit,
+    fuegeKpi(raster, 'Gewinn seit Gründung', formatiereGeld(kpis.profit), null, infos.profit,
         Number.isFinite(gewinn) ? (gewinn >= 0 ? 'positiv' : 'negativ') : '');
-    fuegeKpi(raster, 'Umsatz pro Jahr (hochgerechnet)', formatiereGeld(kpis.revenue_year ?? umsatz), null, infos.revenue);
-    fuegeKpi(raster, 'Absatz', formatiereGanzzahl(kpis.recent_sales), null, infos.sales);
-    fuegeKpi(raster, 'Lager', formatiereGanzzahl(kpis.inventory), null, infos.inventory);
-    fuegeKpi(raster, 'Rückstand', formatiereGanzzahl(kpis.backlog), null, infos.backlog);
+    fuegeKpi(raster, 'Umsatz im Jahr', formatiereGeld(kpis.revenue_year ?? umsatz), null, infos.revenue);
+    if (kpis.profit_year !== undefined && kpis.profit_year !== null) {
+        const gewinnJahr = Number(kpis.profit_year);
+        fuegeKpi(raster, 'Gewinn im Jahr', formatiereGeld(kpis.profit_year), null, infos.profitYear,
+            Number.isFinite(gewinnJahr) ? (gewinnJahr >= 0 ? 'positiv' : 'negativ') : '');
+    }
+    fuegeKpi(raster, 'Absatz pro Tag (Flaschen)', formatiereGanzzahl(kpis.recent_sales), null, infos.sales);
+    fuegeKpi(raster, 'Lager (Flaschen)', formatiereGanzzahl(kpis.inventory), null, infos.inventory);
+    fuegeKpi(raster, 'Rückstand (Flaschen)', formatiereGanzzahl(kpis.backlog), null, infos.backlog);
     fuegeKpi(raster, 'Mitarbeiter', formatiereGanzzahl(kpis.employees), null, infos.employees);
 
     const nachfrage = capacity && capacity.demand;
@@ -785,7 +893,7 @@ async function zeichneUebersicht(el) {
     const nachfrageAvg = nachfrage && Number(nachfrage.avg);
     fuegeKpi(
         raster,
-        'Nachfrage-Spanne',
+        'Nachfrage-Spanne (Flaschen pro Tag)',
         nachfrageWert,
         Number.isFinite(nachfrageAvg) ? `Durchschnitt: ${formatiereGanzzahl(nachfrageAvg)}` : null,
         infos.demand
@@ -795,7 +903,7 @@ async function zeichneUebersicht(el) {
     const auslastung = Number(capacity && capacity.utilization_last_year);
     fuegeKpi(
         raster,
-        'Kapazität pro Tag',
+        'Kapazität (Flaschen pro Tag)',
         Number.isFinite(kapazitaet) ? formatiereGanzzahl(kapazitaet) : '–',
         Number.isFinite(auslastung) ? `Auslastung letztes Jahr: ${formatiereProzent(auslastung)}` : null,
         infos.capacity
@@ -810,6 +918,9 @@ async function zeichneUebersicht(el) {
     fuegeKpi(raster, 'Einstufung', einstufungsLabel || '–', erklaerung || null, infos.classification);
 
     el.appendChild(raster);
+
+    zeichneEngpassKarte(el, engpass);
+    zeichneKostenKarte(el, kosten, ctx);
 
     const ampelKarte = baueKarte('Auf einen Blick');
     zeichneAmpel(ampelKarte, state.warnings || []);

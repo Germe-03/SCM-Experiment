@@ -179,6 +179,10 @@ class CourierMarket(CarrierMarket):
 
     @staticmethod
     def risk(runner, firm: Firm) -> float:
+        choice = getattr(runner, "player_choices", {}).get(firm.id)
+        if choice is not None:
+            pref = getattr(choice, "courier_preference", None)
+            return {"cheap": 1.0, "reliable": 0.0}.get(pref, 0.5)
         return (
             runner.strategies[firm.id].risk_tolerance
             if firm.id in runner.strategies

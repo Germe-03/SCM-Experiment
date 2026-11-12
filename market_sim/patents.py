@@ -188,7 +188,12 @@ class PatentOffice:
         believed_fine = cfg.fine_fixed * price + cfg.fine_revenue_share * revenue
         reputation_cost = cfg.reputation_hit * revenue * actor.cfg.reputation_value_factor
         penalty = belief * (believed_fine + damages + reputation_cost)
-        risk = runner.strategies[firm.id].risk_tolerance if firm.id in runner.strategies else 0.5
+        player = getattr(runner, "player_choices", {}).get(firm.id)
+        if player is not None:
+            lawsuits = getattr(player, "patent_lawsuits", None)
+            risk = 0.5 if lawsuits is None else (1.0 if lawsuits else 0.0)
+        else:
+            risk = runner.strategies[firm.id].risk_tolerance if firm.id in runner.strategies else 0.5
         weighted = penalty * (1 + actor.cfg.aversion * (1 - risk))
         committed = benefit > weighted
         runner.decision_log.record(
