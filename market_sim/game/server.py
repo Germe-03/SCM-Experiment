@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import threading
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -110,6 +111,12 @@ class Handler(SimpleHTTPRequestHandler):
                     body.get("choices") if isinstance(body.get("choices"), dict) else None,
                     body.get("orders") if isinstance(body.get("orders"), dict) else None,
                 )
+            elif path == "/api/run_to_end":
+                result = self.controller.run_to_end(
+                    body.get("settings") if isinstance(body.get("settings"), dict) else None,
+                    body.get("choices") if isinstance(body.get("choices"), dict) else None,
+                    body.get("orders") if isinstance(body.get("orders"), dict) else None,
+                )
             elif path == "/api/reset":
                 result = self.controller.reset()
             elif path == "/api/check":
@@ -152,6 +159,18 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
     controller = GameController(Path(args.saves), seed=args.seed,
                                 years=args.years, days_per_year=args.days_per_year)
+    if (controller.save_dir / "automatisch.json").exists():
+        controller.loading = True
+
+        def _restore() -> None:
+            try:
+                controller.load("automatisch")
+            except Exception:
+                pass
+            finally:
+                controller.loading = False
+
+        threading.Thread(target=_restore, daemon=True).start()
     server = make_server(controller, args.port)
     print(f"Spiel: http://localhost:{args.port}/")
     try:

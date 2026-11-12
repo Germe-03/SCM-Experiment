@@ -55,6 +55,34 @@ def _fmt(value, kind: str) -> str:
     return str(value)
 
 
+DICT_LABELS = {
+    "brand_plan": "Einkaufsplan",
+    "brand_prices": "Verkaufspreise",
+    "brand_suppliers": "Lieferanten je Marke",
+    "supplier_shares": "Lieferanten-Anteile",
+}
+
+
+def _fmt_number(value) -> str:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return str(value)
+    if float(value).is_integer():
+        return f"{int(value):,}".replace(",", "'")
+    return f"{value:,.2f}".replace(",", "'")
+
+
+def _describe_dict(key: str, label: str, value: dict) -> str:
+    """«Einkaufsplan geändert: Alpen Gold 40'000, …» (höchstens 5 Einträge, dann «und N weitere»)."""
+    label = DICT_LABELS.get(key, label)
+    if not value:
+        return f"{label} geändert: leer (Autopilot)"
+    items = [f"{name} {_fmt_number(amount)}" for name, amount in value.items()]
+    text = ", ".join(items[:5])
+    if len(items) > 5:
+        text += f" und {len(items) - 5} weitere"
+    return f"{label} geändert: {text}"
+
+
 def describe_changes(current, updates: dict, choices: dict, orders: dict) -> list[str]:
     """Kurze Sätze wie «Preis: 2.10 → 2.30 CHF (+10 %)» für alle Änderungen dieser Runde."""
     lines: list[str] = []
@@ -69,7 +97,12 @@ def describe_changes(current, updates: dict, choices: dict, orders: dict) -> lis
         lines.append(text)
     for key, value in choices.items():
         label = CHOICE_LABELS.get(key, key)
-        lines.append(f"{label}: {'Autopilot' if value is None else value}")
+        if key == "listing":
+            lines.append(f"{label}: {'Ja, Börsengang zum Jahreswechsel' if value else 'Nein (Standard)'}")
+        elif isinstance(value, dict):
+            lines.append(_describe_dict(key, label, value))
+        else:
+            lines.append(f"{label}: {'Autopilot' if value is None else value}")
     for key in orders:
         if orders[key]:
             lines.append(ORDER_LABELS.get(key, key))

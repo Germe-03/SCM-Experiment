@@ -219,7 +219,7 @@ def purchasing(runner, state, player_id, **extra) -> dict:
         return {
             "kind": "haendler",
             "categories": categories,
-            "brands": _with_buy_prices(runner, state, player_id, [_clean(item) for item in catalog if isinstance(item, dict)]),
+            "brands": _with_sell_prices(runner, player_id, _with_buy_prices(runner, state, player_id, [_clean(item) for item in catalog if isinstance(item, dict)])),
             "plan": _clean(plan),
             "storage": storage,
         }
@@ -581,6 +581,29 @@ def stocks_all(runner, state, player_id, **extra) -> dict:
         return {"firms": firms, "series": series}
     except Exception:
         return {"firms": [], "series": {}}
+
+
+def _with_sell_prices(runner, player_id, brands):
+    """Händler: sell_price = dein Ladenpreis je Marke, rival_price = Durchschnitt der anderen Läden."""
+    try:
+        env = runner.env
+        book = env.brand_book
+        book.player_choices = getattr(env, "player_choices", book.player_choices)
+        mine = env.network.firm(player_id)
+        others = [f for f in env.network.firms_in("retailer")
+                  if f.id != player_id and env.runtimes[f.id].active]
+        for item in brands:
+            brand = book.brands.get(item.get("id"))
+            if brand is None:
+                continue
+            item["sell_price"] = round(float(book.retail_price(mine.sell_price, brand, mine)), 4)
+            rivals = [book.retail_price(f.sell_price, brand, f) for f in others]
+            item["rival_price"] = round(sum(rivals) / len(rivals), 4) if rivals else None
+    except Exception:
+        for item in brands:
+            item.setdefault("sell_price", None)
+            item.setdefault("rival_price", None)
+    return brands
 
 
 def _with_buy_prices(runner, state, player_id, brands):

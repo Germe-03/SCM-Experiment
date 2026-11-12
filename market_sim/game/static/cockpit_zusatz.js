@@ -108,7 +108,7 @@ async function zeichneTochterRendite(container) {
 // «Neues Spiel» in der Kopfzeile: Rückfrage, optional erst speichern, dann zurücksetzen.
 async function neuesSpielStarten() {
     if (beschaeftigt) return;
-    if (!window.confirm('Neues Spiel beginnen? Der laufende Spielstand wird beendet.')) return;
+    if (!window.confirm('Neues Spiel beginnen? Der laufende Spielstand wird beendet, aber vorher automatisch als «vor_neuem_spiel» gesichert.')) return;
     if (window.confirm('Soll der laufende Spielstand vorher gespeichert werden?')) {
         const vorschlag = (aktuellerStand && aktuellerStand.firm && aktuellerStand.firm.name) || 'Spielstand';
         const name = window.prompt('Name des Spielstands', vorschlag);

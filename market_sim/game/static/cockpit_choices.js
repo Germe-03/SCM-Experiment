@@ -74,7 +74,7 @@ const FELD_HILFE = {
     },
     listing: {
         wofuer: 'Ob die Firma an der Börse gelistet wird.',
-        wenn: 'Ein Börsengang macht es möglich, Anteile an der Firma zu handeln.'
+        wenn: 'Der Börsengang wird zum Jahreswechsel ausgeführt. Er bringt Geld aus dem Aktienverkauf, dafür zahlst du Dividenden und musst öffentliche Zahlen veröffentlichen. Standard ist Nein.'
     },
     transport_mode: {
         wofuer: 'Wie deine Firma Waren transportiert.',
@@ -859,7 +859,7 @@ function zeichneFirma(el, state, autopilot, einstufung, preise) {
         label: 'Börsengang',
         typ: 'dreifach',
         optionen: [
-            { value: 'auto', label: 'Autopilot' },
+            { value: 'auto', label: 'Nein (Standard)' },
             { value: 'ja', label: 'Ja' },
             { value: 'nein', label: 'Nein' }
         ],

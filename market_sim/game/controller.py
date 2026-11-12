@@ -4,6 +4,7 @@ from dataclasses import asdict, fields, replace
 from datetime import datetime
 from pathlib import Path
 import math
+import os
 import re
 import threading
 
@@ -122,6 +123,10 @@ class GameController:
         self._seen_notices: set = set()
         self.sale: dict | None = None
         self._options_cache: dict | None = None
+        self.autosaved_at: str | None = None
+        self.loading = False
+        self._ran_to_end = False
+        self._margins: list = []
 
     def options(self) -> dict:
         """Gibt Branchen, Regionen und Kategorien zurück."""
@@ -237,7 +242,10 @@ class GameController:
                 self._year_totals = {}
                 self._seen_notices = set()
                 self.sale = None
+                self._ran_to_end = False
+                self._margins = []
                 self._process(snapshot)
+                self._autosave()
                 return self._state()
             except (ValueError, RuntimeError, KeyError, OSError) as exc:
                 return {"error": str(exc)}
@@ -248,7 +256,7 @@ class GameController:
         with self._lock:
             try:
                 if self.session is None or self.snapshot is None:
-                    raise RuntimeError("Kein Spiel aktiv")
+                    raise RuntimeError("Kein Spiel aktiv – Seite neu laden")
                 if self.session.finished or self.snapshot.game_over:
                     raise RuntimeError("Das Spiel ist bereits beendet")
 
@@ -318,16 +326,33 @@ class GameController:
                     self.protocol.orders.append(dict(session_orders))
                 self.snapshot = snapshot
                 self._process(snapshot)
+                self._autosave()
                 return self._state()
             except (ValueError, RuntimeError, KeyError, OSError) as exc:
                 return {"error": str(exc)}
+
+    def run_to_end(self, settings: dict | None = None, choices: dict | None = None,
+                   orders: dict | None = None) -> dict:
+        """Übernimmt die Eingaben und simuliert bis zum Ende (Autopilot, Dashboard im Hintergrund)."""
+        with self._lock:
+            if self.session is None or self.snapshot is None:
+                return {"error": "Kein Spiel aktiv – Seite neu laden"}
+            if self.session.finished or self.snapshot.game_over:
+                return {"error": "Das Spiel ist bereits beendet"}
+            self.session.force_end = True
+            self._ran_to_end = True
+            result = self.end_round(settings, choices, orders)
+            if "error" in result or not (self.snapshot and self.snapshot.game_over):
+                self.session.force_end = False
+                self._ran_to_end = False
+            return result
 
     def skip_year(self, settings: dict | None = None, choices: dict | None = None,
                   orders: dict | None = None) -> dict:
         """Erste Runde mit den Eingaben, dann ohne Halt bis zum ersten Halt im nächsten Jahr."""
         with self._lock:
             if self.session is None or self.snapshot is None:
-                return {"error": "Kein Spiel aktiv"}
+                return {"error": "Kein Spiel aktiv – Seite neu laden"}
             start_year = int(self.snapshot.year)
             result = self.end_round(settings, choices, orders)
             guard = 0
@@ -345,6 +370,8 @@ class GameController:
     def reset(self) -> dict:
         """Beendet das Spiel ohne Speichern und kehrt zur Gründung zurück."""
         with self._lock:
+            self._autosave("vor_neuem_spiel", rotate=False)
+            self._ran_to_end = False
             self.session = None
             self.snapshot = None
             self.protocol = None
@@ -375,7 +402,7 @@ class GameController:
         with self._lock:
             try:
                 if self.session is None:
-                    raise RuntimeError("Kein Spiel aktiv")
+                    raise RuntimeError("Kein Spiel aktiv – Seite neu laden")
 
                 event_mark = self.session._event_mark
                 result = self.session.sell_firm()
@@ -407,11 +434,11 @@ class GameController:
                 if not name:
                     raise ValueError("Ungültiger Name")
                 if self.session is None or self.snapshot is None:
-                    raise RuntimeError("Kein Spiel aktiv")
+                    raise RuntimeError("Kein Spiel aktiv – Seite neu laden")
                 if self.snapshot.game_over:
                     raise RuntimeError("Beendete Spiele können nicht gespeichert werden")
                 if self.protocol is None:
-                    raise RuntimeError("Kein Spiel aktiv")
+                    raise RuntimeError("Kein Spiel aktiv – Seite neu laden")
 
                 save = replace(
                     self.protocol,
@@ -454,11 +481,36 @@ class GameController:
                 self._year_totals = {}
                 self._seen_notices = set()
                 self.sale = None
+                self._ran_to_end = False
+                self._margins = []
                 for item in snapshots:
                     self._process(item)
+                self._autosave()
                 return self._state()
             except (ValueError, RuntimeError, KeyError, OSError) as exc:
                 return {"error": str(exc)}
+
+    def _autosave(self, name: str = "automatisch", rotate: bool = True) -> None:
+        """Sichert den Spielstand still nach save_dir/<name>.json; wirft nie eine Exception."""
+        try:
+            if self.protocol is None or self.snapshot is None:
+                return
+            if rotate and self.snapshot.game_over:
+                return  # bei Spielende bleibt die letzte Sicherung liegen
+            save = replace(
+                self.protocol,
+                saved_at=datetime.now().isoformat(timespec="seconds"),
+                label=f"Jahr {self.snapshot.year}, Monat {self.snapshot.month}",
+            )
+            self.save_dir.mkdir(parents=True, exist_ok=True)
+            target = self.save_dir / f"{name}.json"
+            if rotate and target.exists():
+                os.replace(target, self.save_dir / f"{name}_vorher.json")
+            write_save(save, target)
+            if rotate:
+                self.autosaved_at = save.saved_at
+        except Exception:
+            pass
 
     def advise(self, question: str | None = None, llm=None) -> dict:
         """Fragt den Berater (Sprachmodell) nach Tipps; nur eigene und öffentliche Daten."""
@@ -484,6 +536,8 @@ class GameController:
     def state(self) -> dict:
         """Gibt den aktuellen Spielzustand zurück."""
         with self._lock:
+            if self.loading and self.session is None:
+                return {"running": False, "loading": True}
             try:
                 return self._state()
             except (ValueError, RuntimeError, KeyError, OSError) as exc:
@@ -498,7 +552,7 @@ class GameController:
         """Prüft Einstellungen und Entscheide für die nächste Runde."""
         with self._lock:
             if self.session is None or self.snapshot is None:
-                return {"error": "Kein Spiel aktiv"}
+                return {"error": "Kein Spiel aktiv – Seite neu laden"}
             try:
                 from market_sim.game import views2
 
@@ -559,7 +613,7 @@ class GameController:
                 "profit": float(snapshot.profit),
                 "sell_price": round(float(snapshot.sell_price), 2),
                 "sales": float(snapshot.recent_sales) * unit_size,
-                "demand": float(snapshot.recent_demand) * unit_size,
+                "demand": max(float(snapshot.recent_demand), float(snapshot.recent_sales)) * unit_size,
                 "inventory": int(snapshot.inventory) * unit_size,
                 "backlog": int(snapshot.backlog) * unit_size,
             }
@@ -628,6 +682,15 @@ class GameController:
                     continue
                 self._seen_notices.add(key)
                 self.messages.append(message)
+        except Exception:
+            pass
+
+        try:
+            from market_sim.game.notices import margin_notice
+            note = margin_notice(self.session.runner, snapshot.firm_id, int(snapshot.year),
+                                 int(snapshot.month), self._margins)
+            if note:
+                self.messages.append(note)
         except Exception:
             pass
 
@@ -735,6 +798,8 @@ class GameController:
             end_reason_text = None
         elif snapshot.reason == "konkurs":
             end_reason_text = "Deine Firma ist in Konkurs gegangen: Das Geld reichte nicht mehr für Rechnungen und Löhne."
+        elif self._ran_to_end and snapshot.reason == "ende":
+            end_reason_text = "Du hast bis zum Ende simuliert."
         elif snapshot.reason == "verkauft":
             end_reason_text = "Du hast deine Firma verkauft. Das Spiel ist zu Ende."
         else:
@@ -770,7 +835,7 @@ class GameController:
                 "employees": int(snapshot.employees),
                 "sell_price": round(float(snapshot.sell_price), 2),
                 "profit": float(snapshot.profit),
-                "recent_demand": float(snapshot.recent_demand) * unit_size,
+                "recent_demand": max(float(snapshot.recent_demand), float(snapshot.recent_sales)) * unit_size,
                 "recent_sales": float(snapshot.recent_sales) * unit_size,
                 "revenue_year": revenue_year,
                 "profit_year": profit_year,
@@ -799,6 +864,7 @@ class GameController:
             "dashboard_progress": int(getattr(self.session, "dashboard_progress", 0) or 0),
             "dashboard_url": "/dashboard" if getattr(self.session, "dashboard_status", None) else None,
             "sim_years": int(runner.config.simulation.years),
+            "autosaved_at": self.autosaved_at,
         }
 
     # ---- Cockpit 2: Ansichten, Makro-Verlauf, Wirkungsprotokoll, Warnungen ----
@@ -828,7 +894,7 @@ class GameController:
             if name not in self.VIEWS:
                 return {"error": f"Unbekannte Ansicht: {name}"}
             if self.session is None or self.snapshot is None:
-                return {"error": "Kein Spiel aktiv"}
+                return {"error": "Kein Spiel aktiv – Seite neu laden"}
             module_name, function_name = self.VIEWS[name]
             module = importlib.import_module(f"market_sim.game.{module_name}")
             extra: dict = {}

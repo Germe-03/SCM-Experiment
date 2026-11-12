@@ -84,6 +84,7 @@ class GameSession:
         self._done = threading.Event()
         self.result: RunResult | None = None
         self.finished = False
+        self.force_end = False  # True: Spiel endet am nächsten Halt (bis zum Ende simulieren)
         self._founding: tuple[str, str, str | None, str | None] | None = None
         self._firm_id: str | None = None
         self._firm = None
@@ -412,7 +413,7 @@ class GameSession:
         if not runner.env.runtimes[firm_id].active:
             self._end_in_thread("konkurs", year, day)
             return
-        if year > self.game_years:
+        if year > self.game_years or self.force_end:
             self._end_in_thread("ende", year, day)
             return
 

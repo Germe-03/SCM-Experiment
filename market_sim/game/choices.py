@@ -72,6 +72,8 @@ class PlayerChoices:
     # Feedback 4 – traders: fixed wholesaler per brand (brand id -> supplier firm id); missing = automatic.
     # The controller turns it into supplier_shares before each round.
     brand_suppliers: dict | None = None
+    # Feedback 5 – traders: own shelf price per brand (brand id -> CHF per bottle); missing = as before.
+    brand_prices: dict | None = None
 
     def offence_intensity(self, name: str) -> float:
         """Intensity 0..1 of an offence the player chose (0 = not committed)."""

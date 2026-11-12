@@ -226,6 +226,16 @@ class BrandBook:
         return value
 
     def retail_price(self, sell_price: float, brand: Brand, firm: Firm | None = None) -> float:
+        if firm is not None:
+            choice = self.player_choices.get(firm.id)
+            prices = getattr(choice, "brand_prices", None) if choice is not None else None
+            if prices and prices.get(brand.id) is not None:
+                try:
+                    own = float(prices[brand.id])
+                except (TypeError, ValueError):
+                    own = 0.0
+                if own > 0:
+                    return own
         markup = self.markup(firm) if firm is not None else 1.0
         return sell_price * self.cfg.price_factors.get(brand.positioning, 1.0) * self.category_value(brand.category) * markup
 

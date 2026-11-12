@@ -325,6 +325,8 @@ def capacity(runner, state, player_id, **extra) -> dict:
     backlog = _runtime_total(runtime, ("backlog",))
     demand_stats = _day_stats(demand)
     sales_stats = _day_stats(sales)
+    for _key in ("min", "max", "avg"):  # Nachfrage nie kleiner als der Absatz
+        demand_stats[_key] = max(demand_stats[_key], sales_stats[_key])
 
     return {
         "capacity_per_day": capacity_per_day,

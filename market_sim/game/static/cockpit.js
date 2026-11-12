@@ -48,6 +48,16 @@ function verbergeFehler() {
     if (fehler) fehler.hidden = true;
 }
 
+async function neuLadenNachFehler() {
+    try {
+        const res = await fetch('/api/game');
+        const neu = await res.json();
+        if (neu && neu.running !== undefined) render(neu);
+    } catch (err) {
+        // Der Fehlerhinweis bleibt stehen.
+    }
+}
+
 async function api(pfad, body) {
     const optionen = body === undefined
         ? { method: 'GET' }
@@ -69,11 +79,13 @@ async function api(pfad, body) {
         }
 
         if (!res.ok || (daten && Object.prototype.hasOwnProperty.call(daten, 'error'))) {
-            zeigeFehler(
-                daten && daten.error
-                    ? String(daten.error)
-                    : `Serverfehler (${res.status}).`
-            );
+            const fehlerText = daten && daten.error
+                ? String(daten.error)
+                : `Serverfehler (${res.status}).`;
+            zeigeFehler(fehlerText);
+            if (/Kein Spiel aktiv/i.test(fehlerText) && pfad !== '/api/game') {
+                window.setTimeout(neuLadenNachFehler, 0);
+            }
             return null;
         }
 
@@ -258,7 +270,7 @@ function setBusy(aktiv, text) {
 
 function updateButtons() {
     const spielBeendet = Boolean(aktuellerStand && aktuellerStand.game_over);
-    const spielKnopfIds = ['runde-btn', 'weiter-btn', 'jahr-btn', 'verkaufen-btn'];
+    const spielKnopfIds = ['runde-btn', 'weiter-btn', 'jahr-btn', 'ende-btn', 'verkaufen-btn'];
 
     spielKnopfIds.forEach((id) => {
         const knopf = element(id);
@@ -1190,6 +1202,33 @@ function leseHashReiter() {
     return REITER_KEYS.includes(key) ? key : 'uebersicht';
 }
 
+let ladeTimer = null;
+
+function zeigeAutosave(state) {
+    const feld = element('autosave-anzeige');
+    if (!feld) return;
+    const zeit = state && state.autosaved_at ? new Date(state.autosaved_at) : null;
+    if (!zeit || Number.isNaN(zeit.getTime())) {
+        feld.hidden = true;
+        return;
+    }
+    const hhmm = zeit.toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' });
+    feld.textContent = `Automatisch gesichert: ${hhmm}`;
+    feld.hidden = false;
+}
+
+function zeigeLadehinweis(state) {
+    window.clearTimeout(ladeTimer);
+    ladeTimer = null;
+    if (state && state.loading) {
+        setzeStatus('Dein letztes Spiel wird wiederhergestellt …');
+        ladeTimer = window.setTimeout(neuLadenNachFehler, 2000);
+    } else {
+        const status = element('status');
+        if (!beschaeftigt && status && status.textContent.startsWith('Dein letztes Spiel wird')) status.hidden = true;
+    }
+}
+
 function render(state) {
     if (!state) return;
 
@@ -1202,6 +1241,8 @@ function render(state) {
     }
     letzterRenderSchluessel = schluessel;
     aktuellerStand = state;
+    zeigeAutosave(state);
+    zeigeLadehinweis(state);
 
     if (!state.running) {
         setzeSichtbar('ansicht-gruendung', true);
@@ -1360,7 +1401,7 @@ function fragePruefung(warnungen) {
     });
 }
 
-async function rundeBeenden(weiterWieBisher, ueberspringen) {
+async function rundeBeenden(weiterWieBisher, ueberspringen, bisEnde) {
     const settings = weiterWieBisher || typeof geaenderteEinstellungen !== 'function'
         ? {}
         : geaenderteEinstellungen();
@@ -1383,6 +1424,16 @@ async function rundeBeenden(weiterWieBisher, ueberspringen) {
     }
     const warnungen = pruefung && Array.isArray(pruefung.warnings) ? pruefung.warnings : [];
     if (warnungen.length && !(await fragePruefung(warnungen))) return;
+
+    if (bisEnde) {
+        await postAktion('/api/run_to_end', { settings, choices, orders }, 'Simuliere bis zum Ende …', async () => {
+            if (typeof leereAuftraegeHolding === 'function') leereAuftraegeHolding();
+            if (typeof leereEntwurf === 'function') leereEntwurf();
+            geplantReiter = {};
+            aktualisiereGeplantZaehler();
+        });
+        return;
+    }
 
     await postAktion(
         ueberspringen ? '/api/skip_year' : '/api/round',
@@ -1510,6 +1561,15 @@ function verbindeEreignisse() {
 
     const jahr = element('jahr-btn');
     if (jahr) jahr.addEventListener('click', () => rundeBeenden(false, true));
+
+    const ende = element('ende-btn');
+    if (ende) {
+        ende.addEventListener('click', () => {
+            if (beschaeftigt) return;
+            if (!window.confirm('Deine Firma läuft danach mit Autopilot bis Jahr 50 weiter, dann öffnet sich das Dashboard. Dein Spiel ist danach beendet. Wirklich bis zum Ende simulieren?')) return;
+            rundeBeenden(false, false, true);
+        });
+    }
 
     const neuesSpiel = element('neues-spiel-btn');
     if (neuesSpiel && typeof neuesSpielStarten === 'function') neuesSpiel.addEventListener('click', neuesSpielStarten);

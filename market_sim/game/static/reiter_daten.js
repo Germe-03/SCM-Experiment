@@ -526,6 +526,9 @@
               ? '–' : zahl(ctx, offer.extra_sales_per_day) + ' Flaschen',
             extra_profit: offer.extra_profit_year === undefined || offer.extra_profit_year === null
               ? '–' : geld(ctx, offer.extra_profit_year),
+            courier_cost_year: offer.courier_cost_year === undefined || offer.courier_cost_year === null ? '–' : geld(ctx, offer.courier_cost_year),
+            own_cost_year: offer.own_cost_year === undefined || offer.own_cost_year === null ? '–' : geld(ctx, offer.own_cost_year),
+            saving_year: offer.saving_year === undefined || offer.saving_year === null ? '–' : geld(ctx, offer.saving_year),
             payback: offer.extra_profit_year === undefined && offer.payback_years === undefined
               ? '–'
               : (offer.payback_years === null || offer.payback_years === undefined
@@ -541,6 +544,13 @@
           { key: 'extra_profit', label: 'Mehr Gewinn pro Jahr', value: function (row) {
             var n = Number(row.offer.extra_profit_year);
             return Number.isFinite(n) ? el('span', n >= 0 ? 'rd-positiv' : 'rd-negativ', row.extra_profit) : row.extra_profit;
+          } },
+          { key: 'courier_cost_year', label: 'Kurierkosten pro Jahr' },
+          { key: 'own_cost_year', label: 'Eigene Kosten pro Jahr' },
+          { key: 'saving_year', label: 'Ersparnis pro Jahr', value: function (row) {
+            var n = Number(row.offer.saving_year);
+            return row.offer.saving_year !== null && row.offer.saving_year !== undefined && Number.isFinite(n)
+              ? el('span', n >= 0 ? 'rd-positiv' : 'rd-negativ', row.saving_year) : row.saving_year;
           } },
           { key: 'payback', label: 'Amortisation' },
           { key: 'advice', label: 'Rat' },

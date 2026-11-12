@@ -766,6 +766,7 @@ def bottleneck(runner, state, player_id, **extra) -> dict:
 
         demand = _day_stats(_recent(state, "recent_demand", player_id))["avg"]
         sales = _day_stats(_recent(state, "recent_sales", player_id))["avg"]
+        demand = max(demand, sales)  # Nachfrage nie kleiner als der Absatz
 
         runtimes = _read(env, "runtimes", {})
         runtime = _read_map(runtimes, player_id)

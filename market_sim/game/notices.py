@@ -3,6 +3,33 @@
 from __future__ import annotations
 
 
+def margin_notice(runner, player_id, year: int, month: int, margins: list) -> dict | None:
+    """Meldung, wenn die Bruttomarge drei Monate in Folge sinkt oder unter 15 % fällt."""
+    try:
+        from market_sim import financials
+        statement = financials.income_statement(runner, player_id, None)
+        revenue = float(statement.get("revenue") or 0.0)
+        gross = float(statement.get("gross_profit") or 0.0)
+    except Exception:
+        return None
+    if revenue <= 0:
+        return None
+    margin = gross / revenue
+    margins.append(margin)
+    del margins[:-4]
+    falling = len(margins) >= 4 and margins[-4] > margins[-3] > margins[-2] > margins[-1]
+    if margin < 0.15:
+        text = (f"Deine Bruttomarge liegt bei {margin * 100:.1f} % und damit unter 15 %. "
+                "Rat: Verkaufspreis erhöhen oder günstiger einkaufen.")
+    elif falling:
+        text = (f"Deine Bruttomarge sinkt seit drei Monaten: jetzt {margin * 100:.1f} % "
+                f"(vor drei Monaten {margins[-4] * 100:.1f} %). "
+                "Rat: Preise und Einkaufskosten prüfen.")
+    else:
+        return None
+    return {"year": year, "month": month, "level": "gelb", "kind": "marge", "text": text}
+
+
 def build_notices(
     runner,
     state,

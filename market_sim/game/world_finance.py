@@ -650,7 +650,44 @@ def _truck_context(runner, state, player_id):
     else:
         margin = 0.3 * price
 
+    courier_cost_year = 0.0
+    own_variable_year = 0.0
+    try:
+        geo = _get(env, "geography")
+        dpy_int = int(dpy)
+        history = list(_get(runtime, "shipment_history", []) or [])
+        shipped = float(sum(history[-dpy_int:]))
+        stage = _get(firm, "stage")
+        downstream = runner.network.downstream_stage(stage)
+        customers = [
+            f for f in runner._firms()
+            if env.runtimes[f.id].active and f.stage == downstream
+        ]
+        gcfg = geo.cfg
+        if customers:
+            mean_km = sum(geo.km(firm, c) for c in customers) / len(customers)
+        else:
+            mean_km = gcfg.local_km
+        carriers = _get(geo, "carriers")
+        if carriers is not None and customers:
+            mean_paid_km = sum(
+                geo.km(firm, c) * carriers.km_multiplier(geo.km(firm, c))
+                for c in customers
+            ) / len(customers)
+            rate = carriers.service_rate(firm)
+        else:
+            mean_paid_km = mean_km
+            rate = gcfg.service_rate
+        fuel = _number(_get(geo, "fuel_index")) or 1.0
+        courier_cost_year = shipped * mean_paid_km * rate * fuel
+        own_variable_year = shipped * mean_km * gcfg.own_rate * fuel
+    except Exception:
+        courier_cost_year = 0.0
+        own_variable_year = 0.0
+
     return {
+        "courier_cost_year": courier_cost_year,
+        "own_variable_year": own_variable_year,
         "scale": scale,
         "dpy": dpy,
         "demand": demand,
@@ -705,10 +742,21 @@ def _truck_advice(offer, ctx):
         if extra_profit_year is None:
             extra_profit_year = 0.0
 
+        courier_cost_year = _r(_number(ctx.get("courier_cost_year")) or 0.0, 2)
+        own_cost_year = _r(annual_cost + (_number(ctx.get("own_variable_year")) or 0.0), 2)
+        saving_year = _r(courier_cost_year - own_cost_year, 2)
+        # Ersparnis gegenüber dem Kurier zählt zum Gewinn (Mehrabsatz-Kosten sind darin schon abgezogen).
+        if own_transport is False:
+            gain_year = saving_year
+        else:
+            gain_year = extra_profit_year
+        if extra_profit_year > 0 and saving_year > 0 and own_transport:
+            gain_year = _r(extra_profit_year + saving_year, 2)
+
         price = _number(_lookup(offer, "price"))
         payback_years = None
-        if extra_profit_year > 0 and price is not None:
-            payback_years = _r(price / extra_profit_year, 2)
+        if gain_year > 0 and price is not None:
+            payback_years = _r(price / gain_year, 2)
 
         if not own_transport:
             advice = (
@@ -741,7 +789,15 @@ def _truck_advice(offer, ctx):
         else:
             advice = "Dieser Lastwagen erhöht deinen Absatz nicht."
 
+        if saving_year > 0:
+            advice += f" Gegenüber dem Kurier sparst du etwa {saving_year:,.0f} CHF pro Jahr."
+        elif courier_cost_year > 0:
+            advice += f" Der Kurier wäre etwa {-saving_year:,.0f} CHF pro Jahr günstiger."
+
         return {
+            "courier_cost_year": courier_cost_year,
+            "own_cost_year": own_cost_year,
+            "saving_year": saving_year,
             "extra_sales_per_day": extra_sales_per_day,
             "extra_profit_year": extra_profit_year,
             "payback_years": payback_years,
@@ -749,6 +805,9 @@ def _truck_advice(offer, ctx):
         }
     except Exception:
         return {
+            "courier_cost_year": 0.0,
+            "own_cost_year": 0.0,
+            "saving_year": 0.0,
             "extra_sales_per_day": 0.0,
             "extra_profit_year": 0.0,
             "payback_years": None,

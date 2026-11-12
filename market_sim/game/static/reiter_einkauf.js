@@ -454,16 +454,23 @@
       });
     }
 
+    var verkaufspreise = Object.assign({}, (ctx.state && ctx.state.choices && ctx.state.choices.brand_prices) || {});
     var inputs = {};
     var brandRows = [];
     brands.forEach(function (brand) {
       var id = String(brand.id);
+      var vorgabe = verkaufspreise[id] !== undefined && verkaufspreise[id] !== null ? verkaufspreise[id] : brand.sell_price;
+      var preisFeld = eingabefeld('Verkaufspreis: ' + wert(brand, 'name', 'Marke'),
+        vorgabe === undefined || vorgabe === null || !Number.isFinite(Number(vorgabe)) ? '' : Number(vorgabe).toFixed(2), 0, 0.01);
+      preisFeld.input.placeholder = 'automatisch';
       var field = eingabefeld('Flaschen/Tag: ' + wert(brand, 'name', 'Marke'), zahlRoh(plan[id]), 0, 1);
       inputs[id] = field.input;
       brandRows.push({
         brand: brand,
         id: id,
         feld: field.input,
+        preisFeld: preisFeld.input,
+        margeText: el('span'),
         warnung: el('span', 'rd-negativ re-lagerwarnung'),
         knopf: el('button', '', '▸'),
         offen: false,
@@ -614,7 +621,12 @@
       { key: 'positioning', label: 'Positionierung', value: function (row) { return wert(row.brand, 'positioning', '–'); } },
       { key: 'quality', label: 'Qualität', value: function (row) { return prozent(ctx, row.brand.quality); } },
       { key: 'reputation', label: 'Ruf', value: function (row) { return prozent(ctx, row.brand.reputation); } },
-      { key: 'price', label: 'Preis', value: function (row) { return preis(ctx, row.brand.price); } },
+      { key: 'price', label: 'Einkaufspreis', value: function (row) { return preis(ctx, row.brand.price); } },
+      { key: 'sell_price', label: 'Mein Verkaufspreis (leer = automatisch)', value: function (row) { return row.preisFeld; } },
+      { key: 'marge', label: 'Marge pro Flasche', value: function (row) { return row.margeText; } },
+      { key: 'rival_price', label: 'Konkurrenzpreis', value: function (row) {
+        return row.brand.rival_price === undefined || row.brand.rival_price === null ? '–' : preis(ctx, row.brand.rival_price);
+      } },
       { key: 'demand_share', label: 'Nachfrageanteil', value: function (row) {
         return prozent(ctx, row.brand.demand_share);
       } },
@@ -662,7 +674,7 @@
       var detail = el('tr', 're-detail');
       detail.hidden = true;
       var zelle = el('td');
-      zelle.colSpan = 10;
+      zelle.colSpan = 13;
       detail.appendChild(zelle);
       row.detail = detail;
       if (!liste.length) {
@@ -719,6 +731,30 @@
         return sum + menge(row.id);
       }, 0);
     });
+
+    function sendeVerkaufspreise() {
+      var result = {};
+      brandRows.forEach(function (row) {
+        var text = String(row.preisFeld.value).trim();
+        var n = Number(text);
+        if (text !== '' && Number.isFinite(n) && n > 0 && (row.geaendert || verkaufspreise[row.id] !== undefined)) result[row.id] = n;
+      });
+      ctx.entscheide({ brand_prices: result });
+    }
+
+    function aktualisiereMarge(row) {
+      var text = String(row.preisFeld.value).trim();
+      var verkauf = text !== '' ? Number(text) : Number(row.brand.sell_price);
+      var einkauf = Number(row.brand.price);
+      if (!Number.isFinite(verkauf) || !Number.isFinite(einkauf) || (text === '' && row.brand.sell_price === undefined)) {
+        row.margeText.textContent = '–';
+        row.margeText.className = '';
+        return;
+      }
+      var marge = verkauf - einkauf;
+      row.margeText.textContent = preis(ctx, marge);
+      row.margeText.className = marge < 0 ? 'rd-negativ' : 'rd-positiv';
+    }
 
     function sendePlan() {
       var result = {};
@@ -809,6 +845,14 @@
         verteileKategorie(key);
         sendePlan();
         aktualisieren();
+      });
+    });
+    brandRows.forEach(function (row) {
+      aktualisiereMarge(row);
+      row.preisFeld.addEventListener('input', function () {
+        row.geaendert = true;
+        aktualisiereMarge(row);
+        sendeVerkaufspreise();
       });
     });
     brandRows.forEach(function (row) {

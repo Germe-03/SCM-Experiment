@@ -1503,3 +1503,16 @@ main, section, .karte, .raster > *, [class*="grid"] > * { min-width: 0; }
 .tochter-rendite table { width: 100%; border-collapse: collapse; }
 .tochter-rendite th, .tochter-rendite td { padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--rand); text-align: left; }
 .tochter-rendite .regeln { display: grid; gap: 0.2rem; }
+
+#fehler:not([hidden]) {
+  position: sticky;
+  top: 0.5rem;
+  z-index: 50;
+  border-width: 2px;
+  font-size: 1.05rem;
+}
+
+#autosave-anzeige {
+  opacity: 0.7;
+  font-size: 0.75rem;
+}
