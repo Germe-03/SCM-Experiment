@@ -216,7 +216,7 @@ events:
       enabled: true
       probability_per_year: 0.20
       duration_days: 365
-      strength: 1.30
+      strength: 1.12  # abgeschwächt (Feedback David): vorher 1.30
       effect_handler: material_cost_multiplier
     - type: recall
       enabled: true
@@ -244,7 +244,7 @@ events:
       enabled: true
       probability_per_year: 0.08
       duration_days: 365
-      strength: 1.25
+      strength: 1.10  # abgeschwächt (Feedback David): vorher 1.25
       effect_handler: material_cost_multiplier
     - type: wage_push
       enabled: true
