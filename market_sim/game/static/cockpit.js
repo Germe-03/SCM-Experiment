@@ -22,6 +22,7 @@ const REITER_KEYS = [
     'einkauf',
     'lager',
     'finanzen',
+    'bank',
     'abschluesse',
     'boerse',
     'rohstoffe',

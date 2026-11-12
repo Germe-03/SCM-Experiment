@@ -587,9 +587,8 @@
     var root = container(elm);
     var planned;
     try { planned = (ctx.geplant && ctx.geplant()) || {}; } catch (e) { planned = {}; }
-    planBox(root, ctx, 'loan', planned.loan ? 'Kredit über ' + geld(ctx, planned.loan.amount) : '');
 
-    return Promise.all([laden(ctx, 'macro'), laden(ctx, 'banks', { amount: kreditBetrag })]).then(function (r) {
+    return Promise.all([laden(ctx, 'macro')]).then(function (r) {
       var macro = r[0];
       if (!macro) fehlerBlock(root, 'Wirtschaftslage');
       else {
@@ -614,90 +613,8 @@
         } else textZeile(mb, 'Keine Verlaufsdaten', 'rd-leise');
       }
 
-      var banks = r[1];
-      if (!banks) fehlerBlock(root, 'Banken');
-      else {
-        var bb = abschnitt(root, 'Banken');
-        bb.appendChild(tabelle([
-          { key: 'name', label: 'Name' },
-          { key: 'margin', label: 'Marge', value: function (b) { return prozent(ctx, b.margin); } },
-          { key: 'equity', label: 'Eigenkapital', value: function (b) { return geld(ctx, b.equity); } },
-          { key: 'capital_ratio', label: 'Eigenkapitalquote', value: function (b) { return prozent(ctx, b.capital_ratio); } },
-          { key: 'active', label: 'Aktiv', value: function (b) { return b.active ? 'Ja' : 'Nein'; } }
-        ], array(banks.banks)));
-        var loans = abschnitt(root, 'Eigene Kredite');
-        loans.appendChild(tabelle([
-          { key: 'bank', label: 'Bank' }, { key: 'amount', label: 'Betrag', value: function (l) { return geld(ctx, l.amount); } },
-          { key: 'rate', label: 'Zins', value: function (l) { return prozent(ctx, l.rate); } },
-          { key: 'years', label: 'Laufzeit Jahre', value: function (l) { return zahl(ctx, l.years); } },
-          { key: 'remaining', label: 'Restschuld', value: function (l) { return geld(ctx, l.remaining); } },
-          { key: 'purpose', label: 'Zweck' }
-        ], array(banks.loans)));
-        var accounts = abschnitt(root, 'Kontoverteilung');
-        var entries = Object.entries(banks.accounts || {});
-        var max = Math.max.apply(null, entries.map(function (pair) { return zahlRoh(pair[1]); }).concat([1]));
-        entries.forEach(function (pair) { balken(accounts, pair[0], prozent(ctx, pair[1]), zahlRoh(pair[1]) / max * 100); });
-        textZeile(accounts, 'Kreditlimite: ' + geld(ctx, banks.credit_limit));
-
-        var calc = abschnitt(root, 'Kreditrechner');
-        var form = el('div', 'rd-form');
-        var label = el('label', '', 'Betrag');
-        var input = el('input');
-        input.type = 'number';
-        input.min = '0';
-        input.step = '1000';
-        input.value = String(kreditBetrag);
-        input.addEventListener('input', function () {
-          kreditBetrag = Math.max(0, zahlRoh(input.value));
-        });
-        label.appendChild(input);
-        form.appendChild(label);
-        var button = el('button', '', 'Angebote anzeigen');
-        button.type = 'button';
-        form.appendChild(button);
-        calc.appendChild(form);
-        var offerArea = el('div');
-        calc.appendChild(offerArea);
-        function zeigeAngebote(data) {
-          offerArea.replaceChildren();
-          if (!data || !Array.isArray(data.offers) || !data.offers.length) {
-            textZeile(offerArea, data ? 'Keine Daten' : 'Daten nicht verfuegbar', 'rd-leise');
-            return;
-          }
-          var list = el('div', 'rd-tabelle');
-          data.offers.forEach(function (offer) {
-            var row = el('div', 'rd-kachel');
-            row.appendChild(el('strong', '', offer.bank + ' · ' + prozent(ctx, offer.rate) + ' · ' + zahl(ctx, offer.years) + ' Jahre'));
-            if (offer.ok === false) {
-              row.appendChild(el('p', 'rd-negativ', offer.reason || 'Nicht verfügbar'));
-            } else {
-              row.appendChild(el('p', '', 'Angebot verfügbar'));
-              var take = el('button', '', 'Kredit aufnehmen');
-              take.type = 'button';
-              take.addEventListener('click', function () {
-                if (window.confirm('Kredit über ' + geld(ctx, kreditBetrag) + ' bei ' + offer.bank + ' aufnehmen?')) {
-                  ctx.plane('loan', { amount: kreditBetrag, bank_id: offer.bank_id });
-                  ctx.neuZeichnen();
-                }
-              });
-              row.appendChild(take);
-            }
-            list.appendChild(row);
-          });
-          offerArea.appendChild(list);
-        }
-        zeigeAngebote(banks);
-        button.addEventListener('click', function () {
-          kreditBetrag = Math.max(0, zahlRoh(input.value));
-          offerArea.replaceChildren();
-          laden(ctx, 'banks', { amount: kreditBetrag }).then(zeigeAngebote).then(function (data) {
-            if (!data) {
-              offerArea.replaceChildren();
-              textZeile(offerArea, 'Daten nicht verfuegbar', 'rd-leise');
-            }
-          });
-        });
-      }
+      var hinweis = abschnitt(root, 'Banken und Kredite');
+      textZeile(hinweis, 'Banken und Kredite: Reiter Bank', 'rd-leise');
     });
   }
 

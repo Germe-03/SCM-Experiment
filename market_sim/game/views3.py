@@ -369,6 +369,15 @@ def _loan_amount(value, firm_id) -> float:
 
 
 def _daughter_debt(env, firm_id) -> float:
+    # Kredite genau dieser Firma (Bankbuch nach Firma) plus Minus auf dem Konto.
+    try:
+        banking = getattr(env, "banking", None)
+        term = float(banking.term_debt(firm_id)) if banking is not None else 0.0
+        runtime = getattr(env, "runtimes", {}).get(firm_id)
+        overdraft = max(0.0, -float(getattr(runtime, "cash", 0.0) or 0.0))
+        return term + overdraft
+    except Exception:
+        pass
     loans = 0.0
     try:
         banking = getattr(env, "banking", None)

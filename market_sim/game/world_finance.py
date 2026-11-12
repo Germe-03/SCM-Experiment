@@ -233,13 +233,111 @@ def banks(runner, state, player_id, amount=None):
     runtime = _lookup(runtimes, player_id)
     credit_limit = _r(_get(runtime, "credit_limit"), 2)
 
+    try:
+        own = _own_bank(runner, state, player_id, env, banking, runtime, loan_items, credit_limit)
+    except Exception:
+        own = _own_bank_empty(credit_limit)
+
     return {
         "banks": banks_data,
         "accounts": accounts,
         "loans": loans,
         "offers": offers,
         "credit_limit": credit_limit,
+        "own": own,
     }
+
+
+_OWN_FIELDS = (
+    "bank_id", "bank_name", "deposit_rate", "overdraft_rate", "loan_rate", "policy_rate",
+    "cash", "credit_limit", "debt_total", "interest_paid_year", "interest_received_year",
+    "next_payment_year",
+)
+
+
+def _own_bank_empty(credit_limit=None):
+    """Leere Hausbank-Angaben, falls nichts berechnet werden kann."""
+    own = {key: None for key in _OWN_FIELDS}
+    own["credit_limit"] = credit_limit
+    return own
+
+
+def _own_bank(runner, state, player_id, env, banking, runtime, loan_items, credit_limit):
+    """Berechnet Hausbank, Zinssätze, Schulden und Zinszahlungen der eigenen Firma."""
+    own = _own_bank_empty(credit_limit)
+    cfg = _get(_get(env, "config"), "bank")
+    cb_cfg = _get(_get(env, "config"), "central_bank")
+    cb = _get(env, "central_bank")
+    policy_rate = _number(_get(cb, "policy_rate"))
+    cb_on = bool(_get(cb_cfg, "enabled", False)) and policy_rate is not None
+
+    bank = None
+    try:
+        if _lookup(_get(banking, "accounts"), player_id):
+            bank = banking.primary_bank(player_id)
+    except Exception:
+        bank = None
+    margin = _number(_get(bank, "margin"))
+    if margin is None:
+        margin = _number(_get(cfg, "loan_margin")) or 0.0
+
+    deposit_rate = _number(_get(cfg, "deposit_rate"))
+    negative_rate = _number(_get(cfg, "negative_rate"))
+    base = _number(_get(cfg, "base_rate"))
+    if cb_on:
+        deposit_rate = max(_number(_get(cfg, "deposit_rate_floor")) or 0.0,
+                           policy_rate - (_number(_get(cfg, "deposit_spread")) or 0.0))
+        negative_rate = max(_number(_get(cfg, "negative_rate_floor")) or 0.0,
+                            (_number(_get(cfg, "negative_policy_factor")) or 0.0) * policy_rate,
+                            -policy_rate)
+        base = policy_rate
+    loan_rate = None
+    overdraft_rate = None
+    if base is not None:
+        max_rate = _number(_get(cfg, "max_rate"))
+        overdraft_rate = base + margin
+        loan_rate = overdraft_rate
+        if max_rate is not None:
+            overdraft_rate = min(max_rate, overdraft_rate)
+    cash = _number(_get(runtime, "cash"))
+    debt_total = 0.0
+    next_payment = 0.0
+    for loan in loan_items:
+        outstanding = _number(_get(loan, "outstanding")) or 0.0
+        rate = _number(_get(loan, "rate")) or 0.0
+        installment = _number(_get(loan, "installment"))
+        if installment is None:
+            years = _number(_get(loan, "years")) or 1.0
+            installment = (_number(_get(loan, "principal")) or outstanding) / max(1.0, years)
+        debt_total += outstanding
+        next_payment += min(outstanding, installment) + outstanding * rate
+
+    paid = received = None
+    try:
+        from market_sim.game.world_firm import year_baseline
+
+        baseline = year_baseline(runner, player_id, _get(state, "year", 1))
+        net = (_number(_get(runtime, "interest_cost")) or 0.0) - (
+            _number(_lookup(baseline, "interest_cost", 0.0)) or 0.0)
+        paid = max(0.0, net)
+        received = max(0.0, -net)
+    except Exception:
+        paid = received = None
+
+    own.update({
+        "bank_id": _plain(_get(bank, "id")),
+        "bank_name": _text(_get(bank, "name")) if bank is not None else None,
+        "deposit_rate": _r(deposit_rate),
+        "overdraft_rate": _r(overdraft_rate),
+        "loan_rate": _r(loan_rate),
+        "policy_rate": _r(policy_rate),
+        "cash": _r(cash, 2),
+        "debt_total": _r(debt_total, 2),
+        "interest_paid_year": _r(paid, 2),
+        "interest_received_year": _r(received, 2),
+        "next_payment_year": _r(next_payment, 2),
+    })
+    return own
 
 
 def stocks(runner, state, player_id, depot=None, history=None):
