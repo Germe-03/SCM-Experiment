@@ -47,7 +47,7 @@ async function zeichneTochterRendite(container) {
     const tabelle = document.createElement('table');
     const kopf = document.createElement('thead');
     const kopfZeile = document.createElement('tr');
-    ['Tochter', 'Kaufpreis', 'Erhalten', 'Wert heute', 'Schulden', 'Rendite/Jahr', 'Regeln'].forEach((text) => {
+    ['Tochter', 'Kaufpreis', 'Erhalten', 'Wert heute', 'Schulden', 'Ertrag/Jahr', 'Regeln'].forEach((text) => {
         const th = document.createElement('th');
         th.textContent = text;
         kopfZeile.appendChild(th);
@@ -59,15 +59,20 @@ async function zeichneTochterRendite(container) {
     daten.rows.forEach((zeile) => {
         const id = String(zeile.id);
         const tr = document.createElement('tr');
-        const rendite = Number(zeile.return_per_year);
+        // Ertrag pro Jahr in CHF; Rendite in % nur, wenn ein Kaufpreis bekannt ist.
+        const ertrag = Number(zeile.return_per_year);
+        const preis = Number(zeile.price_paid);
+        const rendite = Number.isFinite(ertrag) && preis > 0 ? ertrag / preis : NaN;
         [
             zeile.name, zusatzGeld(zeile.price_paid), zusatzGeld(zeile.received),
             zusatzGeld(zeile.value_now), zusatzGeld(zeile.debt),
-            Number.isFinite(rendite) ? `${zusatzZahl(rendite * 100, 1)} %` : '–'
+            Number.isFinite(ertrag)
+                ? `${zusatzGeld(ertrag)}${Number.isFinite(rendite) ? ` (${zusatzZahl(rendite * 100, 1)} %)` : ''}`
+                : '–'
         ].forEach((text, i) => {
             const td = document.createElement('td');
             td.textContent = String(text ?? '–');
-            if (i === 5 && Number.isFinite(rendite)) td.className = rendite >= 0 ? 'positiv' : 'negativ';
+            if (i === 5 && Number.isFinite(ertrag)) td.className = ertrag >= 0 ? 'positiv' : 'negativ';
             tr.appendChild(td);
         });
 
@@ -95,6 +100,8 @@ async function zeichneTochterRendite(container) {
     });
     tabelle.appendChild(koerper);
     bereich.appendChild(tabelle);
+    // Nur eine Tabelle: eine ältere (von früherem Zeichnen) ersetzen.
+    container.querySelectorAll('section.tochter-rendite').forEach((alt) => alt.remove());
     container.appendChild(bereich);
 }
 

@@ -121,7 +121,13 @@ def buy(runner, state, player_id: str, target_id: str, year: int, day: int) -> d
         runner, state, player, target, price, year, day
     )
     if not acquired:
-        return {"ok": False, "message": "Die Uebernahme konnte nicht abgeschlossen werden"}
+        return {"ok": False, "message": "Die Übernahme konnte nicht abgeschlossen werden"}
+    # Kaufpreis und Jahr für die Rendite-Rechnung im Cockpit merken.
+    paid = getattr(runner, "player_purchases", None)
+    if not isinstance(paid, dict):
+        paid = {}
+        runner.player_purchases = paid
+    paid[target.id] = {"price": float(price), "year": int(year)}
 
     return {
         "ok": True,

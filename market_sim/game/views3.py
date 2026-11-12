@@ -279,6 +279,9 @@ def deliveries(runner, state, player_id, **extra) -> dict:
 
 
 def _paid_price(runner, player_id, firm_id) -> float:
+    record = (getattr(runner, "player_purchases", None) or {}).get(firm_id)
+    if isinstance(record, dict) and record.get("price"):
+        return _number(record["price"])
     try:
         holding_groups = getattr(runner, "holding_groups", None)
         group = None
@@ -416,6 +419,9 @@ def daughters(runner, state, player_id, **extra) -> dict:
                 firm = _firm(runner, firm_id)
                 received = _received_amount(runner, firm_id)
                 purchase_year = _purchase_year(runner, player_id, firm_id)
+                record = (getattr(runner, "player_purchases", None) or {}).get(firm_id)
+                if isinstance(record, dict) and record.get("year") is not None:
+                    purchase_year = int(record["year"])
                 if purchase_year is not None and current_year is not None:
                     years = max(1, int(current_year) - purchase_year + 1)
                     return_per_year = received / years
