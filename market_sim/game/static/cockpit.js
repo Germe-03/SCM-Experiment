@@ -464,7 +464,13 @@ function planeReiter(key, value) {
 }
 
 function baueCtx(state) {
-    const aktueller = state || aktuellerStand || {};
+    const roh = state || aktuellerStand || {};
+    // Noch nicht abgeschickte Entscheide (Entwurf bis «Runde beenden») über die Serverwerte legen,
+    // damit Eingaben beim Wechsel zwischen Reitern nicht verloren gehen.
+    const entwurf = (typeof entwurfEntscheide === 'object' && entwurfEntscheide) ? entwurfEntscheide : {};
+    const aktueller = Object.keys(entwurf).length
+        ? { ...roh, choices: { ...(roh.choices || {}), ...entwurf } }
+        : roh;
 
     return {
         state: aktueller,

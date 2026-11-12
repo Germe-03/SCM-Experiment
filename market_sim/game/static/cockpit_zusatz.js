@@ -31,7 +31,7 @@ async function zeichneTochterRendite(container) {
     const daten = await zusatzAnsicht('daughters');
     if (!daten || !Array.isArray(daten.rows) || !daten.rows.length || !container.isConnected) return;
 
-    const gespeichert = (aktuellerStand && aktuellerStand.choices && aktuellerStand.choices.daughter_rules) || {};
+    const gespeichert = (typeof entwurfEntscheide === "object" && entwurfEntscheide && entwurfEntscheide.daughter_rules) || (aktuellerStand && aktuellerStand.choices && aktuellerStand.choices.daughter_rules) || {};
     if (tochterRegeln === null) tochterRegeln = JSON.parse(JSON.stringify(gespeichert));
     daten.rows.forEach((zeile) => {
         const id = String(zeile.id);
