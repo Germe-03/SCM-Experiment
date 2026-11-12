@@ -1600,8 +1600,10 @@ class MarketEnvironment:
         factor = self.config.restaurants.fixed_cost_factor if (
             firm.channel == "restaurant" and self.config.restaurants.enabled) else 1.0
         factor *= self.merger_fixed_factor.get(firm.id, 1.0)
+        reference = cfg.base_reference_units.get(firm.stage, 0.0)
+        size_share = min(1.0, base / reference) if reference > 0 else 1.0
         return factor * (
-            cfg.base_per_day.get(firm.stage, 0.0)
+            cfg.base_per_day.get(firm.stage, 0.0) * size_share
             + cfg.per_capacity_unit_per_day.get(firm.stage, 0.0) * base
         )
 

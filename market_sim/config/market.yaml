@@ -292,6 +292,8 @@ costs:
 fixed_costs:
   base_per_day: {factory: 55000.0, distributor: 8000.0, wholesaler: 9600.0, retailer: 14400.0}
   per_capacity_unit_per_day: {factory: 1820.0, distributor: 2600.0, wholesaler: 2800.0, retailer: 2640.0}
+  # Grundkosten nach Grösse: kleine Brauereien zahlen nur anteilig (bestehende Brauereien liegen bei 55-70).
+  base_reference_units: {factory: 60.0}
 
 # Raw materials per produced sim-unit (real CHF); each index fluctuates over time.
 commodities:

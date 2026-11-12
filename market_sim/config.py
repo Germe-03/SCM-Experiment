@@ -133,6 +133,9 @@ class FixedCostConfig(ConfigModel):
 
     base_per_day: dict[str, float] = Field(default_factory=dict)
     per_capacity_unit_per_day: dict[str, float] = Field(default_factory=dict)
+    # Grundkosten nach Grösse: Eine Firma unter dieser Grösse (Kapazitätseinheiten inkl. Maschinen) zahlt nur
+    # den entsprechenden Anteil der Grundkosten. Fehlt die Stufe, gelten die vollen Grundkosten (wie früher).
+    base_reference_units: dict[str, float] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def _stages_known(self) -> Self:
