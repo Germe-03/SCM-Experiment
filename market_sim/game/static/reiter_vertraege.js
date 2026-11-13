@@ -175,23 +175,44 @@
       { key: 'price', label: 'Preis', value: function (contract) {
         return preis(ctx, contract && contract.price);
       } },
-      { key: 'start_day', label: 'Start (Tag)', value: function (contract) {
-        return zahl(ctx, contract && contract.start_day);
-      } },
       { key: 'days', label: 'Laufzeit', value: function (contract) {
-        return zahl(ctx, contract && contract.days);
+        return monate(contract && contract.days);
       } },
-      { key: 'end_day', label: 'Ende', value: function (contract) {
+      { key: 'end_day', label: 'Endet', value: function (contract) {
         var start = Number(contract && contract.start_day);
         var days = Number(contract && contract.days);
-        return Number.isFinite(start) && Number.isFinite(days) ? zahl(ctx, start + days) : '–';
+        if (!Number.isFinite(start) || !Number.isFinite(days)) return '–';
+        var ende = start + days;
+        return 'Jahr ' + (Math.floor(ende / 360) + 1) + ', ' + MONATE[Math.floor((ende % 360) / 30)];
       } },
-      { key: 'days_left', label: 'Noch (Tage)', value: function (contract) {
+      { key: 'days_left', label: 'Läuft noch', value: function (contract) {
         var left = contract && contract.days_left;
-        if (left === null || left === undefined) return '–';
-        return zahl(ctx, left) + (contract.change ? ' (verlängert bis Entscheid)' : '');
+        if (left === null || left === undefined) {
+          var start = Number(contract && contract.start_day);
+          var days = Number(contract && contract.days);
+          var jahr = Number(ctx && ctx.state && ctx.state.year) || 1;
+          var monat = Number(ctx && ctx.state && ctx.state.month) || 1;
+          if (!Number.isFinite(start) || !Number.isFinite(days)) return '–';
+          left = Math.max(0, start + days - ((jahr - 1) * 360 + (monat - 1) * 30));
+        }
+        var text = left <= 0 ? 'läuft jetzt aus' : 'noch ' + monate(left);
+        return text + (contract.change ? ' (verlängert bis Entscheid)' : '');
       } }
     ];
+  }
+
+  var MONATE = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+  // Tage in Monate umrechnen (30 Tage = 1 Monat), z.B. "9 Monate", "1 Jahr 3 Monate".
+  function monate(tage) {
+    var t = Number(tage);
+    if (!Number.isFinite(t)) return '–';
+    var m = Math.round(t / 30);
+    if (t > 0 && m === 0) return 'weniger als 1 Monat';
+    var j = Math.floor(m / 12), r = m % 12;
+    var teile = [];
+    if (j) teile.push(j + (j === 1 ? ' Jahr' : ' Jahre'));
+    if (r || !j) teile.push(r + (r === 1 ? ' Monat' : ' Monate'));
+    return teile.join(' ');
   }
 
   // Gegenvorschlag zu einem Angebot oder einer Änderung der Gegenseite: Antwort kommt sofort.
@@ -718,7 +739,7 @@
         return preis(ctx, contract.price);
       } },
       { key: 'days', label: 'Laufzeit', value: function (contract) {
-        return zahl(ctx, contract.days);
+        return monate(contract.days);
       } },
       { key: 'status', label: 'Status' }
     ], proposedRows));
