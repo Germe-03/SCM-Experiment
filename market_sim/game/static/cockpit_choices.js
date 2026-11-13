@@ -630,22 +630,24 @@ function zeichneFirma(el, state, autopilot, einstufung, preise) {
 
     formatiereEinstufung(form, einstufung, state);
 
-    const verkauf = firmaKarte(form, 'Verkauf');
-    baueEingabefeld(verkauf, {
-        key: 'base_price',
-        label: 'Preis',
-        istEinstellung: true,
-        typ: 'zahl',
-        min: 0,
-        schritt: '0.01',
-        stellen: 2,
-        hinweis: `Erlaubt: ${state.price_band ? firmaGeld(state.price_band.min) : ''} bis ${state.price_band ? firmaGeld(state.price_band.max) : ''}`
-    });
-    zeichnePreisInfo(verkauf, preise, state);
-    const konkurrenz = kpis.rival_price === null || kpis.rival_price === undefined
-        ? 'kein Konkurrenzpreis'
-        : `${firmaGeld(kpis.rival_price)}`;
-    verkauf.appendChild(baue('small', 'hinweis', `Konkurrenzpreis: ${konkurrenz}`));
+    const verkauf = firmaKarte(form, branch === 'hersteller' ? 'Verkauf' : 'Verkauf und Einkauf');
+    if (branch === 'hersteller') {
+        baueEingabefeld(verkauf, {
+            key: 'base_price',
+            label: 'Preis',
+            istEinstellung: true,
+            typ: 'zahl',
+            min: 0,
+            schritt: '0.01',
+            stellen: 2,
+            hinweis: `Erlaubt: ${state.price_band ? firmaGeld(state.price_band.min) : ''} bis ${state.price_band ? firmaGeld(state.price_band.max) : ''}`
+        });
+        zeichnePreisInfo(verkauf, preise, state);
+        const konkurrenz = kpis.rival_price === null || kpis.rival_price === undefined
+            ? 'kein Konkurrenzpreis'
+            : `${firmaGeld(kpis.rival_price)}`;
+        verkauf.appendChild(baue('small', 'hinweis', `Konkurrenzpreis: ${konkurrenz}`));
+    }
 
     if (branch === 'hersteller') {
         const produktion = firmaKarte(form, 'Produktion');
@@ -676,7 +678,7 @@ function zeichneFirma(el, state, autopilot, einstufung, preise) {
             schritt: '1'
         });
     } else {
-        verkauf.appendChild(baue('small', 'hinweis', 'Wie viel du einkaufst, legst du im Reiter Einkauf fest.'));
+        verkauf.appendChild(baue('p', 'hinweis', 'Verkaufspreise und Mengen legst du pro Marke im Reiter Einkauf fest.'));
         const zumEinkauf = baue('button', '', 'Zum Reiter Einkauf');
         zumEinkauf.type = 'button';
         zumEinkauf.addEventListener('click', () => { window.location.hash = '#einkauf'; });
