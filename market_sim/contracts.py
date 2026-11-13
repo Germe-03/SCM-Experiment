@@ -176,23 +176,21 @@ class ContractBook:
 
     def buyer_orders(self, buyer_id: str, quantity: int, now: int) -> dict[str, int]:
         """Vertragsmengen, die vom Auftrag des Kunden zuerst an die Vertragslieferanten gehen."""
+        # Ein Vertrag ist verbindlich: Der Kunde bestellt die Vertragsmenge jeden Tag, auch wenn er
+        # selbst weniger bräuchte (sonst wäre der Vertrag nur eine unverbindliche Absicht).
         result: dict[str, int] = {}
-        left = int(quantity)
         runtimes = self.env.runtimes
         for contract in sorted(self._active, key=lambda c: c["id"]):
-            if left <= 0:
-                break
             if contract["buyer"] != buyer_id or not self._in_window(contract, now):
                 continue
             supplier = runtimes.get(contract["supplier"])
             if supplier is None or not supplier.active:
                 continue
-            units = min(left, int(round(contract["units_per_day"])))
+            units = int(round(contract["units_per_day"]))
             if units <= 0:
                 continue
             result[contract["supplier"]] = result.get(contract["supplier"], 0) + units
             contract["ordered"] += units
-            left -= units
         return result
 
     def supplier_priority(self, supplier_id: str, requested: dict[str, int], now: int) -> dict[str, int]:

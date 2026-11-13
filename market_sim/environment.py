@@ -651,7 +651,7 @@ class MarketEnvironment:
                 if self.contracts is not None and self.contracts.has_active:
                     # Feedback 6 (B): die Vertragsmenge geht zuerst an den Vertragslieferanten.
                     fixed = self.contracts.buyer_orders(firm.id, quantity, self.period)
-                    quantity -= sum(fixed.values())
+                    quantity = max(0, quantity - sum(fixed.values()))
                 allocations = self._split_by_category(firm, candidates, quantity)
                 for supplier_id, units in fixed.items():
                     allocations[supplier_id] = allocations.get(supplier_id, 0) + units

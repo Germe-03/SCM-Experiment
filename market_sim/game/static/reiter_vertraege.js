@@ -149,6 +149,9 @@
   function vertragsName(contract, side, partners) {
     var id = contract && contract[side];
     var nameKey = side + '_name';
+    // Eigene Firma mit Namen statt interner Kennung (z.B. factory_p01).
+    var eigene = (typeof aktuellerStand !== 'undefined' && aktuellerStand && aktuellerStand.firm) || null;
+    if (eigene && String(id) === String(eigene.id)) return String(eigene.name || id) + ' (du)';
     return partnerName(partners, id, contract && contract[nameKey]);
   }
 
