@@ -201,9 +201,29 @@ def purchasing(runner, state, player_id, **extra) -> dict:
             stock_by_category = {}
         total_stock = sum(max(0.0, _number(amount)) for amount in stock_by_category.values())
 
+        # Abdeckung: welcher Anteil der Kundenwünsche je Getränkeart dieses Jahr bedient wurde
+        # (verkauft ÷ gewünscht, über alle Händler). 100 % = Markt gesättigt, darunter bleibt Nachfrage offen.
+        rival_sales: dict = {}
+        try:
+            wanted = getattr(book, "brand_wanted", {}) or {}
+            sold = getattr(book, "brand_units", {}) or {}
+            cat_wanted: dict = {}
+            cat_sold: dict = {}
+            for brand_id, brand in getattr(book, "brands", {}).items():
+                cat = brand.category
+                cat_wanted[cat] = cat_wanted.get(cat, 0.0) + float(wanted.get(brand_id, 0) or 0)
+                cat_sold[cat] = cat_sold.get(cat, 0.0) + float(sold.get(brand_id, 0) or 0)
+            for cat, w in cat_wanted.items():
+                if w > 0:
+                    rival_sales[cat] = min(1.0, cat_sold.get(cat, 0.0) / w)
+        except Exception:
+            rival_sales = {}
+
         categories = []
         for key, amount in demand.items():
             category_stock = max(0.0, _number(stock_by_category.get(key, 0.0)))
+            total_stock = 1.0
+            category_stock = rival_sales.get(key, 0.0)
             categories.append({
                 "key": _clean(key),
                 "name": _CATEGORY_NAMES.get(key, str(key)),

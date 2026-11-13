@@ -550,7 +550,7 @@
       { key: 'demand_per_day', label: 'Nachfrage/Tag', value: function (category) {
         return zahl(ctx, category.demand_per_day);
       } },
-      { key: 'rival_cover', label: 'Abdeckung durch Konkurrenz', value: function (category) {
+      { key: 'rival_cover', label: 'Bedient im Markt (alle Händler)', value: function (category) {
         var cover = zahlRoh(category.rival_cover);
         return prozent(ctx, cover >= 0 && cover <= 1 ? cover : cover / 100);
       } },
