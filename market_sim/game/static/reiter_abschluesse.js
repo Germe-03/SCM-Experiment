@@ -171,7 +171,7 @@
       ['EBITDA', 'ebitda', 'geld', true],
       ['Abschreibungen', 'depreciation', 'abzug'],
       ['EBIT', 'ebit', 'geld', true],
-      ['Zinsen', 'interest', 'abzug'],
+      ['Zinsen (netto, + = Ertrag)', 'interest', 'zins'],
       ['Gewinn vor Steuern', 'ebt', 'geld', true],
       ['Steuern', 'taxes', 'abzug'],
       ['Reingewinn', 'net_income', 'geld', true, true]
@@ -181,6 +181,7 @@
       function betrag(statement) {
         if (!statement) return '–';
         var value = wert(statement, item[1]);
+        if (item[2] === 'zins') return geld(ctx, -Number(value || 0));
         return item[2] === 'abzug' ? abzug(ctx, value) : geld(ctx, value);
       }
 

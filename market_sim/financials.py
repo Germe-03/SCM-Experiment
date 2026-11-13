@@ -293,7 +293,7 @@ def _income(runner, firm_id, year) -> dict:
         + max(0.0, period["truck_value_start"] - period["truck_value_end"]),
     )
     ebit = ebitda - depreciation
-    interest = max(0.0, period["interest_cost"])
+    interest = period["interest_cost"]  # netto: positiv = Zinskosten, negativ = Zinsertrag auf Guthaben
     ebt = ebit - interest
     taxes = max(
         0.0,
