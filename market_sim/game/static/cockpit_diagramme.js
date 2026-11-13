@@ -214,3 +214,8 @@ function streuDiagramm(punkte, optionen) {
     setTimeout(warte, 0);
     return box;
 }
+
+
+// Deutsche Namen der Rohstoffe (Simulation nutzt englische Schlüssel).
+const ROHSTOFF_NAMEN = {"co2":"CO2","cork":"Kork","fruit":"Früchte","grapes":"Trauben","hops":"Hopfen","malt":"Malz","packaging":"Verpackung (Glas)","glass":"Glas","sugar":"Zucker","water":"Wasser","wheat":"Weizen","barley":"Gerste","electricity":"Strom","energy":"Energie","aluminium":"Aluminium","pet":"PET-Flaschen","yeast":"Hefe","trucks":"Lastwagen"};
+function rohstoffName(key) { return ROHSTOFF_NAMEN[key] || key; }

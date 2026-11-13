@@ -271,7 +271,7 @@
       var choice = ctx.state && ctx.state.choices && ctx.state.choices.component_plan
         ? ctx.state.choices.component_plan[name] : undefined;
       var initial = choice !== undefined && choice !== null ? choice : Math.round(calculated);
-      var feld = eingabefeld('Bestellmenge ' + name, initial, 0, 1);
+      var feld = eingabefeld('Bestellmenge ' + rohstoffName(name), initial, 0, 1);
       eingaben[name] = feld.input;
       return { name: name, feld: feld.input };
     });
@@ -290,7 +290,7 @@
 
     var kostenText = el('p');
     block.appendChild(tabelle([
-      { key: 'name', label: 'Rohstoff' },
+      { key: 'name', label: 'Rohstoff', value: function (row) { return rohstoffName(row.name); } },
       { key: 'bedarf', label: 'Bedarf/Tag', value: function (row) { return zahl(ctx, bedarfWerte[row.name]); } },
       { key: 'stock', label: 'Lager aktuell', value: function (row) { return zahl(ctx, stock[row.name]); } },
       { key: 'price', label: 'Preis', value: function (row) {
@@ -354,10 +354,10 @@
         else rating = 'im Schnitt';
         if (deviation !== null) rating += ' (' + prozent(ctx, deviation) + ')';
       }
-      chartBlock.appendChild(el('strong', '', name + ' · ' + rating));
+      chartBlock.appendChild(el('strong', '', rohstoffName(name) + ' · ' + rating));
       if (typeof ctx.linien === 'function') {
         try {
-          var chart = ctx.linien([{ name: name, werte: historyValues, farbe: 'var(--akzent)' }], {
+          var chart = ctx.linien([{ name: rohstoffName(name), werte: historyValues, farbe: 'var(--akzent)' }], {
             labels: history.map(function (item) { return item ? item.label : ''; }),
             hoehe: 160
           });

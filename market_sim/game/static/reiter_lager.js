@@ -313,7 +313,7 @@
     });
 
     block.appendChild(tabelle([
-      { key: 'name', label: 'Rohstoff' },
+      { key: 'name', label: 'Rohstoff', value: function (row) { return rohstoffName(row.name); } },
       { key: 'stock', label: 'An Lager', value: function (row) { return zahl(ctx, row.stock); } },
       { key: 'use_per_day', label: 'Verbrauch/Tag', value: function (row) { return zahl(ctx, row.use_per_day); } },
       { key: 'days_of_cover', label: 'Reichweite (Tage)', value: function (row) {
