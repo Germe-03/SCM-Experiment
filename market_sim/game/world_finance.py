@@ -765,8 +765,7 @@ def _truck_advice(offer, ctx):
 
         if not own_transport:
             advice = (
-                "Du lieferst über Kurier oder Post, ein eigener Lastwagen "
-                "ändert deinen Absatz nicht."
+                "Kein Mehrabsatz, spart aber Kurierkosten."
             )
         elif (
             personnel_cap <= min(demand, transport_now)
@@ -794,10 +793,8 @@ def _truck_advice(offer, ctx):
         else:
             advice = "Dieser Lastwagen erhöht deinen Absatz nicht."
 
-        if saving_year > 0:
-            advice += f" Gegenüber dem Kurier sparst du etwa {saving_year:,.0f} CHF pro Jahr."
-        elif courier_cost_year > 0:
-            advice += f" Der Kurier wäre etwa {-saving_year:,.0f} CHF pro Jahr günstiger."
+        if saving_year <= 0 and courier_cost_year > 0:
+            advice += " Der Kurier ist günstiger."
 
         return {
             "courier_cost_year": courier_cost_year,

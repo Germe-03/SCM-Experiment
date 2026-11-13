@@ -431,6 +431,14 @@ class GameSession:
         self._apply_orders(self._pending_orders, year, day)
         self._pending_orders = {}
         self._holding_upkeep(year, day, upkeep=False)
+        lab = getattr(runner, "lab", None)
+        if lab is not None and hasattr(lab, "start_player_choice"):
+            try:
+                note = lab.start_player_choice(runner, state, firm_id)
+                if note:
+                    self.order_results.append({"ok": "gestartet" in note, "message": note})
+            except Exception:
+                pass
         if settings is not None:
             runner.policies[firm_id].settings = settings
 

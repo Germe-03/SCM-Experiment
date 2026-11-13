@@ -555,7 +555,12 @@
               ? el('span', n >= 0 ? 'rd-positiv' : 'rd-negativ', row.saving_year) : row.saving_year;
           } },
           { key: 'payback', label: 'Amortisation' },
-          { key: 'advice', label: 'Rat' },
+          { key: 'advice', label: 'Rat', value: function (row) {
+            var span = el('span', '', row.advice || '');
+            span.style.display = 'inline-block';
+            span.style.minWidth = '16em';
+            return span;
+          } },
           { key: 'offer', label: 'Aktion', value: function (row) {
             var actions = el('span');
             ['buy', 'lease'].forEach(function (mode) {

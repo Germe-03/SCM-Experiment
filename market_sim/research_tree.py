@@ -372,6 +372,46 @@ class ResearchTreeLab(ResearchLab):
                 "details": details,
             })
 
+    def start_player_choice(self, runner: SimulationRunner, state: RunState, firm_id: str) -> str | None:
+        """Spielmodus: startet die gewählte Forschung sofort statt erst am Jahresende.
+
+        Startet nur, wenn gerade nichts läuft, die Stufe verfügbar ist und das Geld reicht.
+        Gibt eine Meldung zurück (oder None, wenn nichts gewählt ist).
+        """
+        if not self.cfg.enabled:
+            return None
+        env = runner.env
+        runtime = env.runtimes.get(firm_id)
+        choice = getattr(runner, "player_choices", {}).get(firm_id)
+        forced = getattr(choice, "research_target", None) if choice is not None else None
+        if not forced or runtime is None or not runtime.active:
+            return None
+        firm = runner.network.firm(firm_id)
+        tree = tree_key(firm)
+        label = PROJECT_DE.get(forced, forced)
+        if firm_id in self.running:
+            running = self.running[firm_id][0]
+            if running == forced:
+                return None
+            left = max(0, int(self.running[firm_id][2] - env.period))
+            return (f"{label} wartet: zuerst läuft noch {PROJECT_DE.get(running, running)} "
+                    f"(noch etwa {max(1, round(left / 30))} Monate).")
+        stage = next((o for o in self.options(firm) if o.name == forced), None)
+        if stage is None:
+            return None
+        price = runner.long_run.price_index
+        cost = self.research_cost(tree, stage, state.year) * price
+        if cost > 0 and not env.arrange_funding(firm_id, cost, "rnd", self.cfg.cash_cover, state):
+            return (f"{label} konnte nicht starten: Es braucht {self.cfg.cash_cover:g}-mal die Kosten "
+                    f"({chf(cost)}) als Bargeld oder einen Kredit.")
+        self.running[firm_id] = (stage.name, env.period, env.period + stage.duration_days,
+                                 cost / stage.duration_days, state.year, "research", tree)
+        self.stats["rnd_started"] += 1
+        state.events.append({"year": state.year, "day": env.period % runner.config.simulation.days_per_year,
+                             "firm": firm_id, "event": "rnd_started",
+                             "details": f"{label}, Kosten {chf(cost)}, {stage.duration_days} Tage"})
+        return f"Forschung {label} gestartet ({chf(cost)}, {stage.duration_days} Tage)."
+
     def _apply_stage(self, runner: SimulationRunner, firm, stage: ResearchStageConfig) -> str:
         """Apply a newly implemented tree stage."""
         if stage.kind == "reputation":
