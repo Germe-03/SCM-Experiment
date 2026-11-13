@@ -191,10 +191,14 @@ class FirmPolicy:
         # Langes Gedächtnis der Nachfrage (Halbwertszeit gut ein halbes Jahr): Bei leeren Regalen sinkt die
         # beobachtete Nachfrage, weil Kunden zur Konkurrenz gehen. Ohne Gedächtnis bestellt die Firma dann
         # immer weniger (Abwärtsspirale). Nachbestellt wird mindestens 80 % des langfristigen Niveaus.
+        # Gemessene Nachfrage eines Händlers zählt nur Kunden, die ihn zuerst wählen. Kunden, die bei
+        # ausverkaufter Konkurrenz zu ihm ausweichen, fehlen darin; der Absatz kann darum höher sein.
+        # Darum: Nachfrage = mindestens der Absatz.
+        seen = max(obs.recent_demand, obs.recent_sales)
         long_demand = getattr(self, "_long_demand", None)
-        long_demand = obs.recent_demand if long_demand is None else 0.996 * long_demand + 0.004 * obs.recent_demand
+        long_demand = seen if long_demand is None else 0.996 * long_demand + 0.004 * seen
         self._long_demand = long_demand
-        demand = max(1.0, obs.recent_demand, 0.8 * long_demand)
+        demand = max(1.0, seen, 0.8 * long_demand)
         target = round(strategy.target_safety_stock_days * demand)
         # P1 fix: on_order includes both in-transit and supplier-queued units.
         position = obs.inventory + obs.on_order - obs.backlog
