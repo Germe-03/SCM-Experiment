@@ -185,8 +185,67 @@
         var start = Number(contract && contract.start_day);
         var days = Number(contract && contract.days);
         return Number.isFinite(start) && Number.isFinite(days) ? zahl(ctx, start + days) : '–';
+      } },
+      { key: 'days_left', label: 'Noch (Tage)', value: function (contract) {
+        var left = contract && contract.days_left;
+        if (left === null || left === undefined) return '–';
+        return zahl(ctx, left) + (contract.change ? ' (verlängert bis Entscheid)' : '');
       } }
     ];
+  }
+
+  // Gegenvorschlag zu einem Angebot oder einer Änderung der Gegenseite: Antwort kommt sofort.
+  function gegenvorschlagUi(ctx, contract, basis, box) {
+    var form = el('div', 'rd-form');
+    form.hidden = true;
+    var units = el('input', 're-eingabe');
+    units.type = 'number'; units.min = '1'; units.step = '1';
+    units.value = String(Math.round(zahlRoh(basis.units_per_day)));
+    var price = el('input', 're-eingabe');
+    price.type = 'number'; price.min = '0'; price.step = '0.01';
+    price.value = zahlRoh(basis.price).toFixed(2);
+    var monat = Number(ctx && ctx.state && ctx.state.month) || 1;
+    var restTage = Math.max(1, (12 - monat + 1) * 30);
+    var laufzeit = el('select', 're-eingabe');
+    [['Rest des aktuellen Jahres', restTage], ['2 Jahre (dieses und nächstes)', restTage + 360], ['5 Jahre', restTage + 4 * 360]]
+      .forEach(function (e) { var o = el('option', '', e[0] + ' (' + e[1] + ' Tage)'); o.value = String(e[1]); laufzeit.appendChild(o); });
+    laufzeit.value = String(restTage + 360);
+    var ul = el('label', '', 'Flaschen/Tag'); ul.appendChild(units);
+    var pl = el('label', '', 'Preis (CHF)'); pl.appendChild(price);
+    var ll = el('label', '', 'Laufzeit (ab Annahme)'); ll.appendChild(laufzeit);
+    var meldung = el('p', 'rd-leise');
+    form.appendChild(ul); form.appendChild(pl); form.appendChild(ll);
+    var senden = schaltflaeche('Gegenvorschlag senden', function () {
+      var u = Number(units.value);
+      var p = Number(price.value);
+      if (!Number.isFinite(u) || u <= 0 || !Number.isFinite(p) || p <= 0) {
+        meldung.className = 'rd-negativ';
+        meldung.textContent = 'Menge und Preis müssen grösser als 0 sein.';
+        return;
+      }
+      senden.disabled = true;
+      meldung.className = 'rd-leise';
+      meldung.textContent = 'Warte auf Antwort …';
+      fetch('/api/contract_counter', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: contract.id, units_per_day: Math.round(u), price: Math.round(p * 100) / 100, days: Number(laufzeit.value) })
+      }).then(function (r) { return r.json(); }).then(function (d) {
+        senden.disabled = false;
+        meldung.className = d && d.accepted ? 'rd-positiv' : 'rd-negativ';
+        meldung.textContent = (d && (d.message || d.error)) || 'Keine Antwort vom Server.';
+        if (d && d.accepted && ctx && typeof ctx.neuZeichnen === 'function') {
+          setTimeout(function () { ctx.neuZeichnen(); }, 1500);
+        }
+      }).catch(function () {
+        senden.disabled = false;
+        meldung.className = 'rd-negativ';
+        meldung.textContent = 'Der Server ist nicht erreichbar.';
+      });
+    });
+    form.appendChild(senden);
+    form.appendChild(meldung);
+    box.appendChild(schaltflaeche('Gegenvorschlag', function () { form.hidden = !form.hidden; }));
+    box.appendChild(form);
   }
 
   // Vertragsanpassung: Vorschlag machen sowie offene Änderungen annehmen oder ablehnen.
@@ -219,6 +278,7 @@
         planen(ctx, 'contract_change_decline', id);
         status.textContent = 'Geplant: ablehnen';
       }));
+      gegenvorschlagUi(ctx, contract, change, box);
       return;
     }
     if (change && change.by_me) {
@@ -609,6 +669,7 @@
       declineButton.disabled = declined;
       action.appendChild(acceptButton);
       action.appendChild(declineButton);
+      gegenvorschlagUi(ctx, contract, contract, action);
       contract._action = action;
       return contract;
     });

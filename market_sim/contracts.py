@@ -64,6 +64,10 @@ class ContractBook:
                 contract["end_day"] = now
                 continue
             if contract["status"] == STATUS_ACTIVE and now >= contract["start_day"] + contract["days"]:
+                if contract.get("change"):
+                    # Offene Änderung: Vertrag läuft weiter, bis sie angenommen oder abgelehnt ist.
+                    contract["days"] = now - contract["start_day"] + 1
+                    continue
                 contract["status"] = STATUS_ENDED
                 contract["end_reason"] = "Laufzeit abgelaufen"
         self._active = [c for c in self.contracts if c["status"] == STATUS_ACTIVE]
@@ -228,6 +232,46 @@ class ContractBook:
                                      "day": self._now()}
         contract["change"] = None
         return contract
+
+    def counter(self, contract_id: int, player_id: str, units_per_day: float, price: float,
+                days: int) -> dict:
+        """Gegenvorschlag des Spielers zu einem Angebot oder einer Änderung der KI; die KI antwortet sofort.
+
+        Menge in Sim-Einheiten pro Tag. Bei Ablehnung bleibt das ursprüngliche Angebot bzw. die
+        ursprüngliche Änderung bestehen. Rückgabe: {"accepted": bool, "contract": dict}.
+        """
+        contract = self.get(contract_id)
+        if player_id not in (contract["supplier"], contract["buyer"]):
+            raise ValueError("Du bist an diesem Vertrag nicht beteiligt")
+        units, price, days = float(units_per_day), float(price), int(days)
+        if units <= 0 or price <= 0 or days <= 0:
+            raise ValueError("Menge, Preis und Laufzeit müssen positiv sein")
+        other = contract["buyer"] if player_id == contract["supplier"] else contract["supplier"]
+        if self._is_player(other):
+            raise ValueError("Die Gegenseite ist ein Spieler und entscheidet selbst")
+        runtime = self.env.runtimes.get(other)
+        if runtime is None or not runtime.active:
+            raise ValueError("Die Gegenseite ist nicht mehr aktiv")
+        change = contract.get("change")
+        if contract["status"] == STATUS_OFFERED and contract["proposed_by"] != player_id:
+            accepted = self._ai_accepts(contract, other, units, price, player_id)
+            if accepted:
+                contract.update(units_per_day=units, price=price, days=days, proposed_by=player_id,
+                                status=STATUS_ACTIVE, start_day=self._now())
+                self._refresh()
+            return {"accepted": accepted, "contract": contract}
+        if contract["status"] == STATUS_ACTIVE and change and change["proposed_by"] != player_id:
+            accepted = self._ai_accepts(contract, other, units, price, player_id)
+            if accepted:
+                contract["change"] = {"units_per_day": units, "price": price, "days": days,
+                                      "proposed_by": player_id, "day": self._now()}
+                self.accept_change(contract_id)
+            return {"accepted": accepted, "contract": contract}
+        raise ValueError("Zu diesem Vertrag gibt es kein offenes Angebot und keine offene Änderung der Gegenseite")
+
+    def counter_bottles(self, contract_id: int, player_id: str, bottles_per_day: float, price: float,
+                        days: int) -> dict:
+        return self.counter(contract_id, player_id, float(bottles_per_day) / self._unit_size(), price, days)
 
     def view(self, contract: dict) -> dict:
         """Kopie mit Mengen in Flaschen (units_per_day, ordered, delivered) und Unterlieferung."""

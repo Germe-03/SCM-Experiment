@@ -184,6 +184,15 @@ def _contract_output(contract: dict, player_id, unit: int, runner=None) -> dict:
     else:
         result["change"] = None
 
+    try:
+        now = int(runner.env.period) if runner is not None else None
+    except Exception:
+        now = None
+    if now is not None and contract.get("start_day") is not None and contract.get("days") is not None:
+        result["days_left"] = max(0, int(_number(contract.get("start_day")) + _number(contract.get("days")) - now))
+    else:
+        result["days_left"] = None
+
     partner_id, role = _partner_for_contract(contract, player_id)
     result["partner_name"] = _firm_name(runner, partner_id) if runner is not None else partner_id
     result["role"] = role
@@ -360,8 +369,18 @@ def production(runner, state, player_id, **extra) -> dict:
         days_of_cover = stock_bottles / orders_per_day if orders_per_day > 0 else None
         margin = sell_price - costs["total"]
 
+        contract_per_day = 0.0
+        try:
+            book = getattr(runner, "contracts", None)
+            if book is not None:
+                contract_per_day = sum(_number(c.get("units_per_day")) for c in book.active_for(player_id)
+                                       if c.get("supplier") == player_id) * unit
+        except Exception:
+            contract_per_day = 0.0
+
         return {
             "capacity_per_day": int(round(capacity_per_day)),
+            "contract_per_day": int(round(contract_per_day)),
             "producible_per_day": int(round(producible_per_day)),
             "materials": materials,
             "cost_per_bottle": {
@@ -641,6 +660,18 @@ def contract_notices(runner, state, player_id, seen: set, year: int, month: int)
                         "kind": "vertrag",
                         "text": text,
                     })
+                if status == "aktiv" and not contract.get("change"):
+                    try:
+                        left = int(_number(contract.get("start_day")) + _number(contract.get("days")) - int(runner.env.period))
+                    except Exception:
+                        left = None
+                    if left is not None and 0 < left <= 30:
+                        key = ("vertrag-laeuft-aus", contract_id, contract.get("start_day"), contract.get("days"))
+                        if key not in seen:
+                            seen.add(key)
+                            notices.append({"year": year, "month": month, "level": "gelb", "kind": "vertrag",
+                                            "text": f"Der Liefervertrag mit {partner_name} läuft in {left} Tagen aus. "
+                                                    "Im Reiter Verträge eine Anpassung mit neuer Laufzeit vorschlagen, sonst endet er."})
                 elif status == "aktiv" and (contract.get("change") or contract.get("change_result")):
                     change = contract.get("change")
                     result = contract.get("change_result")

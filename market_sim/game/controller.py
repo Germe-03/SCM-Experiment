@@ -399,6 +399,31 @@ class GameController:
                 return Path(path)
             return None
 
+    def contract_counter(self, body: dict) -> dict:
+        """Gegenvorschlag zu einem Vertragsangebot oder einer Änderung; die KI antwortet sofort."""
+        with self._lock:
+            if self.session is None:
+                return {"ok": False, "message": "Kein Spiel aktiv – Seite neu laden"}
+            book = getattr(self.session.runner, "contracts", None)
+            if book is None:
+                return {"ok": False, "message": "Lieferverträge sind noch nicht verfügbar"}
+            try:
+                result = book.counter_bottles(int(body["id"]), self.session._firm_id,
+                                              float(body["units_per_day"]), float(body["price"]),
+                                              int(body["days"]))
+            except (KeyError, TypeError, ValueError) as exc:
+                return {"ok": False, "message": str(exc) or "Ungültige Angaben"}
+            try:
+                self._autosave(rotate=False)
+            except Exception:
+                pass
+            if result["accepted"]:
+                return {"ok": True, "accepted": True,
+                        "message": "Gegenvorschlag angenommen – der Vertrag gilt ab sofort zu deinen Bedingungen."}
+            return {"ok": True, "accepted": False,
+                    "message": "Gegenvorschlag abgelehnt (Preis oder Menge passt der Gegenseite nicht). "
+                               "Das ursprüngliche Angebot steht weiter."}
+
     def sell(self) -> dict:
         """Verkauft die Firma und beendet das Spiel."""
         with self._lock:

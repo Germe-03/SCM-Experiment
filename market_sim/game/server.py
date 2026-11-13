@@ -125,6 +125,8 @@ class Handler(SimpleHTTPRequestHandler):
                     body.get("choices") if isinstance(body.get("choices"), dict) else None,
                     body.get("orders") if isinstance(body.get("orders"), dict) else None,
                 )
+            elif path == "/api/contract_counter":
+                result = self.controller.contract_counter(body)
             elif path == "/api/sell":
                 result = self.controller.sell()
             elif path == "/api/advice":

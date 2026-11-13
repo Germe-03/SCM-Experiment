@@ -196,6 +196,9 @@
       zahlRoh(producible) < zahlRoh(capacity) ? 'rd-negativ' : ''
     );
     kachel(raster, 'Bestellungen der Kunden pro Tag', zahl(ctx, data.orders_per_day) + ' Flaschen');
+    var vertrag = zahlRoh(data.contract_per_day);
+    kachel(raster, 'Für Verträge nötig (Minimum)', zahl(ctx, vertrag) + ' Flaschen/Tag',
+      vertrag > zahlRoh(producible) ? 'rd-negativ' : '');
     kachel(raster, 'Lager / Reichweite', zahl(ctx, stock) + ' Flaschen · ' + zahl(ctx, days) + ' Tage');
     block.appendChild(raster);
     textZeile(block, 'Produziert wird jeden Tag so viel, wie Kapazität und Rohstofflager zulassen.', 'rd-note');
@@ -283,6 +286,7 @@
     zielFeld.style.width = '9em';
     zielFeld.setAttribute('aria-label', 'Produktionsziel in Flaschen pro Tag');
     zielFeld.placeholder = 'Flaschen/Tag';
+    if (zahlRoh(data.contract_per_day) > 0) zielFeld.value = String(Math.round(zahlRoh(data.contract_per_day)));
     zielBox.appendChild(zielFeld);
     zielBox.appendChild(el('span', '', ' Flaschen pro Tag (höchstens ' + zahl(ctx, kapazitaet) + ') '));
     var zielKnopf = el('button', '', 'Rohstoffe dafür bestellen');
