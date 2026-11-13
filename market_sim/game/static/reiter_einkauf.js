@@ -652,7 +652,10 @@
     function pruefeLiefermenge(row) {
       var info = liefermenge(row);
       var plan = menge(row.id);
-      if (info.n && plan > info.summe) {
+      if (info.n && plan > 0 && info.summe <= 0) {
+        row.warnung.textContent = ' Zurzeit hat kein Grosshändler diese Marke an Lager. Du bekommst sie erst, '
+          + 'wenn der Hersteller nachliefert. Bestellung bleibt offen.';
+      } else if (info.n && plan > info.summe) {
         row.warnung.textContent = ' Plan übersteigt die lieferbare Menge (' + zahl(ctx, info.summe) + ' pro Tag)';
       } else {
         row.warnung.textContent = '';

@@ -505,7 +505,8 @@ def brand_sources(runner, state, player_id, **extra) -> dict:
                         "supplier_name": _clean(supplier_name),
                         "price": price,
                         "stock": stock_bottles,
-                        "deliverable_per_day": deliverable,
+                        # Mehr als sein Lager kann ein Grosshändler an einem Tag nicht liefern.
+                        "deliverable_per_day": min(deliverable, stock_bottles),
                         "fill_rate": round(fill_rate, 3),
                     }
                     candidate_data.append((stock_bottles, row))
