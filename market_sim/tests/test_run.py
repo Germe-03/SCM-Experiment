@@ -36,10 +36,11 @@ def test_write_outputs(tmp_path):
         "carrier_report.csv": len(result.carriers),
     }
     json_files = {"exit_analysis.json", "personas.json", "holdings.json", "laws.json"}
-    assert {path.name for path in paths} == set(expected_rows) | json_files
+    stock_files = {"stock_daily.csv", "stock_weekly.csv"}  # Börse ab Tag 1 (Regel David)
+    assert {path.name for path in paths} == set(expected_rows) | json_files | stock_files
     for path in paths:
         assert path.exists() and path.stat().st_size > 0
-        if path.name in json_files:
+        if path.name in json_files or path.name in stock_files:
             continue
         with path.open(newline="", encoding="utf-8") as source:
             rows = list(csv.reader(source))
@@ -93,6 +94,7 @@ def test_main_writes_to_requested_directory(tmp_path):
         "brand_report.csv", "class_report.csv", "offence_ledger.csv",
         "decisions.csv", "region_report.csv", "exit_analysis.json", "personas.json",
         "holdings.json", "laws.json", "bank_reports.csv", "carrier_report.csv",
+        "stock_daily.csv", "stock_weekly.csv",  # Börse ab Tag 1 (Regel David)
     }
 
 

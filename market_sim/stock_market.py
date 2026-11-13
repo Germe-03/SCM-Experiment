@@ -167,9 +167,9 @@ class StockMarket:
         if year >= tradable_from:
             for fid in active:
                 choice = (getattr(runner, "player_choices", None) or {}).get(fid)
+                # Regel (David): jede Firma ist börsenkotiert – Startfirmen ab Tag 1, neue Firmen
+                # (auch die des Spielers) nach listing_min_years Jahren. Ein Wunsch «Ja» beschleunigt nur.
                 wish = choice.listing if choice is not None else None
-                if wish is False or (choice is not None and wish is not True):
-                    continue  # Spielerfirmen gehen nur an die Börse, wenn der Spieler es will
                 if (fid not in self.listed and fid not in self._ever
                         and (wish is True or fid in self._exempt
                              or year - self._first_active[fid] >= cfg.listing_min_years)):
@@ -185,7 +185,9 @@ class StockMarket:
                     # Ursache des Startabsturzes: Buchwert-Boden (Kapazitaet) lag weit ueber dem
                     # Fundamentalwert, den die taegliche Kursbildung ansteuert. Bei den
                     # Anfangskotierungen (Spielmodus) startet der Kurs deshalb auf dem Fundamentalwert.
-                    value0 = fundamental if tradable_from < cfg.tradable_from_year else max(fundamental, book)
+                    # Start auf dem Fundamentalwert, den auch die tägliche Kursbildung ansteuert (sonst
+                    # stürzt der Kurs nach der Kotierung ab).
+                    value0 = fundamental
 
                     self.listed.add(fid)
                     self._ever.add(fid)

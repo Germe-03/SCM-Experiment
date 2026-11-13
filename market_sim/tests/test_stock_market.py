@@ -114,7 +114,7 @@ def test_disabled_market_does_nothing():
     assert sm.listed == set()
 
 
-def test_listing_waits_one_year():
+def test_new_firm_lists_after_three_years():
     runner, _ = build_runner(days_per_year=4)
     runner.config.stock_market.tradable_from_year = 1
     state = runner.start()
@@ -130,6 +130,9 @@ def test_listing_waits_one_year():
     assert fid not in sm.listed
 
     sm.daily(runner, state, 3, 0, 2)
+    assert fid not in sm.listed  # Regel: neue Firmen erst nach 3 Jahren an der Börse
+
+    sm.daily(runner, state, 5, 0, 3)
     assert fid in sm.listed
 
 

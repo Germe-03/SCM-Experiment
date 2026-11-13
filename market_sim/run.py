@@ -15,7 +15,7 @@ from market_sim.policies import policies_for_network
 from market_sim.runner import RunResult, SimulationRunner
 
 
-EVENT_FIELDS = ["year", "day", "firm", "event", "details"]
+EVENT_FIELDS = ["year", "day", "firm", "event", "details", "reason", "successor"]
 
 
 def run_simulation(

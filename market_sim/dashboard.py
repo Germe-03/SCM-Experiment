@@ -751,7 +751,7 @@ function stockPoints(period){const s=D.stocks||{days:[],years:[]},points=s.days.
 function stockLabel(i,period){const s=D.stocks,day=(s.days[i]-1)%D.meta.days_per_year;
  return `Jahr ${s.years[i]}, ${period==='month'?'Monat '+(Math.min(11,Math.floor(day*12/D.meta.days_per_year))+1):'Woche '+(Math.floor(day/7)+1)}`}
 function stockNormal(values,base){base=base??values.find(v=>v!=null&&v>0);return values.map(v=>v==null||!base?null:100*v/base)}
-function stockOptions(points,period,rate=false){return {plugins:{tooltip:{callbacks:{title:items=>items.length?stockLabel(points[items[0].dataIndex],period):'',label:c=>c.dataset.label+': '+(c.dataset.yAxisID==='y2'?pct(c.parsed.y):nf(c.parsed.y,2))}}},scales:{
+function stockOptions(points,period,rate=false){return {plugins:{tooltip:{callbacks:{title:items=>items.length?stockLabel(points[items[0].dataIndex],period):'',label:c=>c.dataset.label+': '+(c.dataset.yAxisID==='y2'&&c.dataset.label!=='Börsenindex'?pct(c.parsed.y):nf(c.parsed.y,2)+(c.dataset.label==='Börsenindex'?' Punkte':''))}}},scales:{
  x:{grid:{display:false},title:{display:true,text:'Zeit (Jahr)'},ticks:{autoSkip:false,callback:(v,i)=>{const y=D.stocks.years[points[i]],step=Math.max(1,Math.ceil((range.to-range.from+1)/8));return (i===0||y!==D.stocks.years[points[i-1]])&&(y-range.from)%step===0?'Jahr '+y:null}}},
  y:{title:{display:true,text:rate?'Indexstand':'Start = 100'},...fmtAxis()},...(rate?{y2:{position:'right',grid:{display:false},title:{display:true,text:'SNB-Leitzins (%)'},...fmtAxis('pct')}}:{})}}}
 function stockLineName(fid){const g=(D.holding_groups||[]).find(g=>g.listing_id===fid&&g.status!=='active'&&g.successor&&g.successor!==fid&&firm(g.successor));return g?fname(g.successor)+' (vorher '+fname(fid)+')':fname(fid)}

@@ -115,7 +115,7 @@ banking:
 # Phase 17: Börse. Ab Jahr 5 sind alle aktiven Firmen handelbar (Börsengang über eine Bank ist ein TODO).
 stock_market:
   enabled: true
-  tradable_from_year: 5
+  tradable_from_year: 1  # David: Startfirmen sind ab Tag 1 an der Börse
   shares_per_firm: 1000000
   # Kurs = (Gewinn x Faktor + Kasse) x Stimmung; höherer Leitzins senkt den Faktor.
   base_multiple: 8.0
@@ -133,7 +133,7 @@ stock_market:
   etf_weighting: market_cap   # oder equal (gleichgewichtet)
   etf_base: 100.0
   # Realistischer Kurs: Neulinge werden erst nach so vielen vollen Jahren im Markt gelistet.
-  listing_min_years: 1
+  listing_min_years: 3  # David: jede neue Firma geht nach 3 Jahren an die Börse
   # Der verwendete Wert nähert sich dem Fundamentalwert täglich um diesen Anteil an.
   value_adjust_rate: 0.05
   # Tageslimite: der Kurs ändert sich pro Tag höchstens um diesen Anteil (auch bei Schocks).

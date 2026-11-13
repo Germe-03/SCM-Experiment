@@ -856,17 +856,10 @@ function zeichneFirma(el, state, autopilot, einstufung, preise) {
         schritt: '1',
         autopilot
     });
-    baueEingabefeld(geld, {
-        key: 'listing',
-        label: 'Börsengang',
-        typ: 'dreifach',
-        optionen: [
-            { value: 'auto', label: 'Nein (Standard)' },
-            { value: 'ja', label: 'Ja' },
-            { value: 'nein', label: 'Nein' }
-        ],
-        autopilot
-    });
+    // Jede Firma ist börsenkotiert: Startfirmen ab Tag 1, neue Firmen (auch deine) nach 3 Jahren.
+    geld.appendChild(baue('p', 'hinweis',
+        'Börse: Deine Firma geht automatisch nach 3 Jahren an die Börse, wie jede neue Firma. '
+        + 'Die Firmen vom Start sind ab Tag 1 kotiert.'));
 
     if (['hersteller', 'grosshaendler', 'verteiler'].includes(branch)) {
         const transport = firmaKarte(form, 'Transport');
