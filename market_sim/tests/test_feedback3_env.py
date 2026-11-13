@@ -33,7 +33,9 @@ def test_component_helpers_and_plan(tmp_path):
     assert set(env.component_stock(firm_id)) == set(need) == set(env.component_prices(firm_id))
     assert all(p > 0 for p in env.component_prices(firm_id).values())
     before = sum(env.component_stock(firm_id).values())
-    plan = env.component_need(firm_id, 100000)
+    # Produziert wird mit voller Kapazität (Feedback 6): Der Plan muss darüber liegen, damit Vorrat bleibt.
+    capacity_bottles = env._effective_capacity(firm_id) * controller.session.runner.config.unit_scale.real_units_per_sim_unit
+    plan = env.component_need(firm_id, 3 * capacity_bottles)
     for _ in range(3):
         state = controller.end_round({}, {"component_plan": plan})
         assert "error" not in state

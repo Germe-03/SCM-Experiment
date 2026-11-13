@@ -227,6 +227,7 @@ class GameSession:
             runner.env.player_choices = runner.player_choices
         runner.player_choices[firm.id] = PlayerChoices()
         runner.policies[firm.id].choices = runner.player_choices[firm.id]
+        runner.policies[firm.id].env = runner.env
         if (
             stage == "factory"
             and firm.category == "wine"
@@ -531,6 +532,7 @@ class GameSession:
         loan = orders.get("loan")
         if isinstance(loan, dict) and loan.get("amount"):
             run(lambda: actions.take_loan(runner, state, fid, float(loan["amount"]), loan.get("bank_id"), year, day))
+        self._apply_contract_orders(orders, run)
         truck = orders.get("truck")
         if isinstance(truck, dict) and truck.get("type"):
             run(lambda: actions.buy_truck(runner, state, fid, truck["type"], truck.get("mode", "buy"), year, day))
@@ -542,6 +544,51 @@ class GameSession:
                 run(lambda t=target, n=shares: self.depot.sell(runner, fid, t, float(n)))
             for target, shares in (stock.get("buy") or {}).items():
                 run(lambda t=target, n=shares: self.depot.buy(runner, fid, t, float(n)))
+
+    def _apply_contract_orders(self, orders: dict, run) -> None:
+        """Lieferverträge: contract_propose / contract_accept / contract_decline / contract_cancel."""
+        runner, fid = self.runner, self._firm_id
+        book = getattr(runner, "contracts", None)
+        wanted = ("contract_propose", "contract_accept", "contract_decline", "contract_cancel")
+        if not any(orders.get(key) for key in wanted):
+            return
+
+        def call(function):
+            if book is None:
+                return {"ok": False, "message": "Lieferverträge sind noch nicht verfügbar"}
+            try:
+                return function()
+            except ValueError as exc:
+                return {"ok": False, "message": str(exc)}
+
+        propose = orders.get("contract_propose")
+        if isinstance(propose, dict) and propose.get("partner"):
+            def do_propose():
+                partner = propose["partner"]
+                role = None
+                for item in book.partners(fid):
+                    if item.get("id") == partner:
+                        role = item.get("role")
+                if role is None:
+                    return {"ok": False, "message": "Mit dieser Firma ist kein Liefervertrag möglich"}
+                supplier, buyer = (fid, partner) if role == "Kunde" else (partner, fid)
+                book.propose_bottles(supplier, buyer, float(propose["units_per_day"]),
+                                     float(propose["price"]), int(propose["days"]),
+                                     propose.get("category") or None, fid)
+                return {"ok": True, "message": "Vertragsvorschlag wurde gemacht"}
+            run(lambda: call(do_propose))
+        for key, method, text in (("contract_accept", "accept", "Vertrag wurde angenommen"),
+                                  ("contract_decline", "decline", "Vertrag wurde abgelehnt"),
+                                  ("contract_cancel", "cancel", "Vertrag wurde gekündigt")):
+            value = orders.get(key)
+            if value in (None, "", False):
+                continue
+            ids = value if isinstance(value, list) else [value]
+            for contract_id in ids:
+                def do(contract_id=contract_id, method=method, text=text):
+                    getattr(book, method)(int(contract_id))
+                    return {"ok": True, "message": text}
+                run(lambda do=do: call(do))
 
     def _holding_upkeep(self, year: int, day: int, upkeep: bool = True) -> None:
         """Aktualisiert CEOs, Tendenzen und Lohnkosten der Holding-Töchter."""

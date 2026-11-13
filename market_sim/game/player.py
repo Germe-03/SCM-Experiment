@@ -54,6 +54,8 @@ class PlayerPolicy(FirmPolicy):
     def __init__(self, settings: PlayerSettings):
         self.settings = settings
         self.choices = None  # PlayerChoices der Firma (von der Session gesetzt)
+        self.env = None  # MarketEnvironment (von der Session gesetzt) für die effektive Kapazität
+        self.capacity_hint = None  # Ersatz, falls env fehlt
 
     def decide_annual(
         self,
@@ -91,6 +93,23 @@ class PlayerPolicy(FirmPolicy):
     ) -> DailyDecision:
         """Build a daily decision from player settings and observations."""
         sell_price = strategy.clamp_price(self.settings.base_price)
+        if firm.stage == "factory":
+            # Hersteller: immer so viel, wie die Kapazität erlaubt (Environment kürzt auf Rohstoffe/Geld).
+            capacity = None
+            env = getattr(self, "env", None)
+            if env is not None:
+                try:
+                    capacity = int(env._effective_capacity(firm.id))
+                except Exception:
+                    capacity = None
+            if capacity is None:
+                hint = getattr(self, "capacity_hint", None)
+                capacity = int(hint) if hint is not None else int(firm.capacity)
+            return DailyDecision(
+                sell_price=sell_price,
+                order_qty=max(0, capacity),
+                overtime_level=min(1.0, max(0.0, self.settings.overtime_level)),
+            )
         plan = getattr(getattr(self, "choices", None), "brand_plan", None)
         plan_bottles = 0.0
         if isinstance(plan, dict):

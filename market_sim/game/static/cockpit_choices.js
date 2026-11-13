@@ -632,51 +632,11 @@ function zeichneFirma(el, state, autopilot, einstufung, preise) {
 
     const verkauf = firmaKarte(form, branch === 'hersteller' ? 'Verkauf' : 'Verkauf und Einkauf');
     if (branch === 'hersteller') {
-        baueEingabefeld(verkauf, {
-            key: 'base_price',
-            label: 'Preis',
-            istEinstellung: true,
-            typ: 'zahl',
-            min: 0,
-            schritt: '0.01',
-            stellen: 2,
-            hinweis: `Erlaubt: ${state.price_band ? firmaGeld(state.price_band.min) : ''} bis ${state.price_band ? firmaGeld(state.price_band.max) : ''}`
-        });
-        zeichnePreisInfo(verkauf, preise, state);
-        const konkurrenz = kpis.rival_price === null || kpis.rival_price === undefined
-            ? 'kein Konkurrenzpreis'
-            : `${firmaGeld(kpis.rival_price)}`;
-        verkauf.appendChild(baue('small', 'hinweis', `Konkurrenzpreis: ${konkurrenz}`));
-    }
-
-    if (branch === 'hersteller') {
-        const produktion = firmaKarte(form, 'Produktion');
-        baueEingabefeld(produktion, {
-            key: 'target_safety_stock_days',
-            label: 'Lagerziel in Tagen',
-            istEinstellung: true,
-            typ: 'zahl',
-            min: 0,
-            schritt: '1'
-        });
-        baueEingabefeld(produktion, {
-            key: 'order_qty',
-            label: 'Feste Menge pro Tag (Flaschen)',
-            istEinstellung: true,
-            typ: 'zahl',
-            min: 0,
-            schritt: '1',
-            hinweis: 'In Flaschen pro Tag. Leer = automatisch.'
-        });
-        baueEingabefeld(produktion, {
-            key: 'overtime_level',
-            label: 'Überstunden %',
-            istEinstellung: true,
-            typ: 'prozent',
-            min: 0,
-            max: 100,
-            schritt: '1'
-        });
+        verkauf.appendChild(baue('p', 'hinweis', 'Produktion und Preis: Reiter Produktion.'));
+        const zuProd = baue('button', '', 'Zum Reiter Produktion');
+        zuProd.type = 'button';
+        zuProd.addEventListener('click', () => { window.location.hash = '#einkauf'; });
+        verkauf.appendChild(zuProd);
     } else {
         verkauf.appendChild(baue('p', 'hinweis', 'Verkaufspreise und Mengen legst du pro Marke im Reiter Einkauf fest.'));
         const zumEinkauf = baue('button', '', 'Zum Reiter Einkauf');
@@ -875,18 +835,7 @@ function zeichneFirma(el, state, autopilot, einstufung, preise) {
         });
     }
 
-    if (branch === 'hersteller') {
-        const rohstoffe = firmaKarte(form, 'Rohstoffe');
-        baueEingabefeld(rohstoffe, {
-            key: 'commodity_courage',
-            label: 'Einsatz für Rohstoffe %',
-            typ: 'prozent',
-            min: 0,
-            max: 100,
-            schritt: '1',
-            autopilot
-        });
-    }
+    // Rohstoffe kauft der Hersteller im Reiter Produktion ein (Mengen pro Rohstoff).
 
     if (branch === 'gastro') {
         const gastro = firmaKarte(form, 'Gastro');

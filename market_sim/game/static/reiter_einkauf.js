@@ -226,215 +226,6 @@
     return { aktualisieren: aktualisieren, block: block };
   }
 
-  function herstellerRender(root, ctx, data) {
-    var block = abschnitt(root, 'Einkauf Rohstoffe');
-    if (!data) {
-      hinweis(block);
-      return;
-    }
-
-    var need = data.need && typeof data.need === 'object' ? data.need : {};
-    var stock = data.stock && typeof data.stock === 'object' ? data.stock : {};
-    var prices = data.prices && typeof data.prices === 'object' ? data.prices : {};
-    var history = array(data.history);
-    var rohstoffe = Object.keys(need);
-    [stock, prices].forEach(function (obj) {
-      Object.keys(obj).forEach(function (name) {
-        if (rohstoffe.indexOf(name) < 0) rohstoffe.push(name);
-      });
-    });
-    history.forEach(function (item) {
-      Object.keys(item || {}).forEach(function (name) {
-        if (name !== 'label' && rohstoffe.indexOf(name) < 0) rohstoffe.push(name);
-      });
-    });
-
-    var ziel = produktionsziel !== null ? produktionsziel : zahlRoh(data.target_bottles);
-    var zielFeld = eingabefeld('Produktionsziel (Flaschen/Tag)', ziel, 0, 1);
-    produktionsziel = ziel;
-    var zielForm = el('div', 'rd-form');
-    zielForm.appendChild(zielFeld.label);
-    block.appendChild(zielForm);
-
-    var eingaben = {};
-    var bedarfWerte = {};
-    function berechneBedarf(name, target) {
-      var original = zahlRoh(need[name]);
-      var targetBottles = zahlRoh(data.target_bottles);
-      if (targetBottles === 0) return original;
-      return original * target / targetBottles;
-    }
-
-    var tableRows = rohstoffe.map(function (name) {
-      var calculated = berechneBedarf(name, ziel);
-      bedarfWerte[name] = calculated;
-      var choice = ctx.state && ctx.state.choices && ctx.state.choices.component_plan
-        ? ctx.state.choices.component_plan[name] : undefined;
-      var initial = choice !== undefined && choice !== null ? choice : Math.round(calculated);
-      var feld = eingabefeld('Bestellmenge ' + rohstoffName(name), initial, 0, 1);
-      eingaben[name] = feld.input;
-      return { name: name, feld: feld.input };
-    });
-
-    function aktuellerPlan() {
-      var plan = {};
-      rohstoffe.forEach(function (name) {
-        plan[name] = Math.max(0, zahlRoh(eingaben[name].value));
-      });
-      return plan;
-    }
-
-    function sendPlan() {
-      ctx.entscheide({ component_plan: aktuellerPlan() });
-    }
-
-    var kostenText = el('p');
-    block.appendChild(tabelle([
-      { key: 'name', label: 'Rohstoff', value: function (row) { return rohstoffName(row.name); } },
-      { key: 'bedarf', label: 'Bedarf/Tag', value: function (row) { return zahl(ctx, bedarfWerte[row.name]); } },
-      { key: 'stock', label: 'Lager aktuell', value: function (row) { return zahl(ctx, stock[row.name]); } },
-      { key: 'price', label: 'Preis', value: function (row) {
-        var current = prices[row.name];
-        if (current === undefined || current === null) {
-          for (var i = history.length - 1; i >= 0; i -= 1) {
-            if (history[i] && history[i][row.name] !== undefined && history[i][row.name] !== null) {
-              current = history[i][row.name];
-              break;
-            }
-          }
-        }
-        row.currentPrice = current;
-        return preis(ctx, current);
-      } },
-      { key: 'bewertung', label: 'Preisbewertung', value: function (row) {
-        var values = history.map(function (item) {
-          return item && item[row.name] !== undefined && item[row.name] !== null
-            ? Number(item[row.name]) : NaN;
-        }).filter(Number.isFinite);
-        var current = row.currentPrice;
-        if (current === undefined || current === null) {
-          current = values.length ? values[values.length - 1] : null;
-        }
-        if (!values.length || current === null || !Number.isFinite(Number(current))) return 'Noch keine Kursdaten';
-        var average = values.reduce(function (sum, n) { return sum + n; }, 0) / values.length;
-        var difference = average !== 0 ? Number(current) / average - 1 : Number(current) === 0 ? 0 : null;
-        var label = 'im Schnitt';
-        var cls = '';
-        if (difference !== null && Number(current) < average * 0.95) {
-          label = 'günstig gegenüber Schnitt';
-          cls = 'rd-positiv';
-        } else if (difference !== null && Number(current) > average * 1.05) {
-          label = 'teuer gegenüber Schnitt';
-          cls = 'rd-negativ';
-        }
-        var text = label + (difference === null ? '' : ' (' + prozent(ctx, difference) + ')');
-        return el('span', cls, text);
-      } },
-      { key: 'feld', label: 'Bestellfeld', value: function (row) { return row.feld; } }
-    ], tableRows));
-
-    var kursRaster = el('div', 're-raster');
-    rohstoffe.forEach(function (name) {
-      var chartBlock = el('div', 'rd-kachel re-diagramm');
-      var historyValues = history.map(function (item) {
-        return item && item[name] !== undefined && item[name] !== null ? item[name] : null;
-      });
-      var values = historyValues.map(Number).filter(Number.isFinite);
-      var current = prices[name];
-      if (current === undefined || current === null) {
-        current = values.length ? values[values.length - 1] : null;
-      }
-      var average = values.length
-        ? values.reduce(function (sum, n) { return sum + n; }, 0) / values.length : null;
-      var rating = 'Noch keine Kursdaten';
-      if (average !== null && current !== null && Number.isFinite(Number(current))) {
-        var deviation = average !== 0 ? Number(current) / average - 1 : Number(current) === 0 ? 0 : null;
-        if (deviation !== null && Number(current) < average * 0.95) rating = 'günstig gegenüber Schnitt';
-        else if (deviation !== null && Number(current) > average * 1.05) rating = 'teuer gegenüber Schnitt';
-        else rating = 'im Schnitt';
-        if (deviation !== null) rating += ' (' + prozent(ctx, deviation) + ')';
-      }
-      chartBlock.appendChild(el('strong', '', rohstoffName(name) + ' · ' + rating));
-      if (typeof ctx.linien === 'function') {
-        try {
-          var chart = ctx.linien([{ name: rohstoffName(name), werte: historyValues, farbe: 'var(--akzent)' }], {
-            labels: history.map(function (item) { return item ? item.label : ''; }),
-            hoehe: 160
-          });
-          if (chart) chartBlock.appendChild(chart);
-          else hinweis(chartBlock);
-        } catch (e) {
-          hinweis(chartBlock);
-        }
-      } else {
-        hinweis(chartBlock);
-      }
-      kursRaster.appendChild(chartBlock);
-    });
-    if (rohstoffe.length) block.appendChild(kursRaster);
-
-    block.appendChild(kostenText);
-    var storage = storageAnzeige(root, ctx, data.storage, function () {
-      var used = zahlRoh(data.storage && data.storage.used);
-      var extra = 0;
-      var plan = aktuellerPlan();
-      rohstoffe.forEach(function (name) {
-        var platz = data.space_per_component;
-        if (platz && typeof platz === 'object') platz = platz[name];
-        if (platz === undefined || platz === null) platz = 1;
-        extra += zahlRoh(plan[name]) * zahlRoh(platz);
-      });
-      return used + extra;
-    });
-
-    function aktualisieren() {
-      var plan = aktuellerPlan();
-      var gesamt = 0;
-      rohstoffe.forEach(function (name) {
-        var current = prices[name];
-        if (current === undefined || current === null) {
-          for (var i = history.length - 1; i >= 0; i -= 1) {
-            if (history[i] && history[i][name] !== undefined && history[i][name] !== null) {
-              current = history[i][name];
-              break;
-            }
-          }
-        }
-        gesamt += plan[name] * zahlRoh(current);
-      });
-      var target = Math.max(0, zahlRoh(zielFeld.input.value));
-      kostenText.textContent = 'Kosten der Bestellung: ' + geld(ctx, gesamt) + ' pro Tag' +
-        (target > 0 ? ' · pro Flasche: ' + preis(ctx, gesamt / target) : '');
-      storage.aktualisieren();
-    }
-
-    rohstoffe.forEach(function (name) {
-      eingaben[name].addEventListener('input', function () {
-        sendPlan();
-        aktualisieren();
-      });
-    });
-    zielFeld.input.addEventListener('input', function () {
-      ziel = Math.max(0, zahlRoh(zielFeld.input.value));
-      produktionsziel = ziel;
-      rohstoffe.forEach(function (name) {
-        bedarfWerte[name] = berechneBedarf(name, ziel);
-        eingaben[name].value = String(Math.max(0, Math.round(bedarfWerte[name])));
-      });
-      var bedarfCells = block.querySelectorAll('.rd-tabelle tbody tr');
-      Array.prototype.forEach.call(bedarfCells, function (row, index) {
-        if (rohstoffe[index] === undefined) return;
-        var cell = row.children[1];
-        if (cell) cell.textContent = zahl(ctx, bedarfWerte[rohstoffe[index]]);
-      });
-      sendPlan();
-      aktualisieren();
-    });
-
-    sendPlan();
-    aktualisieren();
-  }
-
   function haendlerRender(root, ctx, data, quellen) {
     var nachfrageBlock = abschnitt(root, 'Nachfrage je Getränkeart');
     var markenBlock = abschnitt(root, 'Marken');
@@ -985,13 +776,17 @@
     var root = el('div', 'rd-reiter');
     elm.appendChild(root);
 
+    var branch = ctx && ctx.state && ctx.state.firm ? ctx.state.firm.branch : '';
+    if (branch === 'hersteller' && REITER.produktion) {
+      await REITER.produktion.render(root, ctx);
+      // Hersteller kaufen Rohstoffe am Markt, keine Lieferungen von Grosshändlern: kein Lieferungen-Block.
+      return;
+    }
     var p = await laden(ctx, 'purchasing');
     var l = await laden(ctx, 'deliveries');
-    var branch = ctx && ctx.state && ctx.state.firm ? ctx.state.firm.branch : '';
     var q = branch === 'hersteller' ? null : await laden(ctx, 'brand_sources');
 
-    if (branch === 'hersteller') herstellerRender(root, ctx, p);
-    else haendlerRender(root, ctx, p, q);
+    haendlerRender(root, ctx, p, q);
     lieferungenRender(root, ctx, l);
   }
 

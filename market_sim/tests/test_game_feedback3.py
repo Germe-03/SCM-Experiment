@@ -86,4 +86,5 @@ def test_brand_plan_sets_daily_order(tmp_path):
         decision = policy.decide_daily(firm, obs, strategy, runner.config)
     except AttributeError:
         return  # obs wird im Plan-Zweig nicht gebraucht; sonst Test überspringen
-    assert decision.order_qty == math.ceil(15_000 / unit)
+    # Feedback 6: Hersteller produzieren immer auf Kapazität, kein fester Plan mehr
+    assert decision.order_qty == runner.env._effective_capacity("factory_p01")

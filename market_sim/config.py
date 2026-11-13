@@ -1029,6 +1029,22 @@ class ResearchConfig(ConfigModel):
     entry_inheritance_factor: float = Field(default=1.0, ge=0, le=1)
 
 
+class ContractsConfig(ConfigModel):
+    """Spielmodus Feedback 6 (B): Lieferverträge zwischen Spieler- und KI-Firmen."""
+
+    enabled: bool = True
+    # KI nimmt an, wenn der Preis höchstens so viel schlechter als ihr Marktpreis ist ...
+    price_tolerance: float = Field(default=0.05, ge=0)
+    # ... und die Menge höchstens diesen Anteil ihrer Kapazität beträgt.
+    max_capacity_share: float = Field(default=0.5, gt=0)
+    # Eigene Angebote der KI an den Spieler: höchstens so viele pro Quartal.
+    offers_per_quarter: int = Field(default=2, ge=0)
+    offer_probability: float = Field(default=0.4, ge=0, le=1)
+    offer_capacity_share: float = Field(default=0.1, gt=0)
+    offer_discount: float = Field(default=0.03, ge=0)
+    offer_days: int = Field(default=90, gt=0)
+
+
 class MarketingConfig(ConfigModel):
     """Phase 10: advertising builds awareness of brands and stores, which fades again."""
 
@@ -1340,6 +1356,7 @@ class MarketConfig(ConfigModel):
     research: ResearchConfig = Field(default_factory=ResearchConfig)
     patents: PatentsConfig = Field(default_factory=PatentsConfig)
     marketing: MarketingConfig = Field(default_factory=MarketingConfig)
+    contracts: ContractsConfig = Field(default_factory=ContractsConfig)
     restaurants: RestaurantConfig = Field(default_factory=RestaurantConfig)
     holdings: HoldingsConfig = Field(default_factory=HoldingsConfig)
     holding_groups: HoldingGroupsConfig = Field(default_factory=HoldingGroupsConfig)

@@ -239,6 +239,7 @@ class MarketEnvironment:
         self.period = 0
         self.cumulative_lost_sales = 0
         self.cancelled_units = 0
+        self.contracts = None  # Feedback 6 (B): ContractBook, vom Runner gesetzt
         self.runtimes: dict[str, FirmRuntime] = {}
         self.inventory_history: dict[str, list[int]] = {}
         self.backlog_history: dict[str, list[int]] = {}
@@ -496,6 +497,17 @@ class MarketEnvironment:
             if self.enforce_capacity:
                 available = min(available, self._effective_capacity(supplier_id))
             allocations = proportional_integer_allocation(available, requested)
+            contract_part: dict[str, int] = {}
+            if self.contracts is not None and self.contracts.has_active:
+                # Feedback 6 (B): Vertragskunden werden zuerst bedient.
+                contract_part = self.contracts.supplier_priority(supplier_id, requested, self.period)
+                if contract_part:
+                    first = proportional_integer_allocation(available, contract_part)
+                    rest = {key: requested[key] - first.get(key, 0) for key in requested
+                            if requested[key] - first.get(key, 0) > 0}
+                    second = proportional_integer_allocation(available - sum(first.values()), rest)
+                    allocations = {key: first.get(key, 0) + second.get(key, 0) for key in requested}
+                    contract_part = {key: first.get(key, 0) for key in contract_part}
             if self.banking is None:
                 shipped = sum(allocations.values())
                 runtime.inventory -= shipped
@@ -511,6 +523,11 @@ class MarketEnvironment:
             for downstream_id, quantity in allocations.items():
                 if downstream_id in self.runtimes:
                     price = self.network.firm(supplier_id).sell_price
+                    market_price = price
+                    contract_units = contract_part.get(downstream_id, 0)
+                    if contract_units and quantity:
+                        price = self.contracts.price_for(supplier_id, downstream_id, quantity, contract_units,
+                                                         market_price, self.period)
                     if self.banking is not None and self.config.banking.block_purchases and quantity:
                         customer = self.network.firm(downstream_id)
                         def cost(units):
@@ -533,6 +550,11 @@ class MarketEnvironment:
                                 0, self.runtimes[downstream_id].on_order - cancelled)
                             requested[downstream_id] = quantity
                             allocations[downstream_id] = quantity
+                    if contract_units:
+                        contract_units = min(contract_units, quantity)
+                        price = self.contracts.price_for(supplier_id, downstream_id, quantity, contract_units,
+                                                         market_price, self.period)
+                        self.contracts.record_delivery(supplier_id, downstream_id, contract_units, self.period)
                     trade_value = self._trade_value(quantity, price)
                     parcel = {}
                     delay = 0
@@ -625,7 +647,14 @@ class MarketEnvironment:
                     pending = self.runtimes[firm.id].on_order
                     affordable = self.affordable_units(firm.id, quantity + pending, unit_cost)
                     quantity = min(quantity, max(0, affordable - pending))
+                fixed: dict[str, int] = {}
+                if self.contracts is not None and self.contracts.has_active:
+                    # Feedback 6 (B): die Vertragsmenge geht zuerst an den Vertragslieferanten.
+                    fixed = self.contracts.buyer_orders(firm.id, quantity, self.period)
+                    quantity -= sum(fixed.values())
                 allocations = self._split_by_category(firm, candidates, quantity)
+                for supplier_id, units in fixed.items():
+                    allocations[supplier_id] = allocations.get(supplier_id, 0) + units
                 split_orders[firm.id] = allocations
                 if allocations:
                     selected_suppliers[firm.id] = min(

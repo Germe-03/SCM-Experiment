@@ -686,6 +686,14 @@ class GameController:
             pass
 
         try:
+            from market_sim.game.views5 import contract_notices
+            self.messages.extend(contract_notices(
+                self.session.runner, self.session.state, snapshot.firm_id, self._seen_notices,
+                int(snapshot.year), int(snapshot.month)))
+        except Exception:
+            pass
+
+        try:
             from market_sim.game.notices import margin_notice
             note = margin_notice(self.session.runner, snapshot.firm_id, int(snapshot.year),
                                  int(snapshot.month), self._margins)
@@ -884,6 +892,8 @@ class GameController:
         "takeover_offers": ("views2", "takeover_offers"), "assortment": ("views2", "assortment"),
         "purchasing": ("views3", "purchasing"), "deliveries": ("views3", "deliveries"),
         "daughters": ("views3", "daughters"), "stocks_all": ("views3", "stocks_all"),
+        "production": ("views5", "production"), "contracts": ("views5", "contracts"),
+        "brand_marketing": ("views5", "brand_marketing"),
         "inventory": ("views4", "inventory"), "brand_sources": ("views4", "brand_sources"),
     }
 

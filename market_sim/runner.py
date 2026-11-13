@@ -230,6 +230,10 @@ class SimulationRunner:
         self.fin_start: dict = {}
         self._fin_unit_cost: dict = {}
         self.env.player_choices = self.player_choices  # same dict, for subsystems that only see env
+        # Feedback 6 (B): Lieferverträge (eigener Zufallsstrom, ohne Verträge wirkungslos).
+        from market_sim.contracts import ContractBook
+        self.contracts = ContractBook(self)
+        self.env.contracts = self.contracts
 
     def _in_maturation(self, firm_id: str, year: int) -> bool:
         """True for a wine entrant still within its grace period and without a first sale."""
@@ -577,6 +581,8 @@ class SimulationRunner:
         for day in range(self.config.simulation.days_per_year):
             if self.day_hook is not None:
                 self.day_hook(self, state, year + 1, day)
+            if self.config.contracts.enabled and (self.contracts.contracts or self.player_choices):
+                self.contracts.daily()
             decisions = {}
             for firm in self._firms():
                 runtime = self.env.runtimes[firm.id]

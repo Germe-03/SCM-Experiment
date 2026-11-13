@@ -20,6 +20,7 @@ const REITER_KEYS = [
     'forschung',
     'logistik',
     'einkauf',
+    'vertraege',
     'lager',
     'finanzen',
     'bank',
@@ -1274,6 +1275,8 @@ function render(state) {
 
     setzeText('firmenname', firma.name || '');
     setzeText('branche-anzeige', branche);
+    const einkaufKnopf = document.querySelector('.reiter-btn[data-tab="einkauf"]');
+    if (einkaufKnopf) einkaufKnopf.textContent = firma.branch === 'hersteller' ? 'Produktion' : 'Einkauf';
     setzeText('einstufung-anzeige', einstufung || '');
     setzeSichtbar('einstufung-anzeige', Boolean(einstufung));
     setzeText('zeit-anzeige', `Jahr ${state.year}, ${state.month_name || `Monat ${state.month}`}`);

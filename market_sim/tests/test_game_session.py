@@ -104,7 +104,7 @@ def test_player_policy_decide_daily():
         PlayerSettings(base_price=(band.min + band.max) / 2)
     ).decide_daily(firm, obs, strategy, config)
 
-    assert fixed.order_qty == 5
+    assert fixed.order_qty == automatic.order_qty  # Hersteller: immer Kapazität (Feedback 6)
     assert automatic.order_qty >= 0
 
 
