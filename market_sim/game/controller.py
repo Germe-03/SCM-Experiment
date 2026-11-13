@@ -237,6 +237,7 @@ class GameController:
                 self.macro_history = []
                 self.purchase_history = []
                 self.stock_history = []
+                self.brand_history = []
                 self.effects = []
                 self._pending_changes = []
                 self._year_totals = {}
@@ -381,6 +382,7 @@ class GameController:
             self.macro_history = []
             self.purchase_history = []
             self.stock_history = []
+            self.brand_history = []
             self.effects = []
             self._pending_changes = []
             self._year_totals = {}
@@ -476,6 +478,7 @@ class GameController:
                 self.macro_history = []
                 self.purchase_history = []
                 self.stock_history = []
+                self.brand_history = []
                 self.effects = []
                 self._pending_changes = []
                 self._year_totals = {}
@@ -658,6 +661,7 @@ class GameController:
         self._record_macro(snapshot)
         self._record_effect()
         self._record_stock(snapshot)
+        self._record_brands(snapshot)
         try:
             prices = self.session.runner.env.component_prices(snapshot.firm_id)
             if prices:
@@ -916,6 +920,8 @@ class GameController:
                 extra["history"] = list(self.purchase_history)
             elif name == "inventory":
                 extra["stock_history"] = list(self.stock_history)
+            elif name == "brand_marketing":
+                extra["brand_history"] = list(getattr(self, "brand_history", []) or [])
             elif name == "costs":
                 extra["year"] = int(self.snapshot.year)
             elif name == "stocks":
@@ -969,6 +975,26 @@ class GameController:
                 shares = {supplier_id: 1.0 for supplier_id in shares}
             if shares:
                 choices_copy["supplier_shares"] = shares
+        except Exception:
+            pass
+
+    def _record_brands(self, snapshot) -> None:
+        """Bekanntheit, Ruf und Absatzanteil je Marke der eigenen Kategorie pro Runde (Wirkung des Marketings)."""
+        try:
+            from market_sim.game.views5 import brand_marketing
+            data = brand_marketing(self.session.runner, self.session.state, snapshot.firm_id)
+            if not isinstance(getattr(self, "brand_history", None), list):
+                self.brand_history = []
+            label = self.stock_history[-1]["label"] if self.stock_history else f"Jahr {int(snapshot.year)}"
+            self.brand_history.append({
+                "label": label,
+                "budget": (data.get("choices") or {}).get("marketing_budget"),
+                "brands": {str(b.get("id")): {"awareness": b.get("awareness"), "share": b.get("share_of_sales"),
+                                              "reputation": b.get("reputation"), "name": b.get("name"),
+                                              "mine": b.get("is_mine")}
+                           for b in data.get("brands", []) if isinstance(b, dict)},
+            })
+            self.brand_history = self.brand_history[-600:]
         except Exception:
             pass
 

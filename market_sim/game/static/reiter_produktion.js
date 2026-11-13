@@ -584,6 +584,7 @@
       void e;
 
       productionRender(root, ctx, p, m);
+      wirkungRender(root, ctx, m);
     } catch (error) {
       try {
         if (elm && typeof elm.replaceChildren === 'function') {
@@ -596,6 +597,42 @@
         // Fehler bei der Wiederherstellung der Anzeige ignorieren.
       }
     }
+  }
+
+  
+  // Wirkung des Marketings: Bekanntheit und Absatzanteil der eigenen Marke gegen die Konkurrenz pro Runde.
+  function wirkungRender(root, ctx, m) {
+    var block = el('div', 'rd-block');
+    block.appendChild(el('h3', '', 'Wirkung des Marketings'));
+    var verlauf = m && Array.isArray(m.history) ? m.history : [];
+    if (verlauf.length < 2) {
+      block.appendChild(el('p', 'rd-leise', 'Der Verlauf erscheint ab der zweiten Runde. Er zeigt, wie Bekanntheit und Absatzanteil deiner Marke auf dein Marketing reagieren.'));
+      root.appendChild(block);
+      return;
+    }
+    var labels = verlauf.map(function (r) { return r.label; });
+    var letzte = verlauf[verlauf.length - 1].brands || {};
+    var ids = Object.keys(letzte);
+    var meine = ids.filter(function (id) { return letzte[id] && letzte[id].mine; });
+    var andere = ids.filter(function (id) { return !(letzte[id] && letzte[id].mine); })
+      .sort(function (a, b) { return (Number(letzte[b].share) || 0) - (Number(letzte[a].share) || 0); }).slice(0, 3);
+    function reihen(feld) {
+      return meine.concat(andere).map(function (id, i) {
+        return {
+          name: (letzte[id].name || id) + (letzte[id].mine ? ' (deine)' : ''),
+          werte: verlauf.map(function (r) { var b = (r.brands || {})[id]; return b && b[feld] !== null && b[feld] !== undefined ? Number(b[feld]) : null; }),
+          farbe: letzte[id].mine ? 'var(--akzent)' : undefined
+        };
+      });
+    }
+    block.appendChild(el('p', 'rd-leise', 'Bekanntheit (0–100 %): wie viele Kunden die Marke kennen. Steigt mit Marketing, sinkt ohne.'));
+    block.appendChild(diagramm(reihen('awareness'), { labels: labels, format: 'pct', hoehe: 240 }));
+    block.appendChild(el('p', 'rd-leise', 'Anteil am Verkauf der Getränkeart: der Erfolg bei den Kunden.'));
+    block.appendChild(diagramm(reihen('share'), { labels: labels, format: 'pct', hoehe: 240 }));
+    var budgets = verlauf.map(function (r) { return r.budget === null || r.budget === undefined ? 0 : Number(r.budget); });
+    block.appendChild(el('p', 'rd-leise', 'Dein Marketingbudget pro Jahr (zum Vergleich mit den Kurven oben).'));
+    block.appendChild(diagramm([{ name: 'Marketingbudget', werte: budgets, typ: 'bar' }], { labels: labels, format: 'chf', hoehe: 180, typ: 'bar' }));
+    root.appendChild(block);
   }
 
   REITER.produktion = { async render(elm, ctx) { return render(elm, ctx); } };

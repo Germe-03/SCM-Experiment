@@ -587,6 +587,8 @@ def brand_marketing(runner, state, player_id, **extra) -> dict:
             "category": category,
             "brands": brands,
             "choices": choice_values,
+            # Verlauf je Runde (vom Controller gemerkt): Bekanntheit und Absatzanteil je Marke.
+            "history": list(extra.get("brand_history") or []),
         }
     except Exception:
         return {"brands": [], "choices": empty_choices}
