@@ -636,7 +636,7 @@ def contract_notices(runner, state, player_id, seen: set, year: int, month: int)
                         continue
                     seen.add(key)
                     if status == "beendet":
-                        text = f"Der Liefervertrag mit {partner_name} ist beendet."
+                        text = f"Der Liefervertrag mit {partner_name} ist beendet" + (f" ({contract.get('end_reason')})" if contract.get("end_reason") else "") + "."
                     else:
                         text = f"{partner_name} hat deinen Vertragsvorschlag abgelehnt."
                     notices.append({

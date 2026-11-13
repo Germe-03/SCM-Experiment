@@ -49,9 +49,20 @@ class ContractBook:
 
     def _refresh(self) -> None:
         now = self._now()
+        runtimes = self.env.runtimes
         for contract in self.contracts:
+            # Konkurs oder Schliessung einer Seite: Der Vertrag endet sofort (keine Lieferung, keine Strafe);
+            # offene Angebote mit einer geschlossenen Firma verfallen.
+            gone = [side for side in ("supplier", "buyer")
+                    if runtimes.get(contract[side]) is None or not runtimes[contract[side]].active]
+            if gone and contract["status"] in (STATUS_ACTIVE, STATUS_OFFERED):
+                contract["status"] = STATUS_ENDED if contract["status"] == STATUS_ACTIVE else STATUS_DECLINED
+                contract["end_reason"] = "Konkurs/Schliessung: " + ", ".join(contract[side] for side in gone)
+                contract["end_day"] = now
+                continue
             if contract["status"] == STATUS_ACTIVE and now >= contract["start_day"] + contract["days"]:
                 contract["status"] = STATUS_ENDED
+                contract["end_reason"] = "Laufzeit abgelaufen"
         self._active = [c for c in self.contracts if c["status"] == STATUS_ACTIVE]
 
     def _in_window(self, contract: dict, now: int) -> bool:

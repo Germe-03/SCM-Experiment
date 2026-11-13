@@ -99,3 +99,19 @@ def test_without_contract_identical_runs(tmp_path):
     run_rounds(first)
     run_rounds(second)
     assert snapshot(first) == snapshot(second)
+
+
+def test_contract_ends_when_a_side_goes_bankrupt(tmp_path):
+    from market_sim.game.controller import GameController
+    c = GameController(tmp_path, seed=0, years=2, days_per_year=60)
+    c.new_game("grosshaendler", "T")
+    runner = c.session.runner
+    book = runner.contracts
+    me = c.snapshot.firm_id
+    buyer = next(p["id"] for p in book.partners(me) if p["role"] == "Kunde")
+    contract = book.propose(me, buyer, 1, 5.0, 300, proposed_by=me)
+    book.accept(contract["id"])
+    runner.env.runtimes[buyer].active = False
+    book._refresh()
+    assert contract["status"] == "beendet"
+    assert "Konkurs" in contract["end_reason"]
