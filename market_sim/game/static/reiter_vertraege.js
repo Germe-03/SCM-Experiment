@@ -306,7 +306,20 @@
     var marketText = el('span', 'rd-leise', 'Marktpreis: –');
     priceLabel.appendChild(marketText);
     form.appendChild(priceLabel);
-    var daysInput = nummerFeld('Laufzeit (Tage)', 1, 1, 90);
+    // Laufzeit als Auswahl: Rest des Jahres, dieses und nächstes Jahr, 5 Jahre (in Tagen gerechnet).
+    var monat = Number(ctx && ctx.state && ctx.state.month) || 1;
+    var restTage = Math.max(1, (12 - monat + 1) * 30);
+    var daysLabel = el('label', '', 'Laufzeit');
+    var daysInput = el('select', 're-eingabe');
+    daysInput.setAttribute('aria-label', 'Laufzeit');
+    [['Rest des aktuellen Jahres', restTage], ['2 Jahre (dieses und nächstes)', restTage + 360],
+     ['5 Jahre', restTage + 4 * 360]].forEach(function (eintrag) {
+      var o = el('option', '', eintrag[0] + ' (' + eintrag[1] + ' Tage)');
+      o.value = String(eintrag[1]);
+      daysInput.appendChild(o);
+    });
+    daysLabel.appendChild(daysInput);
+    form.appendChild(daysLabel);
     var priceTouched = false;
 
     function ausgewaehlterPartner() {
@@ -323,7 +336,7 @@
       if (!priceTouched && (priceInput.value === '' || priceInput.dataset.marktpreis === 'true')) {
         if (partner.market_price !== undefined && partner.market_price !== null
           && Number.isFinite(Number(partner.market_price))) {
-          priceInput.value = String(partner.market_price);
+          priceInput.value = Number(partner.market_price).toFixed(2);
           priceInput.dataset.marktpreis = 'true';
         }
       }
