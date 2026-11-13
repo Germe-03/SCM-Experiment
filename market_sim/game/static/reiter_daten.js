@@ -836,13 +836,41 @@
       var history = array(data.history);
       if (!history.length) textZeile(historyBlock, 'Keine Daten');
       else {
-        var names = Object.keys(history[0] || {}).filter(function (key) { return key !== 'label'; });
-        var colors = ['var(--akzent)', 'var(--positiv)', 'var(--negativ)', 'var(--text-leise)', 'var(--rd-farbe-5)', 'var(--rd-farbe-6)', 'var(--rd-farbe-7)', 'var(--rd-farbe-8)'];
-        var series = names.map(function (name, i) {
-          return { name: name, werte: history.map(function (item) { return item[name]; }), farbe: colors[i % colors.length] };
+        // Nur Rohstoffe (Leitzins, Teuerung, Wechselkurs stehen im Reiter Finanzen), mit Filter je Getränkeart.
+        var ohne = { label: 1, policy_rate: 1, inflation: 1, fx_rate: 1, trucks: 1 };
+        var names = Object.keys(history[0] || {}).filter(function (key) { return !ohne[key]; });
+        var GRUPPEN = {
+          'Alle': null,
+          'Bier': ['Hopfen', 'Malz', 'Weizen', 'Verpackung'],
+          'Wein': ['Trauben', 'Kork', 'Verpackung'],
+          'Spirituosen': ['Weizen', 'Früchte', 'Verpackung'],
+          'Softdrinks': ['Zucker', 'Früchte', 'CO2', 'PET'],
+          'Wasser': ['CO2', 'PET'],
+          'Energie': ['strom', 'Strom']
+        };
+        var filterZeile = el('div', 'rd-filter');
+        var diagrammHalter = el('div');
+        historyBlock.appendChild(filterZeile);
+        historyBlock.appendChild(diagrammHalter);
+        function zeichneVerlauf(gruppe) {
+          var erlaubt = GRUPPEN[gruppe];
+          var gewaehlt = names.filter(function (n) { return !erlaubt || erlaubt.indexOf(n) >= 0; });
+          var series = gewaehlt.map(function (name) {
+            return { name: name === 'strom' ? 'Strom' : name, werte: history.map(function (item) { return item[name]; }) };
+          });
+          diagrammHalter.replaceChildren();
+          linien(diagrammHalter, ctx, series, { labels: history.map(function (item) { return item.label; }), hoehe: 260, format: 'zahl' });
+          Array.prototype.forEach.call(filterZeile.children, function (b) { b.className = b.dataset.gruppe === gruppe ? 'aktiv' : ''; });
+        }
+        Object.keys(GRUPPEN).forEach(function (g) {
+          var b = el('button', '', g);
+          b.type = 'button';
+          b.dataset.gruppe = g;
+          b.addEventListener('click', function () { zeichneVerlauf(g); });
+          filterZeile.appendChild(b);
         });
-        legende(historyBlock, series);
-        linien(historyBlock, ctx, series, { labels: history.map(function (item) { return item.label; }), hoehe: 220 });
+        textZeile(historyBlock, 'Index: 100 = Startpreis. Über 100 ist der Rohstoff teurer als am Anfang.', 'rd-leise');
+        zeichneVerlauf('Alle');
       }
       erklaerung(root, 'Was bedeutet Vorkauf?', 'Du kannst Rohstoffe vor Preisanstiegen im Voraus einkaufen und lagern. Das spart bei steigenden Preisen, kostet aber Lagerplatz und Kapital und lohnt sich nicht, wenn die Preise fallen. Mutiger Vorkauf bedeutet höheres Risiko.');
     });
