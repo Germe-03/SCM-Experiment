@@ -189,6 +189,92 @@
     ];
   }
 
+  // Vertragsanpassung: Vorschlag machen sowie offene Änderungen annehmen oder ablehnen.
+  function anpassungUi(ctx, contract, action, plan) {
+    var id = contract.id;
+    var change = contract.change && typeof contract.change === 'object' ? contract.change : null;
+    var box = el('div', 'rd-anpassung');
+    action.appendChild(box);
+    function gleich(a, b) {
+      return a !== undefined && a !== null && id !== undefined && String(a) === String(b);
+    }
+    var geplantVorschlag = plan.contract_change_propose;
+    if (Array.isArray(geplantVorschlag)) {
+      geplantVorschlag = geplantVorschlag.find(function (p) { return p && gleich(p.id, id); });
+    }
+    if (change && !change.by_me) {
+      box.appendChild(el('p', 'rd-negativ', 'Anpassung vorgeschlagen: '
+        + zahl(ctx, change.units_per_day) + ' Flaschen/Tag zu ' + preis(ctx, change.price)));
+      var status = el('p', 'rd-leise');
+      if (gleich(plan.contract_change_accept, id)) status.textContent = 'Geplant: annehmen';
+      else if (gleich(plan.contract_change_decline, id)) status.textContent = 'Geplant: ablehnen';
+      box.appendChild(status);
+      box.appendChild(schaltflaeche('Annehmen', function () {
+        planen(ctx, 'contract_change_decline', null);
+        planen(ctx, 'contract_change_accept', id);
+        status.textContent = 'Geplant: annehmen';
+      }));
+      box.appendChild(schaltflaeche('Ablehnen', function () {
+        planen(ctx, 'contract_change_accept', null);
+        planen(ctx, 'contract_change_decline', id);
+        status.textContent = 'Geplant: ablehnen';
+      }));
+      return;
+    }
+    if (change && change.by_me) {
+      box.appendChild(el('p', 'rd-leise', 'Dein Vorschlag: '
+        + zahl(ctx, change.units_per_day) + ' Flaschen/Tag zu ' + preis(ctx, change.price)
+        + ' – wartet auf Antwort der Gegenseite.'));
+      return;
+    }
+    if (geplantVorschlag) {
+      box.appendChild(el('p', 'rd-leise', 'Anpassung wird mit «Runde beenden» vorgeschlagen.'));
+      box.appendChild(schaltflaeche('Zurücknehmen', function () {
+        planen(ctx, 'contract_change_propose', null);
+        box.replaceChildren(el('span', 'rd-leise', 'Zurückgenommen.'));
+      }));
+      return;
+    }
+    var form = el('div', 'rd-form');
+    form.hidden = true;
+    var units = el('input', 're-eingabe');
+    units.type = 'number';
+    units.min = '1';
+    units.step = '1';
+    units.value = String(Math.round(zahlRoh(contract.units_per_day)));
+    units.setAttribute('aria-label', 'Neue Flaschen pro Tag');
+    var price = el('input', 're-eingabe');
+    price.type = 'number';
+    price.min = '0';
+    price.step = '0.01';
+    price.value = zahlRoh(contract.price).toFixed(2);
+    price.setAttribute('aria-label', 'Neuer Preis pro Flasche (CHF)');
+    var ul = el('label', '', 'Flaschen/Tag');
+    ul.appendChild(units);
+    var pl = el('label', '', 'Preis (CHF)');
+    pl.appendChild(price);
+    var meldung = el('p', 'rd-leise');
+    form.appendChild(ul);
+    form.appendChild(pl);
+    form.appendChild(schaltflaeche('Vorschlag planen', function () {
+      var u = Number(units.value);
+      var p = Number(price.value);
+      if (!Number.isFinite(u) || u <= 0 || !Number.isFinite(p) || p <= 0) {
+        meldung.className = 'rd-negativ';
+        meldung.textContent = 'Menge und Preis müssen grösser als 0 sein.';
+        return;
+      }
+      planen(ctx, 'contract_change_propose', { id: id, units_per_day: Math.round(u), price: p });
+      form.hidden = true;
+      box.replaceChildren(el('span', 'rd-leise', 'Anpassung wird mit «Runde beenden» vorgeschlagen.'));
+    }));
+    form.appendChild(meldung);
+    box.appendChild(schaltflaeche('Anpassung vorschlagen', function () {
+      form.hidden = !form.hidden;
+    }));
+    box.appendChild(form);
+  }
+
   async function render(elm, ctx) {
     elm.replaceChildren();
     var root = el('div', 'rd-reiter');
@@ -459,9 +545,13 @@
         });
         action.appendChild(button);
       }
+      anpassungUi(ctx, contract, action, activePlan);
       contract._action = action;
       return contract;
     });
+    textZeile(activeBlock,
+      'Die Vertragsmenge ist eine Mindestmenge: der Kunde bestellt mindestens so viel, du lieferst mindestens so viel.',
+      'rd-note');
     var activeColumns = vertragsSpalten(ctx, partners).concat([
       { key: '_action', label: 'Aktion', value: function (contract) { return contract._action; } }
     ]);

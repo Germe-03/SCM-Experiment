@@ -115,3 +115,39 @@ def test_contract_ends_when_a_side_goes_bankrupt(tmp_path):
     book._refresh()
     assert contract["status"] == "beendet"
     assert "Konkurs" in contract["end_reason"]
+
+
+def test_player_change_decided_by_ai_and_ai_change_accepted(tmp_path):
+    controller = make(tmp_path)
+    runner, player = parts(controller)
+    book = runner.contracts
+    retailer = pick_retailer(runner)
+    market = runner.network.firm(player).sell_price
+    contract = book.propose(player, retailer.id, 1, market * 1.04, 200, proposed_by=player)
+    run_rounds(controller, 1)
+    assert contract["status"] == "aktiv"
+    contract["change"] = None  # evtl. KI-Vorschlag des Quartals verwerfen
+    # Spieler schlägt zu hohen Preis vor: KI lehnt ab, alter Vertrag gilt
+    book.propose_change_bottles(contract["id"], player, None, market * 3)
+    assert contract["change"]["proposed_by"] == player
+    old_price = contract["price"]
+    run_rounds(controller, 1)
+    assert contract["price"] == old_price
+    assert contract["change_result"]["status"] == "abgelehnt"
+    contract["change"] = None
+    # Vernünftiger Vorschlag wird angenommen
+    book.propose_change(contract["id"], player, 2, market * 1.02)
+    run_rounds(controller, 1)
+    assert contract["change_result"]["status"] == "angenommen" and contract["units_per_day"] == 2
+    assert contract["price"] == pytest.approx(market * 1.02)
+    # KI-Vorschlag: Spieler nimmt an
+    book.propose_change(contract["id"], retailer.id, 3, 1.5)
+    with pytest.raises(ValueError):
+        book.propose_change(contract["id"], "unbekannt", 1, 1.0)
+    book.accept_change(contract["id"])
+    assert contract["units_per_day"] == 3 and contract["price"] == 1.5 and contract["change"] is None
+    book.propose_change(contract["id"], retailer.id, 4, 2.0)
+    book.decline_change(contract["id"])
+    assert contract["units_per_day"] == 3
+    with pytest.raises(ValueError):
+        book.accept_change(contract["id"])

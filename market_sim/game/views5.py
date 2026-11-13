@@ -171,6 +171,18 @@ def _contract_output(contract: dict, player_id, unit: int, runner=None) -> dict:
     result["delivered"] = _round(delivered, 2)
     result["shortfall"] = _round(max(0.0, ordered - delivered), 2)
 
+    change = contract.get("change")
+    if isinstance(change, dict):
+        result["change"] = {
+            "units_per_day": _round(_number(change.get("units_per_day")) * unit, 2),
+            "price": _round(change.get("price"), 4),
+            "proposed_by": change.get("proposed_by"),
+            "day": change.get("day"),
+            "by_me": change.get("proposed_by") == player_id,
+        }
+    else:
+        result["change"] = None
+
     partner_id, role = _partner_for_contract(contract, player_id)
     result["partner_name"] = _firm_name(runner, partner_id) if runner is not None else partner_id
     result["role"] = role
@@ -628,6 +640,28 @@ def contract_notices(runner, state, player_id, seen: set, year: int, month: int)
                         "kind": "vertrag",
                         "text": text,
                     })
+                elif status == "aktiv" and (contract.get("change") or contract.get("change_result")):
+                    change = contract.get("change")
+                    result = contract.get("change_result")
+                    if change and change.get("proposed_by") != player_id:
+                        key = ("vertrag-aenderung", contract_id, change.get("day"))
+                        if key not in seen:
+                            seen.add(key)
+                            text = (
+                                f"{partner_name} schlägt eine Vertragsanpassung vor: "
+                                f"{round(_number(change.get('units_per_day')) * unit):,} Flaschen pro Tag "
+                                f"zu CHF {_number(change.get('price')):.2f}. "
+                                "Im Reiter Verträge annehmen oder ablehnen."
+                            ).replace(",", "'")
+                            notices.append({"year": year, "month": month, "level": "gelb",
+                                            "kind": "vertrag", "text": text})
+                    if result and result.get("proposed_by") == player_id:
+                        key = ("vertrag-aenderung-ende", contract_id, result.get("day"), result.get("status"))
+                        if key not in seen:
+                            seen.add(key)
+                            word = "angenommen" if result.get("status") == "angenommen" else "abgelehnt"
+                            notices.append({"year": year, "month": month, "level": "info", "kind": "vertrag",
+                                            "text": f"{partner_name} hat deine Vertragsanpassung {word}."})
                 elif status in ("beendet", "abgelehnt"):
                     if status == "abgelehnt" and proposed_by != player_id:
                         continue

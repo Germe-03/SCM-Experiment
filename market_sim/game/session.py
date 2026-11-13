@@ -549,7 +549,8 @@ class GameSession:
         """Lieferverträge: contract_propose / contract_accept / contract_decline / contract_cancel."""
         runner, fid = self.runner, self._firm_id
         book = getattr(runner, "contracts", None)
-        wanted = ("contract_propose", "contract_accept", "contract_decline", "contract_cancel")
+        wanted = ("contract_propose", "contract_accept", "contract_decline", "contract_cancel",
+                  "contract_change_propose", "contract_change_accept", "contract_change_decline")
         if not any(orders.get(key) for key in wanted):
             return
 
@@ -577,7 +578,20 @@ class GameSession:
                                      propose.get("category") or None, fid)
                 return {"ok": True, "message": "Vertragsvorschlag wurde gemacht"}
             run(lambda: call(do_propose))
-        for key, method, text in (("contract_accept", "accept", "Vertrag wurde angenommen"),
+        change = orders.get("contract_change_propose")
+        for item in (change if isinstance(change, list) else [change]):
+            if isinstance(item, dict) and item.get("id") not in (None, ""):
+                def do_change(item=item):
+                    units, price = item.get("units_per_day"), item.get("price")
+                    book.propose_change_bottles(
+                        int(item["id"]), fid,
+                        None if units in (None, "") else float(units),
+                        None if price in (None, "") else float(price))
+                    return {"ok": True, "message": "Vertragsanpassung wurde vorgeschlagen"}
+                run(lambda do_change=do_change: call(do_change))
+        for key, method, text in (("contract_change_accept", "accept_change", "Vertragsanpassung wurde angenommen"),
+                                  ("contract_change_decline", "decline_change", "Vertragsanpassung wurde abgelehnt"),
+                                  ("contract_accept", "accept", "Vertrag wurde angenommen"),
                                   ("contract_decline", "decline", "Vertrag wurde abgelehnt"),
                                   ("contract_cancel", "cancel", "Vertrag wurde gekündigt")):
             value = orders.get(key)

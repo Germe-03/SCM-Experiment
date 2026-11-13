@@ -7,6 +7,7 @@ einem eigenen ``random.Random`` und nie aus bestehenden Strömen.
 from __future__ import annotations
 
 import random
+from collections import deque
 
 # Lieferant (Stufe) -> erlaubte Kundenstufe.
 ALLOWED_STAGES = {"factory": "distributor", "distributor": "wholesaler", "wholesaler": "retailer"}
@@ -22,6 +23,8 @@ class ContractBook:
         self._next_id = 1
         self.rng = random.Random(int(getattr(runner, "seed", 0)) * 7919 + 4711)
         self._active: list[dict] = []
+        self.change_rng = random.Random(int(getattr(runner, "seed", 0)) * 6271 + 1337)
+        self._demand: dict[str, deque] = {}
 
     # --- Zugriff -----------------------------------------------------------------------------
     @property
@@ -132,7 +135,7 @@ class ContractBook:
             "units_per_day": units_per_day, "price": price,
             "start_day": self._now() if start_day is None else int(start_day), "days": days,
             "status": STATUS_OFFERED, "proposed_by": proposer,
-            "ordered": 0.0, "delivered": 0.0,
+            "ordered": 0.0, "delivered": 0.0, "change": None,
         }
         self._next_id += 1
         self.contracts.append(contract)
@@ -171,6 +174,55 @@ class ContractBook:
         self._refresh()
         return contract
 
+    # --- Vertragsanpassungen -----------------------------------------------------------------
+    def propose_change(self, contract_id: int, proposed_by: str, units_per_day: float | None = None,
+                       price: float | None = None) -> dict:
+        """Änderungsvorschlag (Menge in Sim-Einheiten/Tag und/oder Preis) für einen aktiven Vertrag."""
+        contract = self.get(contract_id)
+        if contract["status"] != STATUS_ACTIVE:
+            raise ValueError("Nur aktive Verträge können angepasst werden")
+        if proposed_by not in (contract["supplier"], contract["buyer"]):
+            raise ValueError("Der Vorschlagende muss Lieferant oder Kunde sein")
+        if units_per_day is None and price is None:
+            raise ValueError("Menge oder Preis muss angegeben werden")
+        units = contract["units_per_day"] if units_per_day is None else float(units_per_day)
+        new_price = contract["price"] if price is None else float(price)
+        if units <= 0 or new_price <= 0:
+            raise ValueError("Menge und Preis müssen positiv sein")
+        if units == contract["units_per_day"] and new_price == contract["price"]:
+            raise ValueError("Die Änderung entspricht dem bestehenden Vertrag")
+        contract["change"] = {"units_per_day": units, "price": new_price,
+                              "proposed_by": proposed_by, "day": self._now()}
+        contract["change_result"] = None
+        return contract
+
+    def propose_change_bottles(self, contract_id: int, proposed_by: str, bottles_per_day: float | None = None,
+                               price: float | None = None) -> dict:
+        units = None if bottles_per_day is None else float(bottles_per_day) / self._unit_size()
+        return self.propose_change(contract_id, proposed_by, units, price)
+
+    def accept_change(self, contract_id: int) -> dict:
+        contract = self.get(contract_id)
+        change = contract.get("change")
+        if contract["status"] != STATUS_ACTIVE or not change:
+            raise ValueError("Es gibt keine offene Änderung")
+        contract["units_per_day"] = float(change["units_per_day"])
+        contract["price"] = float(change["price"])
+        contract["change_result"] = {"status": "angenommen", "proposed_by": change["proposed_by"],
+                                     "day": self._now()}
+        contract["change"] = None
+        return contract
+
+    def decline_change(self, contract_id: int) -> dict:
+        contract = self.get(contract_id)
+        change = contract.get("change")
+        if contract["status"] != STATUS_ACTIVE or not change:
+            raise ValueError("Es gibt keine offene Änderung")
+        contract["change_result"] = {"status": "abgelehnt", "proposed_by": change["proposed_by"],
+                                     "day": self._now()}
+        contract["change"] = None
+        return contract
+
     def view(self, contract: dict) -> dict:
         """Kopie mit Mengen in Flaschen (units_per_day, ordered, delivered) und Unterlieferung."""
         size = self._unit_size()
@@ -191,6 +243,7 @@ class ContractBook:
         # selbst weniger bräuchte (sonst wäre der Vertrag nur eine unverbindliche Absicht).
         result: dict[str, int] = {}
         runtimes = self.env.runtimes
+        self._demand.setdefault(buyer_id, deque(maxlen=30)).append(float(quantity))
         for contract in sorted(self._active, key=lambda c: c["id"]):
             if contract["buyer"] != buyer_id or not self._in_window(contract, now):
                 continue
@@ -239,11 +292,13 @@ class ContractBook:
     def daily(self) -> None:
         self._refresh()
         self._decide_player_proposals()
+        self._decide_player_changes()
         days = self.runner.config.simulation.days_per_year
         quarter = max(1, days // 4)
         now = self._now()
         if now > 0 and now % quarter == 0:
             self._make_ai_offers()
+            self._make_ai_changes()
         self._refresh()
 
     def _market_price(self, firm_id: str, as_supplier: bool, partner_id: str) -> float:
@@ -281,6 +336,63 @@ class ContractBook:
                 contract["start_day"] = self._now()
             else:
                 contract["status"] = STATUS_DECLINED
+
+    def _ai_accepts(self, contract: dict, ai_id: str, units: float, price: float, other_id: str) -> bool:
+        cfg = self.runner.config.contracts
+        ai_is_supplier = ai_id == contract["supplier"]
+        market = self._market_price(ai_id, ai_is_supplier, other_id)
+        if ai_is_supplier:
+            price_ok = price >= market * (1 - cfg.price_tolerance)
+        else:
+            price_ok = price <= market * (1 + cfg.price_tolerance)
+        qty_ok = units <= cfg.max_capacity_share * self.env._effective_capacity(ai_id)
+        return price_ok and qty_ok
+
+    def _decide_player_changes(self) -> None:
+        """KI entscheidet über Änderungsvorschläge der Spieler (wie bei neuen Verträgen)."""
+        for contract in self.contracts:
+            change = contract.get("change")
+            if contract["status"] != STATUS_ACTIVE or not change or not self._is_player(change["proposed_by"]):
+                continue
+            ai_id = contract["buyer"] if change["proposed_by"] == contract["supplier"] else contract["supplier"]
+            if self._is_player(ai_id):
+                continue
+            runtime = self.env.runtimes.get(ai_id)
+            if runtime is None or not runtime.active:
+                continue
+            if self._ai_accepts(contract, ai_id, change["units_per_day"], change["price"], change["proposed_by"]):
+                self.accept_change(contract["id"])
+            else:
+                self.decline_change(contract["id"])
+
+    def _make_ai_changes(self) -> None:
+        """KI schlägt (einmal pro Quartal) Anpassungen an Verträgen mit Spielern vor."""
+        for contract in sorted(self._active, key=lambda c: c["id"]):
+            if contract.get("change"):
+                continue
+            supplier_player, buyer_player = self._is_player(contract["supplier"]), self._is_player(contract["buyer"])
+            if supplier_player == buyer_player:
+                continue  # nur Verträge zwischen KI und Spieler
+            ai_id = contract["buyer"] if supplier_player else contract["supplier"]
+            ai_is_buyer = ai_id == contract["buyer"]
+            runtime = self.env.runtimes.get(ai_id)
+            if runtime is None or not runtime.active:
+                continue
+            units, price = contract["units_per_day"], contract["price"]
+            new_units, new_price = units, price
+            history = self._demand.get(ai_id)
+            if ai_is_buyer and history:
+                need = sum(history) / len(history)
+                if need > 0 and (need < units * 0.7 or need > units * 1.3):
+                    new_units = max(1.0, float(round(need)))
+            other = contract["supplier"] if ai_is_buyer else contract["buyer"]
+            market = self._market_price(ai_id, not ai_is_buyer, other)
+            if market > 0 and abs(market - price) / market > 0.05:
+                new_price = round(price + (market - price) * 0.5, 4)
+            if (new_units, new_price) == (units, price):
+                continue
+            contract["change"] = {"units_per_day": new_units, "price": new_price,
+                                  "proposed_by": ai_id, "day": self._now()}
 
     def _make_ai_offers(self) -> None:
         cfg = self.runner.config.contracts
