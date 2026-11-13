@@ -142,6 +142,10 @@ class FirmPolicy:
                 # Vollkosten pro Flasche = (Umsatz - Gewinn) / Umsatz × Durchschnittspreis.
                 full_cost = last_summary.avg_sell_price * (last_summary.revenue - last_summary.profit) / last_summary.revenue
                 floor = full_cost * (1 + margin)
+                # Hohe Kosten pro Flasche wegen tiefer Auslastung: nicht über die Konkurrenz hinaus erhöhen,
+                # sonst verliert die Firma noch mehr Kunden (Spirale). Dann lieber Menge zurückgewinnen.
+                if rival_price is not None and last_summary.capacity_utilization < 0.7:
+                    floor = min(floor, rival_price)
                 if floor > base:
                     base = max(band_low, min(band_high, floor))
             if weak_service:
@@ -184,7 +188,13 @@ class FirmPolicy:
         strategy: AnnualStrategy, config: MarketConfig,
     ) -> DailyDecision:
         # S8 decision: base-stock ordering uses only locally observable state.
-        demand = max(1.0, obs.recent_demand)
+        # Langes Gedächtnis der Nachfrage (Halbwertszeit gut ein halbes Jahr): Bei leeren Regalen sinkt die
+        # beobachtete Nachfrage, weil Kunden zur Konkurrenz gehen. Ohne Gedächtnis bestellt die Firma dann
+        # immer weniger (Abwärtsspirale). Nachbestellt wird mindestens 80 % des langfristigen Niveaus.
+        long_demand = getattr(self, "_long_demand", None)
+        long_demand = obs.recent_demand if long_demand is None else 0.996 * long_demand + 0.004 * obs.recent_demand
+        self._long_demand = long_demand
+        demand = max(1.0, obs.recent_demand, 0.8 * long_demand)
         target = round(strategy.target_safety_stock_days * demand)
         # P1 fix: on_order includes both in-transit and supplier-queued units.
         position = obs.inventory + obs.on_order - obs.backlog
