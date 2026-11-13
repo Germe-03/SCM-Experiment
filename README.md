@@ -183,6 +183,77 @@ danach zwischengespeichert). `serve` liefert das Dashboard unter
 <http://localhost:8770/dashboard.html> aus und beantwortet Fragen im Chat
 unten rechts.
 
+### Spielmodus (Firmen-Cockpit)
+
+Im Spielmodus gründest du selbst eine Firma in einer der fünf Branchen
+(Hersteller, Verteiler, Grosshändler, Detailhandel, Gastro) und führst sie
+Monat für Monat. Alle anderen Firmen laufen wie im Experiment weiter.
+
+```bash
+python -m market_sim.game.server --port 8771 --saves runs/spielstaende
+```
+
+Danach im Browser <http://localhost:8771> öffnen.
+
+- **Ablauf:** Gründung mit Branche, Region und Spieldauer (5 bis 50 Jahre).
+  Eine Runde ist ein Monat. «Rest des Jahres überspringen» springt zum
+  Januar, «Bis zum Ende simulieren» übergibt die Firma an den Autopiloten.
+  Die Simulation läuft immer bis Jahr 50; danach erzeugt der Server das
+  normale Beobachter-Dashboard (`/dashboard`, gespeichert unter
+  `runs/spiele/<zeit>_<firma>/dashboard.html`).
+- **Sicherung:** Nach jeder Runde wird automatisch nach
+  `runs/spielstaende/automatisch.json` gesichert (die vorherige Sicherung
+  bleibt als `automatisch_vorher.json`). Beim Start lädt der Server diese
+  Sicherung wieder. «Neues Spiel» sichert das alte Spiel vorher als
+  `vor_neuem_spiel.json`.
+- **Reiter:** Übersicht, Firma, Markt, Forschung, Logistik, Einkauf (beim
+  Hersteller: Produktion), Lager, Finanzen, Bank, Abschlüsse, Börse,
+  Rohstoffe, Bevölkerung, Holding, Graubereich, Hilfe.
+- **Händler** kaufen pro Getränkeart und Marke ein, wählen pro Marke einen
+  Grosshändler und setzen pro Marke einen eigenen Verkaufspreis (auch alle
+  um x % auf einmal). Lagerplatz und Regalkosten pro geführter Getränkeart
+  begrenzen das Sortiment.
+- **Hersteller** kaufen Rohstoffe zu Tageskursen ein; produziert wird so viel,
+  wie Kapazität und Rohstoffe zulassen.
+- **Lieferverträge:** Zwischen Hersteller und Verteiler, Verteiler und
+  Grosshändler sowie Grosshändler und Detailhandel/Gastro lassen sich
+  Verträge mit Menge pro Tag, Preis und Laufzeit abschliessen
+  (`market_sim/contracts.py`). Vertragsware wird zuerst bestellt und zuerst
+  geliefert. Andere Firmen nehmen Vorschläge an, wenn Preis und Menge passen,
+  und schlagen dem Spieler selbst Verträge vor.
+- **Holding:** Gekaufte Firmen werden Töchter; für jede Tochter braucht es
+  einen CEO (Avatare in `market_sim/game/static/avatare/`, Bildvorlagen in
+  [`docs/avatar-prompts.md`](docs/avatar-prompts.md)).
+- **Berater:** ein Sprachmodell (GLM über SwissAI) gibt Tipps, sieht aber nur
+  eigene und öffentliche Zahlen.
+- Entwürfe und Schnittstellen: `docs/entwurf-spielmodus.md` und
+  `docs/spielmodus-feedback1.md` bis `docs/spielmodus-feedback6.md`.
+
+### Regeln, die im November 2026 geändert wurden
+
+Diese Änderungen gelten für die ganze Simulation, also auch für das
+Experiment; frühere Läufe sind damit nicht mehr direkt vergleichbar.
+
+- **Übernahmen sind freiwillig:** Angeschlagene Firmen stehen zum Verkauf,
+  Käufer entscheiden selbst nach Preis, Wert und Geld (`state.py`).
+- **Börse:** Alle Firmen vom Start sind ab Tag 1 kotiert, jede neue Firma
+  nach 3 Jahren (`tradable_from_year: 1`, `listing_min_years: 3`). Der
+  Startkurs folgt dem Ertragswert.
+- **Grundkosten nach Grösse:** Kleine Hersteller zahlen die Grundkosten nur
+  anteilig (`fixed_costs.base_reference_units`).
+- **Rohstoffkrisen abgeschwächt:** Missernte ×1.12 (vorher 1.30),
+  Kostenschock ×1.10 (vorher 1.25).
+- **Preisuntergrenze:** Firmen verkaufen nicht dauerhaft unter ihren
+  Vollkosten des Vorjahres plus 2 % (`cost_floor_margin`); bei tiefer
+  Auslastung höchstens bis zum Konkurrenzpreis.
+- **Autopilot bestellt nach dem Absatz:** Händler bestellen mindestens so
+  viel, wie sie verkaufen, mit einem Gedächtnis für die Nachfrage der
+  letzten Monate. Vorher führte die zu tief gemessene Nachfrage zu leeren
+  Regalen und einer Abwärtsspirale.
+- **Abschlüsse:** Für jede Firma gibt es Erfolgsrechnung, Bilanz,
+  Geldflussrechnung und Kalkulation pro Flasche (`financials.py`), im
+  Dashboard im Reiter «Abschlüsse».
+
 ### Speicherstände
 
 Mit `--checkpoints` speichert `run` nach jedem Jahr den ganzen Zustand als
