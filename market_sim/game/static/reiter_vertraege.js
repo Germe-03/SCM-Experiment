@@ -204,7 +204,7 @@
     }
     if (change && !change.by_me) {
       box.appendChild(el('p', 'rd-negativ', 'Anpassung vorgeschlagen: '
-        + zahl(ctx, change.units_per_day) + ' Flaschen/Tag zu ' + preis(ctx, change.price)));
+        + zahl(ctx, change.units_per_day) + ' Flaschen/Tag zu ' + preis(ctx, change.price) + (change.days ? ', Laufzeit ' + zahl(ctx, change.days) + ' Tage ab Annahme' : '')));
       var status = el('p', 'rd-leise');
       if (gleich(plan.contract_change_accept, id)) status.textContent = 'Geplant: annehmen';
       else if (gleich(plan.contract_change_decline, id)) status.textContent = 'Geplant: ablehnen';
@@ -223,7 +223,7 @@
     }
     if (change && change.by_me) {
       box.appendChild(el('p', 'rd-leise', 'Dein Vorschlag: '
-        + zahl(ctx, change.units_per_day) + ' Flaschen/Tag zu ' + preis(ctx, change.price)
+        + zahl(ctx, change.units_per_day) + ' Flaschen/Tag zu ' + preis(ctx, change.price) + (change.days ? ', Laufzeit ' + zahl(ctx, change.days) + ' Tage ab Annahme' : '')
         + ' – wartet auf Antwort der Gegenseite.'));
       return;
     }
@@ -253,9 +253,20 @@
     ul.appendChild(units);
     var pl = el('label', '', 'Preis (CHF)');
     pl.appendChild(price);
+    // Neue Laufzeit ab Annahme der Änderung.
+    var monat = Number(ctx && ctx.state && ctx.state.month) || 1;
+    var restTage = Math.max(1, (12 - monat + 1) * 30);
+    var laufzeit = el('select', 're-eingabe');
+    laufzeit.setAttribute('aria-label', 'Neue Laufzeit');
+    [['Rest des aktuellen Jahres', restTage], ['2 Jahre (dieses und nächstes)', restTage + 360], ['5 Jahre', restTage + 4 * 360]]
+      .forEach(function (e) { var o = el('option', '', e[0] + ' (' + e[1] + ' Tage)'); o.value = String(e[1]); laufzeit.appendChild(o); });
+    laufzeit.value = String(restTage + 360);
+    var ll = el('label', '', 'Neue Laufzeit (ab Annahme)');
+    ll.appendChild(laufzeit);
     var meldung = el('p', 'rd-leise');
     form.appendChild(ul);
     form.appendChild(pl);
+    form.appendChild(ll);
     form.appendChild(schaltflaeche('Vorschlag planen', function () {
       var u = Number(units.value);
       var p = Number(price.value);
@@ -264,7 +275,7 @@
         meldung.textContent = 'Menge und Preis müssen grösser als 0 sein.';
         return;
       }
-      planen(ctx, 'contract_change_propose', { id: id, units_per_day: Math.round(u), price: p });
+      planen(ctx, 'contract_change_propose', { id: id, units_per_day: Math.round(u), price: p, days: Number(laufzeit.value) });
       form.hidden = true;
       box.replaceChildren(el('span', 'rd-leise', 'Anpassung wird mit «Runde beenden» vorgeschlagen.'));
     }));

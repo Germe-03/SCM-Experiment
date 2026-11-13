@@ -582,11 +582,12 @@ class GameSession:
         for item in (change if isinstance(change, list) else [change]):
             if isinstance(item, dict) and item.get("id") not in (None, ""):
                 def do_change(item=item):
-                    units, price = item.get("units_per_day"), item.get("price")
+                    units, price, days = item.get("units_per_day"), item.get("price"), item.get("days")
                     book.propose_change_bottles(
                         int(item["id"]), fid,
                         None if units in (None, "") else float(units),
-                        None if price in (None, "") else float(price))
+                        None if price in (None, "") else float(price),
+                        None if days in (None, "") else int(days))
                     return {"ok": True, "message": "Vertragsanpassung wurde vorgeschlagen"}
                 run(lambda do_change=do_change: call(do_change))
         for key, method, text in (("contract_change_accept", "accept_change", "Vertragsanpassung wurde angenommen"),

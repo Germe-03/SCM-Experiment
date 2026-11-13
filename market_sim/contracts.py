@@ -176,30 +176,33 @@ class ContractBook:
 
     # --- Vertragsanpassungen -----------------------------------------------------------------
     def propose_change(self, contract_id: int, proposed_by: str, units_per_day: float | None = None,
-                       price: float | None = None) -> dict:
+                       price: float | None = None, days: int | None = None) -> dict:
         """Änderungsvorschlag (Menge in Sim-Einheiten/Tag und/oder Preis) für einen aktiven Vertrag."""
         contract = self.get(contract_id)
         if contract["status"] != STATUS_ACTIVE:
             raise ValueError("Nur aktive Verträge können angepasst werden")
         if proposed_by not in (contract["supplier"], contract["buyer"]):
             raise ValueError("Der Vorschlagende muss Lieferant oder Kunde sein")
-        if units_per_day is None and price is None:
-            raise ValueError("Menge oder Preis muss angegeben werden")
+        if units_per_day is None and price is None and days is None:
+            raise ValueError("Menge, Preis oder Laufzeit muss angegeben werden")
         units = contract["units_per_day"] if units_per_day is None else float(units_per_day)
         new_price = contract["price"] if price is None else float(price)
         if units <= 0 or new_price <= 0:
             raise ValueError("Menge und Preis müssen positiv sein")
-        if units == contract["units_per_day"] and new_price == contract["price"]:
+        remaining = max(1, contract["start_day"] + contract["days"] - self._now())
+        new_days = remaining if days is None else max(1, int(days))
+        if units == contract["units_per_day"] and new_price == contract["price"] and new_days == remaining:
             raise ValueError("Die Änderung entspricht dem bestehenden Vertrag")
-        contract["change"] = {"units_per_day": units, "price": new_price,
+        # Neue Laufzeit zählt ab Annahme der Änderung.
+        contract["change"] = {"units_per_day": units, "price": new_price, "days": new_days,
                               "proposed_by": proposed_by, "day": self._now()}
         contract["change_result"] = None
         return contract
 
     def propose_change_bottles(self, contract_id: int, proposed_by: str, bottles_per_day: float | None = None,
-                               price: float | None = None) -> dict:
+                               price: float | None = None, days: int | None = None) -> dict:
         units = None if bottles_per_day is None else float(bottles_per_day) / self._unit_size()
-        return self.propose_change(contract_id, proposed_by, units, price)
+        return self.propose_change(contract_id, proposed_by, units, price, days)
 
     def accept_change(self, contract_id: int) -> dict:
         contract = self.get(contract_id)
@@ -208,6 +211,9 @@ class ContractBook:
             raise ValueError("Es gibt keine offene Änderung")
         contract["units_per_day"] = float(change["units_per_day"])
         contract["price"] = float(change["price"])
+        if change.get("days"):
+            contract["start_day"] = self._now()
+            contract["days"] = int(change["days"])
         contract["change_result"] = {"status": "angenommen", "proposed_by": change["proposed_by"],
                                      "day": self._now()}
         contract["change"] = None
@@ -391,7 +397,9 @@ class ContractBook:
                 new_price = round(price + (market - price) * 0.5, 4)
             if (new_units, new_price) == (units, price):
                 continue
+            remaining = max(1, contract["start_day"] + contract["days"] - self._now())
             contract["change"] = {"units_per_day": new_units, "price": new_price,
+                                  "days": max(remaining, self.runner.config.simulation.days_per_year),
                                   "proposed_by": ai_id, "day": self._now()}
 
     def _make_ai_offers(self) -> None:

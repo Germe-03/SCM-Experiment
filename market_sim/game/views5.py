@@ -650,7 +650,7 @@ def contract_notices(runner, state, player_id, seen: set, year: int, month: int)
                             text = (
                                 f"{partner_name} schlägt eine Vertragsanpassung vor: "
                                 f"{round(_number(change.get('units_per_day')) * unit):,} Flaschen pro Tag "
-                                f"zu CHF {_number(change.get('price')):.2f}. "
+                                f"zu CHF {_number(change.get('price')):.2f}, Laufzeit {int(_number(change.get('days')))} Tage ab Annahme. "
                                 "Im Reiter Verträge annehmen oder ablehnen."
                             ).replace(",", "'")
                             notices.append({"year": year, "month": month, "level": "gelb",
