@@ -284,6 +284,36 @@
       aktualisierePlan(true);
     });
     materialBlock.appendChild(vorschlag);
+
+    // Alle Bestellmengen auf einmal um x % ändern (leere Felder starten beim Bedarf für volle Kapazität).
+    var massen = el('div', '');
+    massen.appendChild(el('span', '', ' Alle Bestellmengen ändern um '));
+    var prozentFeld = el('input');
+    prozentFeld.type = 'number';
+    prozentFeld.step = '1';
+    prozentFeld.value = '10';
+    prozentFeld.style.width = '5em';
+    massen.appendChild(prozentFeld);
+    massen.appendChild(el('span', '', ' % '));
+    [['Erhöhen', 1], ['Senken', -1]].forEach(function (art) {
+      var knopf = el('button', '', art[0]);
+      knopf.type = 'button';
+      knopf.addEventListener('click', function () {
+        var p = Number(prozentFeld.value);
+        if (!Number.isFinite(p) || p <= 0) return;
+        var faktor = Math.max(0, 1 + art[1] * p / 100);
+        materials.forEach(function (material) {
+          var name = String(material && material.name !== undefined ? material.name : '');
+          if (!inputs[name]) return;
+          var text = String(inputs[name].value).trim();
+          var basis = text !== '' ? zahlRoh(text) : zahlRoh(material.need_per_day_at_capacity);
+          inputs[name].value = String(Math.round(basis * faktor * 10) / 10);
+        });
+        aktualisierePlan(true);
+      });
+      massen.appendChild(knopf);
+    });
+    materialBlock.appendChild(massen);
     materialBlock.appendChild(bestellkosten);
 
     function aktualisierePlan(senden) {
