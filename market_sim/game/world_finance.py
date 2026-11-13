@@ -316,7 +316,12 @@ def _own_bank(runner, state, player_id, env, banking, runtime, loan_items, credi
     try:
         from market_sim.game.world_firm import year_baseline
 
-        baseline = year_baseline(runner, player_id, _get(state, "year", 1))
+        # Nur lesen: den vom Controller gesetzten Stand zu Jahresbeginn verwenden. year_baseline() mit dem
+        # Simulationsjahr aufzurufen würde den Stand überschreiben (anderes Jahr als das Spieljahr).
+        record = (getattr(runner, "_game_year_marks", None) or {}).get(player_id) or {}
+        baseline = record.get("values") if isinstance(record, dict) else None
+        if not baseline:
+            baseline = year_baseline(runner, player_id, _get(state, "year", 1))
         net = (_number(_get(runtime, "interest_cost")) or 0.0) - (
             _number(_lookup(baseline, "interest_cost", 0.0)) or 0.0)
         paid = max(0.0, net)
