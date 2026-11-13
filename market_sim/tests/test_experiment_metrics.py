@@ -26,7 +26,8 @@ def test_new_kpis_are_filled_and_plausible(short_run) -> None:
         assert 0 <= item.firms_with_loss <= 22
     assert kpis[0].market_share_movement == 0.0
     assert kpis[1].market_share_movement > 0.0
-    entries = [e for e in short_run.events if e["event"] == "market_entry"]
+    # Gründungen für das Jahr nach dem Laufende zählen in keiner Jahres-KPI mehr.
+    entries = [e for e in short_run.events if e["event"] == "market_entry" and e["year"] <= len(kpis)]
     assert sum(item.market_entries for item in kpis) == len(entries)
 
 
