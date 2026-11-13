@@ -198,6 +198,21 @@
       return;
     }
 
+    // Ergebnis der letzten Runde zu Verträgen gut sichtbar oben anzeigen.
+    var ergebnisse = array(ctx.state && ctx.state.order_results).filter(function (r) {
+      return r && /Vertrag|Paar|Angebot|Partner/i.test(String(r.message || ''));
+    });
+    if (ergebnisse.length) {
+      var ergebnisBlock = abschnitt(root, 'Ergebnis der letzten Runde');
+      ergebnisse.forEach(function (r) {
+        var text = String(r.message || '');
+        if (/schon einen offenen/i.test(text)) {
+          text += ' – Dieser Partner hat dir bereits selbst ein Angebot gemacht. Nimm es unten bei «Angebote an dich» an.';
+        }
+        ergebnisBlock.appendChild(el('p', r.ok ? 'rd-positiv' : 'rd-negativ', (r.ok ? '✓ ' : '✗ ') + text));
+      });
+    }
+
     var partners = array(v.partners).filter(function (partner) {
       return partner && typeof partner === 'object';
     });
@@ -333,6 +348,14 @@
         return;
       }
       marketText.textContent = 'Marktpreis: ' + preis(ctx, partner.market_price);
+      var offen = array(v.offers).filter(function (c) {
+        return c && (String(c.supplier) === String(partner.id) || String(c.buyer) === String(partner.id));
+      });
+      if (offen.length) {
+        marketText.textContent += ' · Achtung: Dieser Partner hat dir schon ein Angebot gemacht ('
+          + zahl(ctx, offen[0].units_per_day) + ' Flaschen/Tag zu ' + preis(ctx, offen[0].price)
+          + '). Ein eigener Vorschlag wird abgelehnt, solange das Angebot offen ist.';
+      }
       if (!priceTouched && (priceInput.value === '' || priceInput.dataset.marktpreis === 'true')) {
         if (partner.market_price !== undefined && partner.market_price !== null
           && Number.isFinite(Number(partner.market_price))) {
@@ -441,7 +464,7 @@
     ]);
     activeBlock.appendChild(tabelle(activeColumns, activeRows));
 
-    var offerBlock = abschnitt(root, 'Angebote der KI');
+    var offerBlock = abschnitt(root, 'Angebote an dich');
     textZeile(offerBlock, 'Pro Runde kannst du je ein Angebot annehmen und eines ablehnen.', 'rd-leise');
     var offerPlan = geplant(ctx);
     var offerRows = offers.map(function (contract) {
