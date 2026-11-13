@@ -445,7 +445,9 @@
       }
 
       var suppliers = r[1];
-      if (!suppliers) fehlerBlock(root, 'Lieferanten');
+      var istHersteller = ctx.state && ctx.state.firm && ctx.state.firm.branch === 'hersteller';
+      if (istHersteller) { /* Hersteller kaufen am Rohstoffmarkt: keine Lieferanten-Wahl */ }
+      else if (!suppliers) fehlerBlock(root, 'Lieferanten');
       else {
         var sb = abschnitt(root, 'Lieferanten');
         var candidates = array(suppliers.candidates);
