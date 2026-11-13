@@ -144,7 +144,8 @@ function zeigeDashboardStatus(state) {
     if (state.dashboard_url) link.href = state.dashboard_url;
     if (status === 'laeuft') {
         const jahr = state.dashboard_progress;
-        text.textContent = `Simulation läuft bis Jahr 50: Jahr ${jahr === null || jahr === undefined ? '…' : jahr}`;
+        text.textContent = `Simulation läuft bis Jahr ${state.sim_years || 50}: Jahr ${jahr === null || jahr === undefined ? '…' : jahr}`
+            + restzeitText(jahr, state.sim_years || 50);
         dashboardTimer = window.setTimeout(async () => {
             dashboardTimer = null;
             try {
@@ -166,4 +167,24 @@ function zeigeDashboardStatus(state) {
     } else {
         text.textContent = 'Die Auswertung konnte nicht erstellt werden.';
     }
+}
+
+
+// Restzeit aus der gemessenen Geschwindigkeit (Jahre seit der ersten Messung in diesem Browser).
+const fortschrittMessung = { start: null, startJahr: null };
+function restzeitText(jahr, ziel) {
+    const j = Number(jahr);
+    if (!Number.isFinite(j)) return '';
+    const jetzt = Date.now();
+    if (fortschrittMessung.start === null || j < fortschrittMessung.startJahr) {
+        fortschrittMessung.start = jetzt;
+        fortschrittMessung.startJahr = j;
+        return ' · Restzeit wird gemessen …';
+    }
+    const jahre = j - fortschrittMessung.startJahr;
+    if (jahre < 1) return ' · Restzeit wird gemessen …';
+    const proJahr = (jetzt - fortschrittMessung.start) / 1000 / jahre;
+    const rest = Math.max(0, (ziel - j) * proJahr);
+    const restText = rest < 90 ? `${Math.round(rest)} s` : `${Math.round(rest / 60)} Minuten`;
+    return ` · etwa ${Math.round(proJahr)} s pro Jahr · noch etwa ${restText}`;
 }
