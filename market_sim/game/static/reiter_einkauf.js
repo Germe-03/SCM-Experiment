@@ -726,6 +726,51 @@
     markenBlock.appendChild(note);
     markenBlock.appendChild(costText);
 
+    // Alle Verkaufspreise auf einmal um x % ändern (nur sichtbare Marken, also mit Filter z.B. nur Bier).
+    var massen = el('div', 're-preis-massen');
+    massen.appendChild(el('span', '', 'Verkaufspreise der angezeigten Marken ändern um '));
+    var prozentFeld = el('input');
+    prozentFeld.type = 'number';
+    prozentFeld.step = '0.5';
+    prozentFeld.value = '5';
+    prozentFeld.style.width = '5em';
+    massen.appendChild(prozentFeld);
+    massen.appendChild(el('span', '', ' % '));
+    [['Erhöhen', 1], ['Senken', -1]].forEach(function (art) {
+      var knopf = el('button', '', art[0]);
+      knopf.type = 'button';
+      knopf.addEventListener('click', function () {
+        var p = Number(prozentFeld.value);
+        if (!Number.isFinite(p) || p <= 0) return;
+        var faktor = 1 + art[1] * p / 100;
+        brandRows.forEach(function (row) {
+          if (row.row && row.row.hidden) return;
+          var text = String(row.preisFeld.value).trim();
+          var basis = text !== '' ? Number(text) : Number(row.brand.sell_price);
+          if (!Number.isFinite(basis) || basis <= 0) return;
+          row.preisFeld.value = (Math.round(basis * faktor * 100) / 100).toFixed(2);
+          row.geaendert = true;
+          aktualisiereMarge(row);
+        });
+        sendeVerkaufspreise();
+      });
+      massen.appendChild(knopf);
+    });
+    var zurueck = el('button', '', 'Alle auf automatisch');
+    zurueck.type = 'button';
+    zurueck.addEventListener('click', function () {
+      brandRows.forEach(function (row) {
+        if (row.row && row.row.hidden) return;
+        row.preisFeld.value = '';
+        delete verkaufspreise[row.id];
+        row.geaendert = false;
+        aktualisiereMarge(row);
+      });
+      sendeVerkaufspreise();
+    });
+    massen.appendChild(zurueck);
+    markenBlock.appendChild(massen);
+
     var storage = storageAnzeige(root, ctx, data.storage, function () {
       return zahlRoh(data.storage && data.storage.used) + brandRows.reduce(function (sum, row) {
         return sum + menge(row.id);
