@@ -272,6 +272,35 @@
       }
     ], materials));
 
+    // Produktionsziel: gewünschte Flaschen pro Tag -> Rohstoff-Bestellmengen passend dazu.
+    var kapazitaet = zahlRoh(data && data.capacity_per_day);
+    var zielBox = el('div', '');
+    zielBox.appendChild(el('strong', '', 'Produktionsziel: '));
+    var zielFeld = el('input');
+    zielFeld.type = 'number';
+    zielFeld.min = '0';
+    zielFeld.step = '1000';
+    zielFeld.style.width = '9em';
+    zielFeld.setAttribute('aria-label', 'Produktionsziel in Flaschen pro Tag');
+    zielFeld.placeholder = 'Flaschen/Tag';
+    zielBox.appendChild(zielFeld);
+    zielBox.appendChild(el('span', '', ' Flaschen pro Tag (höchstens ' + zahl(ctx, kapazitaet) + ') '));
+    var zielKnopf = el('button', '', 'Rohstoffe dafür bestellen');
+    zielKnopf.type = 'button';
+    zielKnopf.addEventListener('click', function () {
+      var ziel = Math.max(0, Math.min(kapazitaet || Infinity, zahlRoh(zielFeld.value)));
+      var anteil = kapazitaet > 0 ? ziel / kapazitaet : 0;
+      materials.forEach(function (material) {
+        var name = String(material && material.name !== undefined ? material.name : '');
+        if (inputs[name]) inputs[name].value = String(Math.round(zahlRoh(material.need_per_day_at_capacity) * anteil * 10) / 10);
+      });
+      aktualisierePlan(true);
+    });
+    zielBox.appendChild(zielKnopf);
+    zielBox.appendChild(el('p', 'rd-leise', 'Produziert wird, was die Rohstoffe hergeben. Mit dem Ziel bestellst du genau so viele Rohstoffe, '
+      + 'wie für diese Menge nötig sind. Tipp: etwa so viel wie die Bestellungen deiner Kunden (' + zahl(ctx, data && data.orders_per_day) + ' pro Tag).'));
+    materialBlock.appendChild(zielBox);
+
     var vorschlag = el('button', '', 'Vorschlag für volle Kapazität');
     vorschlag.type = 'button';
     vorschlag.addEventListener('click', function () {

@@ -435,7 +435,7 @@ function zeichneMeldungen(messages) {
 
         const zeit = document.createElement('span');
         zeit.className = 'zeit';
-        zeit.textContent = `Jahr ${meldung.year}, Tag ${meldung.day}`;
+        zeit.textContent = meldung.day === undefined || meldung.day === null ? `Jahr ${meldung.year}` : `Jahr ${meldung.year}, Tag ${meldung.day}`;
 
         li.append(zeit, document.createTextNode(` ${meldung.text || ''}`));
         if (meldung.action === 'ceo') {
