@@ -653,7 +653,14 @@
       return meine.concat(andere).map(function (id, i) {
         return {
           name: (letzte[id].name || id) + (letzte[id].mine ? ' (deine)' : ''),
-          werte: verlauf.map(function (r) { var b = (r.brands || {})[id]; return b && b[feld] !== null && b[feld] !== undefined ? Number(b[feld]) : null; }),
+          werte: verlauf.map(function (r) {
+            var b = (r.brands || {})[id];
+            // Jahreswechsel: Der Anteil zählt ab 1. Januar neu, alle Marken stehen dann kurz auf 0 -> Punkt weglassen.
+            if (feld === 'share') {
+              var summe = Object.keys(r.brands || {}).reduce(function (acc, k) { return acc + (Number((r.brands[k] || {}).share) || 0); }, 0);
+              if (summe <= 0) return null;
+            }
+            return b && b[feld] !== null && b[feld] !== undefined ? Number(b[feld]) : null; }),
           farbe: letzte[id].mine ? 'var(--akzent)' : undefined
         };
       });
