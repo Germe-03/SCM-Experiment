@@ -178,6 +178,7 @@ def _contract_output(contract: dict, player_id, unit: int, runner=None) -> dict:
             "price": _round(change.get("price"), 4),
             "proposed_by": change.get("proposed_by"),
             "day": change.get("day"),
+            "days": change.get("days"),  # neue Laufzeit in Tagen ab Annahme
             "by_me": change.get("proposed_by") == player_id,
         }
     else:
