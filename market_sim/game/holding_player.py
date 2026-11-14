@@ -201,9 +201,26 @@ def holding_info(runner, state, player_id: str) -> dict | None:
             "tendency": firm.tendency,
         })
 
+    own = None
+    try:
+        firm = runner.network.firm(player_id)
+        runtime = runner.env.runtimes[player_id]
+        summary = _last_summary(state, player_id)
+        own = {
+            "id": player_id,
+            "name": firm.name,
+            "branch": _branch(firm),
+            "cash": runtime.cash,
+            "revenue": summary.revenue if summary is not None else 0.0,
+            "profit": summary.profit if summary is not None else 0.0,
+        }
+    except Exception:
+        own = None
+
     return {
         "id": group.id,
         "name": group.name,
         "cash": group.cash,
+        "own_firm": own,  # die vom Spieler selbst geführte Tochter
         "daughters": subsidiaries,
     }

@@ -428,6 +428,17 @@ function fuelleHolding(state) {
 
     const abschnitt = holdingElement('section');
     abschnitt.appendChild(holdingElement('h2', 'Töchter'));
+    const eigene = holdingState.holding.own_firm || (holdingState.firm ? { name: holdingState.firm.name } : null);
+    if (eigene) {
+        const karte = holdingElement('article', null, 'tochter-karte');
+        karte.appendChild(holdingElement('h3', `${eigene.name} (von dir geführt)`));
+        if (eigene.revenue !== undefined) {
+            karte.appendChild(holdingElement('p',
+                `Umsatz ${holdingGeld(eigene.revenue)} · Gewinn ${holdingGeld(eigene.profit)} · Kasse ${holdingGeld(eigene.cash)}`));
+        }
+        karte.appendChild(holdingElement('p', 'Diese Tochter führst du selbst in den übrigen Reitern.', 'leise'));
+        abschnitt.appendChild(karte);
+    }
     (holdingState.holding.daughters || []).forEach((tochter) => {
         abschnitt.appendChild(holdingTochterKarte(tochter, holdingState));
     });

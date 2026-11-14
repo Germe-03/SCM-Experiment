@@ -415,6 +415,13 @@ def stocks(runner, state, player_id, depot=None, history=None):
     for firm_id in listed_ids:
         firm = _firm(runner, firm_id)
         name = _text(_get(firm, "name", firm_id), _text(firm_id))
+        try:
+            groups = getattr(runner, "holding_groups", None)
+            group = groups.group_of(firm_id) if groups is not None else None
+            if group is not None and not groups.is_sub_only(firm_id):
+                name = _text(group.name, name)  # kotiert ist die Holding (konsolidiert)
+        except Exception:
+            pass
         branch = _get(firm, "branch")
         if branch is None:
             branch = _get(firm, "stage", "")

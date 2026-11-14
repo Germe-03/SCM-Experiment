@@ -531,9 +531,17 @@ def stocks_all(runner, state, player_id, **extra) -> dict:
                     if firm_id is None:
                         continue
                     stage_name = _read(firm, "stage")
+                    _name = _read(firm, "name", firm_id) or firm_id
+                    try:
+                        _groups = getattr(runner, "holding_groups", None)
+                        _group = _groups.group_of(firm_id) if _groups is not None else None
+                        if _group is not None and not _groups.is_sub_only(firm_id):
+                            _name = _group.name
+                    except Exception:
+                        pass
                     firms_by_id[firm_id] = {
                         "id": _clean(firm_id),
-                        "name": _clean(_read(firm, "name", firm_id) or firm_id),
+                        "name": _clean(_name),
                         "branch": _BRANCH_NAMES.get(stage_name, _clean(stage_name)),
                         "listed": firm_id in listed,
                     }
