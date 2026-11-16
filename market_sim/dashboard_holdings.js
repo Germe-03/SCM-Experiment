@@ -106,7 +106,8 @@ if(typeof chart==='function'){const baseChart=chart;chart=function(id,cfg){if(id
 
 // Popup einer Holding: zusammengezählte Diagramme über Stammfirma und alle Töchter.
 var hgPopupCharts=[];
-function hgPopupClose(){hgPopupCharts.forEach(c=>{try{c.destroy()}catch(e){}});hgPopupCharts=[];const m=document.getElementById('hg-popup');if(m)m.remove()}
+var hgPopupScroll=null;
+function hgPopupClose(){hgPopupCharts.forEach(c=>{try{c.destroy()}catch(e){}});hgPopupCharts=[];const m=document.getElementById('hg-popup');if(m)m.remove();if(hgPopupScroll){document.documentElement.style.overflow=hgPopupScroll[0];document.body.style.overflow=hgPopupScroll[1];hgPopupScroll=null}}
 function hgPopupChart(id,cfg){const el=document.getElementById(id);if(!el||!window.Chart)return;const c=new Chart(el,cfg);hgPopupCharts.push(c)}
 function openHoldingPopup(hid){
  hgPopupClose();
@@ -122,7 +123,7 @@ function openHoldingPopup(hid){
  const lastY=years.at(-1),rev=sum('revenue'),prof=sum('profit'),cash=sum('cash');
  const kp=(l,v)=>'<div class="kpi"><span>'+l+'</span><b>'+v+'</b></div>';
  const m=document.createElement('div');m.id='hg-popup';
- m.style.cssText='position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.6);overflow:auto;padding:24px 16px';
+ m.style.cssText='position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.6);overflow:auto;overscroll-behavior:contain;padding:24px 16px';hgPopupScroll=[document.documentElement.style.overflow,document.body.style.overflow];document.documentElement.style.overflow='hidden';document.body.style.overflow='hidden';
  m.innerHTML='<div class="card" style="max-width:1200px;margin:0 auto;background:var(--card,var(--bg,#1b1f24))"><div class="detail-head"><button class="btn" data-hg-close aria-label="Schliessen">✕</button><h2>'+esc(g.name)+'</h2><span class="badge">'+(g.status==='active'?'aktiv seit Jahr '+g.founded_year:'aufgelöst Jahr '+g.dissolved_year)+'</span></div>'
   +'<div class="kpis">'+kp('Kasse der Holding',fmtChf(g.cash))+kp('Firmen in der Gruppe',ids.length)+kp('Umsatz Jahr '+(lastY??''),fmtChf(rev.at(-1)))+kp('Gewinn Jahr '+(lastY??''),fmtChf(prof.at(-1)))+kp('Cash aller Firmen',fmtChf(cash.at(-1)))+'</div>'
   +'<p class="hint">Summe über '+ids.map(id=>esc(firm(id).name)).join(', ')+'. Zusammensetzung wie am Ende der Simulation.</p>'
