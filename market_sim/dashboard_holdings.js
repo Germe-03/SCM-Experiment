@@ -136,7 +136,14 @@ function openHoldingPopup(hid){
   +'<div class="card"><h3>Gewinn je Firma</h3><div class="chart"><canvas id="hgp-proff"></canvas></div></div>'
   +'<div class="card"><h3>Reputation und Qualität (Durchschnitt)</h3><div class="chart"><canvas id="hgp-rep"></canvas></div></div>'
   +(D.stocks?.prices?.[g.listing_id]?'<div class="card wide"><h3>Aktienkurs der Holding</h3><div class="chart"><canvas id="hgp-stock"></canvas></div></div>':'')
-  +'</div></div>';
+  +'</div>'
+  +(()=>{const L={formed:'Gründung mit',acquired:'Kauf',bought:'Kauf',sold:'Verkauf',dissolved:'Auflösung',covered:'Zuschuss an'};
+    const rows=(D.holding_log||[]).filter(r=>String(r.holding)===String(g.holding)&&['formed','acquired','bought','sold','dissolved'].includes(r.action)).sort((a,b)=>a.year-b.year);
+    const nm=id=>id&&typeof firm==='function'&&firm(id)?esc(firm(id).name):esc(id||'');
+    return '<div class="card wide"><h3>Käufe und Verkäufe</h3>'+(rows.length?'<div class="table-wrap"><table><thead><tr><th>Jahr</th><th>Vorgang</th><th>Firma</th><th class="num">Preis</th><th>Details</th></tr></thead><tbody>'
+     +rows.map(r=>'<tr><td>'+r.year+'</td><td>'+(L[r.action]||esc(r.action))+'</td><td>'+nm(r.firm)+'</td><td class="num">'+(r.amount!=null?fmtChf(r.amount):'')+'</td><td>'+esc(r.details||'')+'</td></tr>').join('')
+     +'</tbody></table></div>':'<p class="hint">Keine Käufe oder Verkäufe.</p>')+'</div>'})()
+  +'</div>';
  document.body.appendChild(m);
  m.addEventListener('click',e=>{if(e.target===m||e.target.closest('[data-hg-close]'))hgPopupClose()});
  document.addEventListener('keydown',function esc_(e){if(e.key==='Escape'){hgPopupClose();document.removeEventListener('keydown',esc_)}});
