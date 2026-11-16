@@ -129,6 +129,7 @@ function openHoldingPopup(hid){
   +'<p class="hint">Summe über '+ids.map(id=>esc(firm(id).name)).join(', ')+'. Zusammensetzung wie am Ende der Simulation.</p>'
   +'<div class="grid">'
   +'<div class="card wide"><h3>Umsatz und Gewinn pro Jahr</h3><div class="chart"><canvas id="hgp-rev"></canvas></div></div>'
+  +'<div class="card"><h3>Anzahl Firmen in der Gruppe</h3><p class="hint">Stammfirma plus Töchter, gezählt am Jahresende.</p><div class="chart"><canvas id="hgp-count"></canvas></div></div>'
   +'<div class="card"><h3>Marktanteil je Stufe</h3><p class="hint">Summe der Anteile der Firmen auf dieser Stufe.</p><div class="chart"><canvas id="hgp-share"></canvas></div></div>'
   +'<div class="card"><h3>Cash je Firma (Jahresende)</h3><div class="chart"><canvas id="hgp-cash"></canvas></div></div>'
   +'<div class="card"><h3>Umsatz je Firma</h3><div class="chart"><canvas id="hgp-revf"></canvas></div></div>'
@@ -150,6 +151,9 @@ function openHoldingPopup(hid){
  hgPopupChart('hgp-cash',{type:'line',data:{labels,datasets:ids.map((id,i)=>line(firm(id).name,years.map(y=>val(id,y,'cash')),i))},options:opt('chf')});
  hgPopupChart('hgp-revf',{type:'line',data:{labels,datasets:ids.map((id,i)=>line(firm(id).name,years.map(y=>val(id,y,'revenue')),i))},options:opt('chf')});
  hgPopupChart('hgp-proff',{type:'line',data:{labels,datasets:ids.map((id,i)=>line(firm(id).name,years.map(y=>val(id,y,'profit')),i))},options:opt('chf')});
+ const glog=(D.holding_log||[]).filter(r=>String(r.holding)===String(g.holding)&&r.firm);
+ const countAt=y=>{const set=new Set([g.listing_id]);glog.filter(r=>r.year<=y).sort((a,b)=>a.year-b.year).forEach(r=>{if(['formed','acquired','bought'].includes(r.action))set.add(r.firm);else if(r.action==='sold')set.delete(r.firm)});if(g.dissolved_year!=null&&y>=g.dissolved_year)return 0;const alive=id=>{const f=typeof firm==='function'&&firm(id);if(!f)return false;const r=f.yearly.find(r=>r.year===y);return !!r&&(r.revenue>0||r.cash!==0)};const finalIds=new Set([g.listing_id,...(g.subs||[]).map(x=>x.firm)]);if(y===Math.max(...years))return [...finalIds].filter(alive).length||finalIds.size;return [...set].filter(alive).length};
+ hgPopupChart('hgp-count',{type:'bar',data:{labels,datasets:[{label:'Firmen',data:years.map(countAt),backgroundColor:col(2)+'cc'}]},options:{...base,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{precision:0}}}}});
  const avg=k=>years.map(y=>{const v=ids.map(id=>val(id,y,k)).filter(v=>v!=null);return v.length?v.reduce((a,b)=>a+b,0)/v.length:null});
  hgPopupChart('hgp-rep',{type:'line',data:{labels,datasets:[line('Reputation',avg('reputation'),0),line('Qualität',avg('average_quality'),1)]},options:opt('pct')});
  if(D.stocks?.prices?.[g.listing_id]&&typeof stockPoints==='function'){
