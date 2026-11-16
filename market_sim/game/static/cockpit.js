@@ -1279,7 +1279,13 @@ function render(state) {
     if (einkaufKnopf) einkaufKnopf.textContent = firma.branch === 'hersteller' ? 'Produktion' : 'Einkauf';
     setzeText('einstufung-anzeige', einstufung || '');
     setzeSichtbar('einstufung-anzeige', Boolean(einstufung));
-    setzeText('zeit-anzeige', `Jahr ${state.year}, ${state.month_name || `Monat ${state.month}`}`);
+    const MONATSNAMEN = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+    const uhr = state.sim_clock;
+    if (state.dashboard_status === 'laeuft' && uhr && uhr.year) {
+        setzeText('zeit-anzeige', `Jahr ${uhr.year}, ${MONATSNAMEN[(uhr.month || 1) - 1]} (läuft)`);
+    } else {
+        setzeText('zeit-anzeige', `Jahr ${state.year}, ${state.month_name || `Monat ${state.month}`}`);
+    }
     const verbleibend = Number(state.years_left);
     const dauerAnzeige = element('dauer-anzeige');
     if (dauerAnzeige) {

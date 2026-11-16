@@ -143,7 +143,7 @@ function zeigeDashboardStatus(state) {
     link.hidden = status !== 'fertig';
     if (state.dashboard_url) link.href = state.dashboard_url;
     if (status === 'laeuft') {
-        const jahr = state.dashboard_progress;
+        const jahr = (state.sim_clock && state.sim_clock.year) || state.dashboard_progress;
         text.textContent = `Simulation läuft bis Jahr ${state.sim_years || 50}: Jahr ${jahr === null || jahr === undefined ? '…' : jahr}`
             + restzeitText(jahr, state.sim_years || 50);
         dashboardTimer = window.setTimeout(async () => {

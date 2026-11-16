@@ -399,6 +399,16 @@ class GameController:
                 return Path(path)
             return None
 
+    @staticmethod
+    def _sim_clock(runner) -> dict | None:
+        """Aktuelles Simulationsdatum (Jahr, Monat), auch während «bis zum Ende» im Hintergrund läuft."""
+        try:
+            dpy = int(runner.config.simulation.days_per_year)
+            period = int(runner.env.period)
+            return {"year": period // dpy + 1, "month": min(12, (period % dpy) * 12 // dpy + 1)}
+        except Exception:
+            return None
+
     def immediate(self, kind: str, args: dict) -> dict:
         """Sofort-Aktion zwischen den Runden; wird im Spielstand gespeichert und beim Laden wiederholt."""
         with self._lock:
@@ -894,6 +904,7 @@ class GameController:
             "depot_value": self._depot_value(),
             "dashboard_status": getattr(self.session, "dashboard_status", None),
             "dashboard_progress": int(getattr(self.session, "dashboard_progress", 0) or 0),
+            "sim_clock": self._sim_clock(runner),
             "dashboard_url": "/dashboard" if getattr(self.session, "dashboard_status", None) else None,
             "sim_years": int(runner.config.simulation.years),
             "autosaved_at": self.autosaved_at,
