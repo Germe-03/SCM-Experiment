@@ -139,13 +139,13 @@ function openHoldingPopup(hid){
   +'</div>'
   +(()=>{const L={formed:'Gründung mit',acquired:'Kauf',bought:'Kauf',sold:'Verkauf',dissolved:'Auflösung',covered:'Zuschuss an'};
     const rows=(D.holding_log||[]).filter(r=>String(r.holding)===String(g.holding)&&['formed','acquired','bought','sold','dissolved'].includes(r.action)).sort((a,b)=>a.year-b.year);
-    const nm=id=>id&&typeof firm==='function'&&firm(id)?esc(firm(id).name):esc(id||'');
+    const nm=id=>id&&typeof firm==='function'&&firm(id)?'<a href="#" class="click" data-hgp-firm="'+esc(id)+'">'+esc(firm(id).name)+'</a>':esc(id||'');
     return '<div class="card wide"><h3>Käufe und Verkäufe</h3>'+(rows.length?'<div class="table-wrap"><table><thead><tr><th>Jahr</th><th>Vorgang</th><th>Firma</th><th class="num">Preis</th><th>Details</th></tr></thead><tbody>'
      +rows.map(r=>'<tr><td>'+r.year+'</td><td>'+(L[r.action]||esc(r.action))+'</td><td>'+nm(r.firm)+'</td><td class="num">'+(r.amount!=null?fmtChf(r.amount):'')+'</td><td>'+esc(r.details||'')+'</td></tr>').join('')
      +'</tbody></table></div>':'<p class="hint">Keine Käufe oder Verkäufe.</p>')+'</div>'})()
   +'</div>';
  document.body.appendChild(m);
- m.addEventListener('click',e=>{if(e.target===m||e.target.closest('[data-hg-close]'))hgPopupClose()});
+ m.addEventListener('click',e=>{const fl=e.target.closest('[data-hgp-firm]');if(fl){e.preventDefault();const id=fl.dataset.hgpFirm;hgPopupClose();if(typeof showActor==='function')showActor(id);return}if(e.target===m||e.target.closest('[data-hg-close]'))hgPopupClose()});
  document.addEventListener('keydown',function esc_(e){if(e.key==='Escape'){hgPopupClose();document.removeEventListener('keydown',esc_)}});
  const base={responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{display:true}}};
  const axis=f=>({ticks:{callback:v=>f==='chf'?fmtChf(v):f==='pct'?fmtPct(v):v}});
