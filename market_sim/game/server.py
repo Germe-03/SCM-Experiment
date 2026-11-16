@@ -125,6 +125,10 @@ class Handler(SimpleHTTPRequestHandler):
                     body.get("choices") if isinstance(body.get("choices"), dict) else None,
                     body.get("orders") if isinstance(body.get("orders"), dict) else None,
                 )
+            elif path == "/api/holding_action":
+                kind = str(body.get("kind", ""))
+                result = (self.controller.immediate(kind, body.get("args") or {}) if kind.startswith("holding_")
+                          else {"ok": False, "message": "Unbekannte Aktion"})
             elif path == "/api/contract_counter":
                 result = self.controller.contract_counter(body)
             elif path == "/api/sell":

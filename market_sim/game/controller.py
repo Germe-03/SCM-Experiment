@@ -399,30 +399,25 @@ class GameController:
                 return Path(path)
             return None
 
-    def contract_counter(self, body: dict) -> dict:
-        """Gegenvorschlag zu einem Vertragsangebot oder einer Änderung; die KI antwortet sofort."""
+    def immediate(self, kind: str, args: dict) -> dict:
+        """Sofort-Aktion zwischen den Runden; wird im Spielstand gespeichert und beim Laden wiederholt."""
         with self._lock:
-            if self.session is None:
+            if self.session is None or self.protocol is None:
                 return {"ok": False, "message": "Kein Spiel aktiv – Seite neu laden"}
-            book = getattr(self.session.runner, "contracts", None)
-            if book is None:
-                return {"ok": False, "message": "Lieferverträge sind noch nicht verfügbar"}
+            item = {"round": len(self.protocol.rounds), "kind": str(kind), "args": dict(args or {})}
             try:
-                result = book.counter_bottles(int(body["id"]), self.session._firm_id,
-                                              float(body["units_per_day"]), float(body["price"]),
-                                              int(body["days"]))
+                result = self.session.apply_immediate(item)
             except (KeyError, TypeError, ValueError) as exc:
                 return {"ok": False, "message": str(exc) or "Ungültige Angaben"}
-            try:
+            if result.get("ok"):
+                self.protocol.immediate.append(item)
                 self._autosave(rotate=False)
-            except Exception:
-                pass
-            if result["accepted"]:
-                return {"ok": True, "accepted": True,
-                        "message": "Gegenvorschlag angenommen – der Vertrag gilt ab sofort zu deinen Bedingungen."}
-            return {"ok": True, "accepted": False,
-                    "message": "Gegenvorschlag abgelehnt (Preis oder Menge passt der Gegenseite nicht). "
-                               "Das ursprüngliche Angebot steht weiter."}
+            return result
+
+    def contract_counter(self, body: dict) -> dict:
+        """Gegenvorschlag zu einem Vertragsangebot oder einer Änderung; die KI antwortet sofort."""
+        return self.immediate("contract_counter",
+                              {k: body.get(k) for k in ("id", "units_per_day", "price", "days")})
 
     def sell(self) -> dict:
         """Verkauft die Firma und beendet das Spiel."""

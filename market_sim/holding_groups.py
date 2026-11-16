@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from market_sim.kpi import chf
@@ -32,6 +32,8 @@ class HoldingGroup:
     dissolved_year: int | None = None
     successor: str | None = None
     reason: str = ""
+    # Spielmodus: Geldanträge der Töchter an die Holding des Spielers.
+    requests: list = field(default_factory=list)
 
 
 class HoldingGroups:
@@ -56,6 +58,46 @@ class HoldingGroups:
             "holdings_bought": 0,
             "holdings_dissolved": 0,
         }
+
+    def player_transfer(self, runner, player_id: str, amount: float, to_firm: bool) -> dict:
+        """Spieler bezieht Geld von seiner Holding (to_firm) oder zahlt ein; die Holding sagt immer Ja."""
+        group = self.group_of(player_id)
+        if group is None:
+            return {"ok": False, "message": "Du hast keine Holding"}
+        amount = float(amount)
+        if amount <= 0:
+            return {"ok": False, "message": "Der Betrag muss grösser als 0 sein"}
+        runtime = runner.env.runtimes[player_id]
+        if to_firm:
+            if amount > group.cash:
+                return {"ok": False, "message": f"Die Holding hat nur {chf(group.cash)} in der Kasse"}
+            group.cash -= amount
+            runtime.adjust_cash(amount, f"holding_bezug:{group.id}")
+            return {"ok": True, "message": f"{chf(amount)} von {group.name} bezogen"}
+        if amount > runtime.cash:
+            return {"ok": False, "message": f"Deine Firma hat nur {chf(runtime.cash)} in der Kasse"}
+        runtime.adjust_cash(-amount, f"holding_einlage:{group.id}")
+        group.cash += amount
+        return {"ok": True, "message": f"{chf(amount)} an {group.name} eingezahlt"}
+
+    def decide_request(self, runner, player_id: str, request_id: int, accept: bool) -> dict:
+        """Spieler entscheidet über den Geldantrag einer Tochter."""
+        group = self.group_of(player_id)
+        if group is None:
+            return {"ok": False, "message": "Du hast keine Holding"}
+        request = next((r for r in group.requests if r["id"] == request_id and r["status"] == "offen"), None)
+        if request is None:
+            return {"ok": False, "message": "Diesen offenen Antrag gibt es nicht"}
+        name = runner.network.firm(request["firm"]).name
+        if not accept:
+            request["status"] = "abgelehnt"
+            return {"ok": True, "message": f"Antrag von {name} abgelehnt"}
+        if request["amount"] > group.cash:
+            return {"ok": False, "message": f"Die Holding hat nur {chf(group.cash)} in der Kasse"}
+        group.cash -= request["amount"]
+        runner.env.runtimes[request["firm"]].adjust_cash(request["amount"], f"holding_zuschuss:{group.id}")
+        request["status"] = "angenommen"
+        return {"ok": True, "message": f"{chf(request['amount'])} an {name} überwiesen"}
 
     def group_of(self, firm_id: str) -> HoldingGroup | None:
         group_id = self.sub_of.get(firm_id)
@@ -267,6 +309,15 @@ class HoldingGroups:
                     continue
 
                 need = floor - runtime.cash
+                if group.root_id in (getattr(runner, "player_choices", None) or {}) and firm_id != group.root_id:
+                    # Spieler-Holding: Die Tochter stellt einen Antrag, der Spieler entscheidet.
+                    if not any(r["firm"] == firm_id and r["status"] == "offen" for r in group.requests):
+                        group.requests.append({"id": len(group.requests) + 1, "firm": firm_id,
+                                               "amount": round(need, 2), "year": year, "status": "offen"})
+                        state.events.append({"year": year, "day": day, "firm": firm_id, "event": "holding_request",
+                                             "details": f"{runner.network.firm(firm_id).name} beantragt "
+                                                        f"{chf(need)} bei {group.name}"})
+                    continue
                 duty = group.cash >= self.cfg.cover_cash_share * total_rev
                 if duty:
                     if group.cash <= 0:

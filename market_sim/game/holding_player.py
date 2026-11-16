@@ -223,4 +223,11 @@ def holding_info(runner, state, player_id: str) -> dict | None:
         "cash": group.cash,
         "own_firm": own,  # die vom Spieler selbst geführte Tochter
         "daughters": subsidiaries,
+        "total_cash": group.cash + sum(d["cash"] for d in subsidiaries) + (own["cash"] if own else 0.0),
+        "total_revenue": sum(d["revenue"] for d in subsidiaries) + (own["revenue"] if own else 0.0),
+        "total_profit": sum(d["profit"] for d in subsidiaries) + (own["profit"] if own else 0.0),
+        "requests": [
+            {**r, "name": runner.network.firm(r["firm"]).name}
+            for r in getattr(group, "requests", []) if r.get("status") == "offen"
+        ],
     }

@@ -553,6 +553,34 @@ class GameSession:
             for target, shares in (stock.get("buy") or {}).items():
                 run(lambda t=target, n=shares: self.depot.buy(runner, fid, t, float(n)))
 
+    def apply_immediate(self, item: dict) -> dict:
+        """Sofort-Aktion zwischen zwei Runden (Gegenvorschlag, Holding-Geld). Gibt {"ok", "message", ...} zurück."""
+        kind = item.get("kind")
+        args = item.get("args") or {}
+        runner, fid = self.runner, self._firm_id
+        if kind == "contract_counter":
+            book = getattr(runner, "contracts", None)
+            if book is None:
+                return {"ok": False, "message": "Lieferverträge sind noch nicht verfügbar"}
+            result = book.counter_bottles(int(args["id"]), fid, float(args["units_per_day"]),
+                                          float(args["price"]), int(args["days"]))
+            if result["accepted"]:
+                return {"ok": True, "accepted": True,
+                        "message": "Gegenvorschlag angenommen – der Vertrag gilt ab sofort zu deinen Bedingungen."}
+            return {"ok": True, "accepted": False,
+                    "message": "Gegenvorschlag abgelehnt (Preis oder Menge passt der Gegenseite nicht). "
+                               "Das ursprüngliche Angebot steht weiter."}
+        groups = getattr(runner, "holding_groups", None)
+        if kind in ("holding_withdraw", "holding_deposit", "holding_request"):
+            if groups is None:
+                return {"ok": False, "message": "Keine Holding"}
+            if kind == "holding_withdraw":
+                return groups.player_transfer(runner, fid, float(args["amount"]), to_firm=True)
+            if kind == "holding_deposit":
+                return groups.player_transfer(runner, fid, float(args["amount"]), to_firm=False)
+            return groups.decide_request(runner, fid, int(args["id"]), bool(args.get("accept")))
+        return {"ok": False, "message": "Unbekannte Aktion"}
+
     def _apply_contract_orders(self, orders: dict, run) -> None:
         """Lieferverträge: contract_propose / contract_accept / contract_decline / contract_cancel."""
         runner, fid = self.runner, self._firm_id

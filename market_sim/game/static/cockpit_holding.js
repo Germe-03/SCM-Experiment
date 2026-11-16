@@ -426,6 +426,8 @@ function fuelleHolding(state) {
         return;
     }
 
+    holdingKasse(container, holdingState.holding);
+
     const abschnitt = holdingElement('section');
     abschnitt.appendChild(holdingElement('h2', 'Töchter'));
     const eigene = holdingState.holding.own_firm || (holdingState.firm ? { name: holdingState.firm.name } : null);
@@ -472,4 +474,85 @@ function geplanteAuftraegeHolding() {
 function leereAuftraegeHolding() {
     holdingAuftraege = {};
     fuelleHolding(holdingState || {});
+}
+
+
+// Holding-Übersicht: Kasse, Summen, Geld beziehen/einzahlen, Anträge der Töchter (Antwort sofort).
+async function holdingAktion(kind, args, meldung) {
+    meldung.className = 'leise';
+    meldung.textContent = 'Wird ausgeführt …';
+    try {
+        const res = await fetch('/api/holding_action', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ kind, args })
+        });
+        const d = await res.json();
+        meldung.className = d && d.ok ? 'ergebnis-ok' : 'ergebnis-fehler';
+        meldung.textContent = (d && (d.message || d.error)) || 'Keine Antwort vom Server.';
+        if (d && d.ok) {
+            const neu = await fetch('/api/game').then((r) => r.json()).catch(() => null);
+            if (neu && typeof fuelleHolding === 'function') {
+                fuelleHolding(neu);
+                const ziel = document.querySelector('#holding-kasse .holding-meldung');
+                if (ziel) { ziel.className = meldung.className; ziel.textContent = meldung.textContent; }
+            }
+        }
+    } catch (err) {
+        meldung.className = 'ergebnis-fehler';
+        meldung.textContent = 'Der Server ist nicht erreichbar.';
+    }
+}
+
+function holdingKasse(container, holding) {
+    const abschnitt = holdingElement('section');
+    abschnitt.id = 'holding-kasse';
+    abschnitt.appendChild(holdingElement('h2', holding.name || 'Holding'));
+    const liste = document.createElement('dl');
+    [
+        ['Kasse der Holding', holdingGeld(holding.cash)],
+        ['Kasse aller Firmen zusammen', holdingGeld(holding.total_cash)],
+        ['Umsatz aller Firmen (letztes Jahr)', holdingGeld(holding.total_revenue)],
+        ['Gewinn aller Firmen (letztes Jahr)', holdingGeld(holding.total_profit)]
+    ].forEach(([titel, wert]) => {
+        liste.appendChild(holdingElement('dt', titel));
+        liste.appendChild(holdingElement('dd', wert));
+    });
+    abschnitt.appendChild(liste);
+    abschnitt.appendChild(holdingElement('p',
+        'Die Holding sammelt einmal im Jahr das überschüssige Geld der Töchter ein. Deine Brauerei bekommt Geld sofort, '
+        + 'andere Töchter stellen Anträge, über die du entscheidest.', 'leise'));
+
+    const zeile = holdingElement('div');
+    const betrag = document.createElement('input');
+    betrag.type = 'number';
+    betrag.min = '0';
+    betrag.step = '1000000';
+    betrag.placeholder = 'Betrag in CHF';
+    betrag.setAttribute('aria-label', 'Betrag in CHF');
+    zeile.appendChild(betrag);
+    const meldung = holdingElement('p', '', 'holding-meldung');
+    zeile.appendChild(holdingKnopf('Geld beziehen', () => {
+        holdingAktion('holding_withdraw', { amount: Number(betrag.value) }, meldung);
+    }));
+    zeile.appendChild(holdingKnopf('Geld einzahlen', () => {
+        holdingAktion('holding_deposit', { amount: Number(betrag.value) }, meldung);
+    }));
+    abschnitt.appendChild(zeile);
+    abschnitt.appendChild(meldung);
+
+    const antraege = holding.requests || [];
+    abschnitt.appendChild(holdingElement('h3', 'Anträge der Töchter'));
+    if (!antraege.length) {
+        abschnitt.appendChild(holdingElement('p', 'Keine offenen Anträge.', 'leise'));
+    }
+    antraege.forEach((antrag) => {
+        const p = holdingElement('p', `${antrag.name} beantragt ${holdingGeld(antrag.amount)} (Jahr ${antrag.year}) `);
+        const m = holdingElement('span', '', 'leise');
+        p.appendChild(holdingKnopf('Annehmen', () => holdingAktion('holding_request', { id: antrag.id, accept: true }, m)));
+        p.appendChild(holdingKnopf('Ablehnen', () => holdingAktion('holding_request', { id: antrag.id, accept: false }, m)));
+        p.appendChild(m);
+        abschnitt.appendChild(p);
+    });
+    container.appendChild(abschnitt);
 }

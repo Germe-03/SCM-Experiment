@@ -23,6 +23,8 @@ class SaveGame:
     rounds: list[dict] = field(default_factory=list)
     choices: list[dict] = field(default_factory=list)
     orders: list[dict] = field(default_factory=list)
+    # Sofort-Aktionen zwischen den Runden: {"round": Anzahl Runden davor, "kind": ..., "args": {...}}
+    immediate: list[dict] = field(default_factory=list)
     saved_at: str = ""
     label: str = ""
 
@@ -80,11 +82,21 @@ def replay(
     if on_snapshot:
         on_snapshot(snap)
 
+    def _immediate(index: int) -> None:
+        for item in save.immediate or []:
+            if isinstance(item, dict) and int(item.get("round", -1)) == index:
+                try:
+                    session.apply_immediate(item)
+                except Exception:
+                    pass
+
     for index, round_settings in enumerate(save.rounds):
+        _immediate(index)
         round_choices = save.choices[index] if index < len(save.choices) else None
         round_orders = save.orders[index] if index < len(save.orders) else None
         snap = session.end_round(PlayerSettings(**round_settings), round_choices or None, round_orders or None)
         if on_snapshot:
             on_snapshot(snap)
 
+    _immediate(len(save.rounds))
     return session, snap
