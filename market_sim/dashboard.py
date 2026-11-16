@@ -281,7 +281,7 @@ body:has(dialog[open]){overflow:hidden}
  <p class="hint" id="fi-stock-empty" role="status"></p>
  <div class="grid">
   <div class="card wide"><h3>Börsenindex und SNB-Leitzins</h3><p class="hint">Wochen- und Jahresendkurse. Monat zeigt den letzten verfügbaren Stand. Leitzins: Jahresendstand auf der rechten Achse.</p><div class="chart"><canvas id="fi-stocks"></canvas></div></div>
-  <div class="card wide"><h3>Entwicklung (Start des Zeitraums = 100)</h3><label for="sx-search">Firma vergleichen …</label><input id="sx-search" type="search" list="sx-options" placeholder="Firma vergleichen …" aria-describedby="sx-selection-hint"><datalist id="sx-options"></datalist><p class="hint" id="sx-selection-hint" role="status">Bis zu fünf Firmen. Bei späterem Börsengang gilt der erste verfügbare Kurs als Start.</p><div class="chips" id="sx-selected" aria-label="Ausgewählte Firmen"></div><div id="sx-index-switch"></div><div class="chart"><canvas id="sx-compare"></canvas></div></div>
+  <div class="card wide"><h3>Entwicklung (Start des Zeitraums = 100)</h3><label for="sx-search">Firma vergleichen …</label><input id="sx-search" type="search" list="sx-options" placeholder="Firma vergleichen …" aria-describedby="sx-selection-hint"><datalist id="sx-options"></datalist><p class="hint" id="sx-selection-hint" role="status">Bis zu fünf Firmen. Bei späterem Börsengang gilt der erste verfügbare Kurs als Start.</p><div class="chips" id="sx-selected" aria-label="Ausgewählte Firmen"></div><div id="sx-index-switch"></div><div data-stock-win-slot></div><div class="chart"><canvas id="sx-compare"></canvas></div></div>
   <div class="card"><h3>Grösste Börsenwerte</h3><p class="hint">Top 10 am Ende des Zeitraums. Zeile: zum Vergleich hinzufügen. Name: Firmendetails.</p><div class="table-wrap"><table id="sx-top"></table></div></div>
   <div class="card"><h3>Grösste Gewinner / Verlierer im Zeitraum</h3><p class="hint">Je fünf noch kotierte Firmen mit Kurs am Anfang und Ende des Zeitraums.</p><div id="sx-movers"></div></div>
   <div class="card wide"><details><summary>Index pro Stufe (Start = 100)</summary><p class="hint">Nach Kurs gewichtet, gleiche Aktienzahl je Firma. Ein- und Austritte werden ohne Kurssprung verkettet.</p><div class="chart"><canvas id="sx-stages"></canvas></div></details></div>
@@ -650,7 +650,7 @@ function renderFirmDetail(){const root=$('#fm-detail');destroy();if(S.tab!=='fir
  <div class="card"><h3>Reputation und Qualität</h3><div class="chart"><canvas id="fd-rep"></canvas></div></div><div class="card"><h3>Ereignisse dieser Firma</h3><ul class="list" id="fd-events" style="max-height:270px;overflow:auto"></ul></div>
  <div class="card wide" id="fd-pd" hidden></div>
  <div class="card wide" id="fd-story" hidden></div>
- ${D.stocks?.prices?.[id]?'<div class="card wide"><h3>Börsenkurs</h3>'+etfMembership(id)+'<div id="fd-index-switch">'+stockIndexSwitch('fd',true)+'</div><p class="hint" id="fd-stock-empty"></p><div class="chart"><canvas id="fd-price"></canvas></div></div>':''}
+ ${D.stocks?.prices?.[id]?'<div class="card wide"><h3>Börsenkurs</h3>'+etfMembership(id)+'<div id="fd-index-switch">'+stockIndexSwitch('fd',true)+'</div>'+stockWinControl()+'<p class="hint" id="fd-stock-empty"></p><div class="chart"><canvas id="fd-price"></canvas></div></div>':''}
  ${firmRndHtml(id)}
  ${firmCommodityHtml(id)}
  <div class="card wide" id="fd-exit" hidden></div>
@@ -744,7 +744,7 @@ function renderBanks(){
   return `<tr><td>${bankLink(b.bank_id,b.name)}</td><td class="num" data-value="${b.customers}">${nf(b.customers)}</td><td class="num" data-value="${b.equity}">${chf(b.equity)}</td><td class="num" data-value="${bankRatio(b)==null?'':(bankRatio(b))*100}">${pct(bankRatio(b))}</td><td class="num" data-value="${b.loans}">${chf(b.loans)}</td><td class="num" data-value="${b.deposits}">${chf(b.deposits)}</td><td class="num" data-value="${b.profit}">${chf(b.profit)}</td><td class="num" data-value="${b.write_offs}">${chf(b.write_offs)}</td><td class="num" data-value="${b.credit_rejections||0}">${nf(b.credit_rejections||0)}</td><td class="num" data-value="${b.fee_income||0}">${chf(b.fee_income||0)}</td><td>${b.active?'aktiv':'pleite seit Jahr '+since}</td></tr>`
  }).join(''):`<tr><td colspan="11">${empty('Keine Bankberichte für dieses Jahr.')}</td></tr>`)+'</tbody>';wireBankLinks($('#fi-banks'))}
 // Points are closes of calendar buckets within each simulation year.
-function stockPoints(period){const s=D.stocks||{days:[],years:[]},points=s.days.map((_,i)=>i).filter(i=>inRange(s.years[i]));
+function stockPoints(period){const s=D.stocks||{days:[],years:[]},inYears=s.days.map((_,i)=>i).filter(i=>inRange(s.years[i])),points=typeof stockWinFilter==='function'?stockWinFilter(inYears):inYears;
  if(period!=='month')return points;
  const key=i=>s.years[i]+':'+Math.min(11,Math.floor(((s.days[i]-1)%D.meta.days_per_year)*12/D.meta.days_per_year));
  return points.filter((i,j)=>j===points.length-1||key(i)!==key(points[j+1]))}
