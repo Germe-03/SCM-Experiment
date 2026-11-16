@@ -316,6 +316,21 @@ class GameController:
                     choices_copy or None,
                     session_orders or None,
                 )
+                if snapshot is None:  # «Bis zum Ende» läuft im Autopilot im Hintergrund
+                    if self.protocol is not None:
+                        while len(self.protocol.choices) < len(self.protocol.rounds):
+                            self.protocol.choices.append({})
+                        self.protocol.rounds.append(asdict(new_settings))
+                        self.protocol.choices.append(dict(choices_copy))
+                        while len(self.protocol.orders) < len(self.protocol.rounds) - 1:
+                            self.protocol.orders.append({})
+                        saved = dict(session_orders)
+                        saved["_autopilot"] = {"until": None}
+                        self.protocol.orders.append(saved)
+                    self._autopilot_index = len(self.protocol.rounds) - 1 if self.protocol is not None else None
+                    self._autosave()
+                    threading.Thread(target=self._watch_autopilot, daemon=True).start()
+                    return self._state()
                 if self.protocol is not None:
                     # Alte Spielstände ohne "choices": auf gleiche Länge auffüllen.
                     while len(self.protocol.choices) < len(self.protocol.rounds):
@@ -334,19 +349,53 @@ class GameController:
 
     def run_to_end(self, settings: dict | None = None, choices: dict | None = None,
                    orders: dict | None = None) -> dict:
-        """Übernimmt die Eingaben und simuliert bis zum Ende (Autopilot, Dashboard im Hintergrund)."""
+        """Übernimmt die Eingaben; die Firma läuft im Autopilot bis zum Spielende weiter.
+
+        Die Simulation läuft im Hintergrund, «Ruder übernehmen» (take_over) hält sie wieder an.
+        """
         with self._lock:
             if self.session is None or self.snapshot is None:
                 return {"error": "Kein Spiel aktiv – Seite neu laden"}
             if self.session.finished or self.snapshot.game_over:
                 return {"error": "Das Spiel ist bereits beendet"}
-            self.session.force_end = True
+            if self.session.autopilot_running():
+                return {"error": "Der Autopilot läuft bereits"}
             self._ran_to_end = True
+            orders = dict(orders or {})
+            orders["_autopilot"] = {"until": None, "live": True}
             result = self.end_round(settings, choices, orders)
-            if "error" in result or not (self.snapshot and self.snapshot.game_over):
-                self.session.force_end = False
+            if "error" in result:
                 self._ran_to_end = False
             return result
+
+    def take_over(self) -> dict:
+        """Hält den Autopiloten am nächsten Monatsanfang an; danach führt der Spieler wieder."""
+        with self._lock:
+            if self.session is None or not self.session.autopilot_running():
+                return {"error": "Es läuft kein Autopilot"}
+            self.session.takeover_requested = True
+            return {"ok": True, "message": "Du übernimmst am nächsten Monatsanfang wieder."}
+
+    def _watch_autopilot(self) -> None:
+        """Wartet im Hintergrund auf das Ende des Autopiloten (Spielende oder Übernahme)."""
+        session = self.session
+        try:
+            snapshot = session._wait()
+        except Exception as exc:  # Fehler der Simulation
+            with self._lock:
+                self.error = str(exc)
+            return
+        with self._lock:
+            if self.session is not session:
+                return
+            if not snapshot.game_over:
+                self._ran_to_end = False
+                index = getattr(self, "_autopilot_index", None)
+                if self.protocol is not None and index is not None and index < len(self.protocol.orders):
+                    self.protocol.orders[index]["_autopilot"] = {"until": session.resumed_day}
+            self.snapshot = snapshot
+            self._process(snapshot)
+            self._autosave()
 
     def skip_year(self, settings: dict | None = None, choices: dict | None = None,
                   orders: dict | None = None) -> dict:
@@ -790,6 +839,13 @@ class GameController:
             return {"running": False}
 
         snapshot = self.snapshot
+        autopilot = bool(self.session.autopilot_running())
+        if autopilot or getattr(self.session, "dashboard_status", None) == "laeuft":
+            try:  # Kacheln laufen mit, solange die Simulation im Hintergrund rechnet
+                snapshot = self.session.live_snapshot(game_over=bool(self.snapshot.game_over),
+                                                      reason=self.snapshot.reason)
+            except Exception:
+                snapshot = self.snapshot
         stage = BRANCHES[self.protocol.branch][0]
         band = self.session.runner.config.stage_prices[stage]
         runner = self.session.runner
@@ -905,6 +961,8 @@ class GameController:
             "dashboard_status": getattr(self.session, "dashboard_status", None),
             "dashboard_progress": int(getattr(self.session, "dashboard_progress", 0) or 0),
             "sim_clock": self._sim_clock(runner),
+            "autopilot": autopilot,
+            "takeover_requested": bool(getattr(self.session, "takeover_requested", False)),
             "dashboard_url": "/dashboard" if getattr(self.session, "dashboard_status", None) else None,
             "sim_years": int(runner.config.simulation.years),
             "autosaved_at": self.autosaved_at,

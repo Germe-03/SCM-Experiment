@@ -188,3 +188,81 @@ function restzeitText(jahr, ziel) {
     const restText = rest < 90 ? `${Math.round(rest)} s` : `${Math.round(rest / 60)} Minuten`;
     return ` · etwa ${Math.round(proJahr)} s pro Jahr · noch etwa ${restText}`;
 }
+
+
+// «Bis zum Ende»: Firma im Autopilot. Kacheln laufen alle 3 s mit, «Ruder übernehmen» hält wieder an.
+let autopilotTimer = null;
+function zeigeAutopilot(state) {
+    let bereich = document.getElementById('autopilot-bereich');
+    if (autopilotTimer) {
+        window.clearTimeout(autopilotTimer);
+        autopilotTimer = null;
+    }
+    if (!state || !state.autopilot) {
+        if (bereich) bereich.hidden = true;
+        return;
+    }
+    if (!bereich) {
+        bereich = document.createElement('div');
+        bereich.id = 'autopilot-bereich';
+        bereich.className = 'dashboard-bereich';
+        bereich.style.position = 'sticky';
+        bereich.style.top = 'var(--kopf-hoehe, 0px)';
+        bereich.style.zIndex = '20';
+        bereich.style.display = 'flex';
+        bereich.style.gap = '1em';
+        bereich.style.alignItems = 'center';
+        bereich.style.flexWrap = 'wrap';
+        const text = document.createElement('p');
+        text.id = 'autopilot-text';
+        text.setAttribute('role', 'status');
+        const knopf = document.createElement('button');
+        knopf.type = 'button';
+        knopf.id = 'autopilot-knopf';
+        knopf.className = 'primaer';
+        knopf.textContent = 'Ruder übernehmen';
+        knopf.addEventListener('click', async () => {
+            knopf.disabled = true;
+            try {
+                await fetch('/api/take_over', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+            } catch (err) {
+                knopf.disabled = false;
+            }
+            const t = document.getElementById('autopilot-text');
+            if (t) t.textContent = 'Du übernimmst am nächsten Monatsanfang …';
+        });
+        bereich.appendChild(text);
+        bereich.appendChild(knopf);
+        const kopf = document.getElementById('kopf');
+        if (kopf && kopf.parentNode) kopf.parentNode.insertBefore(bereich, kopf.nextSibling);
+        else document.body.prepend(bereich);
+    }
+    bereich.hidden = false;
+    const uhr = state.sim_clock || {};
+    const monate = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+    const text = document.getElementById('autopilot-text');
+    const knopf = document.getElementById('autopilot-knopf');
+    if (state.takeover_requested) {
+        text.textContent = 'Du übernimmst am nächsten Monatsanfang …';
+        knopf.disabled = true;
+    } else {
+        text.textContent = `Autopilot führt deine Firma bis zum Spielende – gerade Jahr ${uhr.year || '…'}, ${monate[(uhr.month || 1) - 1]}.`;
+        knopf.disabled = false;
+    }
+    autopilotTimer = window.setTimeout(async () => {
+        autopilotTimer = null;
+        try {
+            const res = await fetch('/api/game');
+            if (res.ok) {
+                const neu = await res.json();
+                if (neu && neu.running !== undefined) {
+                    render(neu);
+                    return;
+                }
+            }
+        } catch (err) {
+            // beim nächsten Versuch weiter
+        }
+        zeigeAutopilot(state);
+    }, 3000);
+}

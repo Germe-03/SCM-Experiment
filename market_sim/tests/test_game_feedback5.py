@@ -68,9 +68,16 @@ def test_run_to_end(tmp_path):
     start(controller)
     state = controller.run_to_end({}, {}, {})
     assert "error" not in state, state
+    assert state["autopilot"] is True  # Firma läuft im Autopilot, Spieler kann übernehmen
+    assert controller.session.wait_done(300)
+    import time
+    for _ in range(50):
+        if controller._state()["game_over"]:
+            break
+        time.sleep(0.1)
+    state = controller._state()
     assert state["game_over"] is True
     assert state["end_reason_text"] == "Du hast bis zum Ende simuliert."
-    assert controller.session.wait_done(300)
 
 
 def test_describe_changes_dict_readable():

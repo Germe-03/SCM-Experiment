@@ -117,6 +117,8 @@ class Handler(SimpleHTTPRequestHandler):
                     body.get("choices") if isinstance(body.get("choices"), dict) else None,
                     body.get("orders") if isinstance(body.get("orders"), dict) else None,
                 )
+            elif path == "/api/take_over":
+                result = self.controller.take_over()
             elif path == "/api/reset":
                 result = self.controller.reset()
             elif path == "/api/check":

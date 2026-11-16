@@ -270,7 +270,7 @@ function setBusy(aktiv, text) {
 }
 
 function updateButtons() {
-    const spielBeendet = Boolean(aktuellerStand && aktuellerStand.game_over);
+    const spielBeendet = Boolean(aktuellerStand && (aktuellerStand.game_over || aktuellerStand.autopilot));
     const spielKnopfIds = ['runde-btn', 'weiter-btn', 'jahr-btn', 'ende-btn', 'verkaufen-btn'];
 
     spielKnopfIds.forEach((id) => {
@@ -1304,6 +1304,7 @@ function render(state) {
     if (typeof fuelleHolding === 'function') fuelleHolding(state);
     zeigeSpielende(state);
     if (typeof zeigeDashboardStatus === 'function') zeigeDashboardStatus(state);
+    if (typeof zeigeAutopilot === 'function') zeigeAutopilot(state);
     if (typeof zeigeRueckblick === 'function') zeigeRueckblick(state);
     zeichneMeldungen(state.messages || []);
     aktualisiereFilter();

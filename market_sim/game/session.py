@@ -85,6 +85,12 @@ class GameSession:
         self.result: RunResult | None = None
         self.finished = False
         self.force_end = False  # True: Spiel endet am nächsten Halt (bis zum Ende simulieren)
+        # «Bis zum Ende»: Firma vorübergehend im Autopilot, Spieler kann wieder übernehmen.
+        # {"until": globaler Tag oder None (bis Spielende), "on": bool}
+        self._ap: dict | None = None
+        self._ap_saved: tuple | None = None
+        self.takeover_requested = False
+        self.resumed_day: int | None = None
         self._founding: tuple[str, str, str | None, str | None] | None = None
         self._firm_id: str | None = None
         self._firm = None
@@ -277,11 +283,25 @@ class GameSession:
             if old is not None and settings.wage_level != old.wage_level:
                 # Mitarbeiter reagieren sofort auf den neuen Lohn.
                 self._current_firm().wage_level = settings.wage_level
-        self._pending_orders = orders if isinstance(orders, dict) else {}
+        orders = dict(orders) if isinstance(orders, dict) else {}
+        autopilot = orders.pop("_autopilot", None)
+        self._pending_orders = orders
         self.order_results = []
         self._holding = False
+        if isinstance(autopilot, dict):
+            until = autopilot.get("until")
+            self._ap = {"until": None if until is None else int(until), "on": False}
+            self.takeover_requested = False
+            self.resumed_day = None
+            self._to_thread.put(("continue", settings))
+            if until is None and autopilot.get("live"):
+                return None  # läuft im Hintergrund; der Controller wartet selbst
+            return self._wait()
         self._to_thread.put(("continue", settings))
         return self._wait()
+
+    def autopilot_running(self) -> bool:
+        return self._ap is not None and not self.finished
 
     def sell_firm(self) -> SaleResult:
         """Verkauft die Spielerfirma und lässt die Simulation zu Ende laufen."""
@@ -417,6 +437,26 @@ class GameSession:
         if year > self.game_years or self.force_end:
             self._end_in_thread("ende", year, day)
             return
+        ap = self._ap
+        if ap is not None:
+            global_day = int(runner.env.period)
+            if not ap["on"]:
+                ap["on"] = True
+                self._ap_saved = (runner.policies[firm_id], runner.player_choices.get(firm_id))
+                runner.policies[firm_id] = policy_for_firm(self._current_firm())
+                runner.player_choices.pop(firm_id, None)
+            if self.takeover_requested and ap["until"] is None:
+                ap["until"] = global_day
+            if ap["until"] is None or global_day < ap["until"]:
+                return  # Autopilot: kein Halt
+            policy, choices = self._ap_saved
+            runner.policies[firm_id] = policy
+            if choices is not None:
+                runner.player_choices[firm_id] = choices
+            self._ap = None
+            self._ap_saved = None
+            self.takeover_requested = False
+            self.resumed_day = global_day
 
         self._last_year = year
         self._last_day = day
@@ -735,6 +775,17 @@ class GameSession:
                 reason=reason,
             )
         raise RuntimeError(f"Unbekannte Nachricht aus dem Simulationsthread: {kind}")
+
+    def live_snapshot(self, game_over: bool = False, reason: str | None = None):
+        """Snapshot vom aktuellen Stand, während die Simulation im Hintergrund läuft (ohne Meldungen zu verbrauchen)."""
+        mark = self._event_mark
+        try:
+            dpy = int(self.runner.config.simulation.days_per_year)
+            period = int(self.runner.env.period)
+            return self._snapshot(self.runner, self.state, period // dpy + 1, period % dpy,
+                                  game_over=game_over, reason=reason)
+        finally:
+            self._event_mark = mark
 
     def _snapshot(
         self,
