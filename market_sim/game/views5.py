@@ -692,8 +692,9 @@ def contract_notices(runner, state, player_id, seen: set, year: int, month: int)
                         if key not in seen:
                             seen.add(key)
                             word = "angenommen" if result.get("status") == "angenommen" else "abgelehnt"
+                            why = f" ({result.get('reason')})" if result.get("reason") else ""
                             notices.append({"year": year, "month": month, "level": "info", "kind": "vertrag",
-                                            "text": f"{partner_name} hat deine Vertragsanpassung {word}."})
+                                            "text": f"{partner_name} hat deine Vertragsanpassung {word}{why}."})
                 elif status in ("beendet", "abgelehnt"):
                     if status == "abgelehnt" and proposed_by != player_id:
                         continue

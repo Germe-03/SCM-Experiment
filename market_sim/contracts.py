@@ -254,19 +254,19 @@ class ContractBook:
             raise ValueError("Die Gegenseite ist nicht mehr aktiv")
         change = contract.get("change")
         if contract["status"] == STATUS_OFFERED and contract["proposed_by"] != player_id:
-            accepted = self._ai_accepts(contract, other, units, price, player_id)
+            accepted, reason = self._ai_check(contract, other, units, price, player_id)
             if accepted:
                 contract.update(units_per_day=units, price=price, days=days, proposed_by=player_id,
                                 status=STATUS_ACTIVE, start_day=self._now())
                 self._refresh()
-            return {"accepted": accepted, "contract": contract}
+            return {"accepted": accepted, "reason": reason, "contract": contract}
         if contract["status"] == STATUS_ACTIVE and change and change["proposed_by"] != player_id:
-            accepted = self._ai_accepts(contract, other, units, price, player_id)
+            accepted, reason = self._ai_check(contract, other, units, price, player_id)
             if accepted:
                 contract["change"] = {"units_per_day": units, "price": price, "days": days,
                                       "proposed_by": player_id, "day": self._now()}
                 self.accept_change(contract_id)
-            return {"accepted": accepted, "contract": contract}
+            return {"accepted": accepted, "reason": reason, "contract": contract}
         raise ValueError("Zu diesem Vertrag gibt es kein offenes Angebot und keine offene Änderung der Gegenseite")
 
     def counter_bottles(self, contract_id: int, player_id: str, bottles_per_day: float, price: float,
@@ -388,15 +388,53 @@ class ContractBook:
                 contract["status"] = STATUS_DECLINED
 
     def _ai_accepts(self, contract: dict, ai_id: str, units: float, price: float, other_id: str) -> bool:
+        return self._ai_check(contract, ai_id, units, price, other_id)[0]
+
+    def _ai_check(self, contract: dict, ai_id: str, units: float, price: float, other_id: str) -> tuple[bool, str]:
+        """Entscheid der KI mit Grund. Bei einem laufenden Vertrag (Verlängerung) ist sie grosszügiger:
+        bis zur bisherigen Menge gibt es keine Kapazitätsprüfung und der Preis darf dreimal so weit abweichen."""
         cfg = self.runner.config.contracts
         ai_is_supplier = ai_id == contract["supplier"]
         market = self._market_price(ai_id, ai_is_supplier, other_id)
+        running = contract.get("status") == STATUS_ACTIVE
+        tolerance = cfg.price_tolerance * (3 if running else 1)
+        size = self._unit_size()
         if ai_is_supplier:
-            price_ok = price >= market * (1 - cfg.price_tolerance)
+            limit = market * (1 - tolerance)
+            if price < limit:
+                return False, f"Preis zu tief: die Gegenseite will mindestens CHF {limit:.2f} (Marktpreis {market:.2f})"
         else:
-            price_ok = price <= market * (1 + cfg.price_tolerance)
-        qty_ok = units <= cfg.max_capacity_share * self.env._effective_capacity(ai_id)
-        return price_ok and qty_ok
+            limit = market * (1 + tolerance)
+            if price > limit:
+                return False, f"Preis zu hoch: die Gegenseite zahlt höchstens CHF {limit:.2f} (Marktpreis {market:.2f})"
+        cap = cfg.max_capacity_share * self.env._effective_capacity(ai_id)
+        if running and units <= contract["units_per_day"]:
+            return True, ""
+        if units > cap:
+            return False, (f"Menge zu gross: die Gegenseite nimmt höchstens {round(cap * size):,} Flaschen pro Tag"
+                           .replace(",", "'"))
+        return True, ""
+
+    def extend(self, contract_id: int, player_id: str, days: int) -> dict:
+        """Verlängerung zu gleichen Bedingungen; die KI antwortet sofort. Rückgabe {"accepted", "reason"}."""
+        contract = self.get(contract_id)
+        if contract["status"] != STATUS_ACTIVE:
+            raise ValueError("Nur laufende Verträge können verlängert werden")
+        if player_id not in (contract["supplier"], contract["buyer"]):
+            raise ValueError("Du bist an diesem Vertrag nicht beteiligt")
+        days = int(days)
+        if days <= 0:
+            raise ValueError("Die Laufzeit muss positiv sein")
+        other = contract["buyer"] if player_id == contract["supplier"] else contract["supplier"]
+        if self._is_player(other):
+            raise ValueError("Die Gegenseite ist ein Spieler und entscheidet selbst")
+        ok, reason = self._ai_check(contract, other, contract["units_per_day"], contract["price"], player_id)
+        if ok:
+            contract["start_day"] = self._now()
+            contract["days"] = days
+            contract["change"] = None
+            contract["change_result"] = {"status": "angenommen", "proposed_by": player_id, "day": self._now()}
+        return {"accepted": ok, "reason": reason, "contract": contract}
 
     def _decide_player_changes(self) -> None:
         """KI entscheidet über Änderungsvorschläge der Spieler (wie bei neuen Verträgen)."""
@@ -410,10 +448,13 @@ class ContractBook:
             runtime = self.env.runtimes.get(ai_id)
             if runtime is None or not runtime.active:
                 continue
-            if self._ai_accepts(contract, ai_id, change["units_per_day"], change["price"], change["proposed_by"]):
+            ok, reason = self._ai_check(contract, ai_id, change["units_per_day"], change["price"],
+                                        change["proposed_by"])
+            if ok:
                 self.accept_change(contract["id"])
             else:
                 self.decline_change(contract["id"])
+                contract["change_result"]["reason"] = reason
 
     def _make_ai_changes(self) -> None:
         """KI schlägt (einmal pro Quartal) Anpassungen an Verträgen mit Spielern vor."""

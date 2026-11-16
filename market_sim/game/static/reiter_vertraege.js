@@ -364,6 +364,40 @@
     box.appendChild(schaltflaeche('Anpassung vorschlagen', function () {
       form.hidden = !form.hidden;
     }));
+    // Verlängern zu gleichen Bedingungen: Antwort kommt sofort.
+    var vMonat = Number(ctx && ctx.state && ctx.state.month) || 1;
+    var vRest = Math.max(1, (12 - vMonat + 1) * 30);
+    var vWahl = el('select', 're-eingabe');
+    vWahl.setAttribute('aria-label', 'Verlängern um');
+    [['bis Ende Jahr', vRest], ['1 Jahr', 360], ['2 Jahre', 720], ['5 Jahre', 1800]]
+      .forEach(function (e) { var o = el('option', '', e[0]); o.value = String(e[1]); vWahl.appendChild(o); });
+    vWahl.value = '360';
+    var vMeldung = el('p', 'rd-leise');
+    var vKnopf = schaltflaeche('Verlängern', function () {
+      vKnopf.disabled = true;
+      vMeldung.className = 'rd-leise';
+      vMeldung.textContent = 'Warte auf Antwort …';
+      fetch('/api/contract_extend', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: id, days: Number(vWahl.value) })
+      }).then(function (r) { return r.json(); }).then(function (d) {
+        vKnopf.disabled = false;
+        vMeldung.className = d && d.accepted ? 'rd-positiv' : 'rd-negativ';
+        vMeldung.textContent = (d && (d.message || d.error)) || 'Keine Antwort vom Server.';
+        if (d && d.accepted && ctx && typeof ctx.neuZeichnen === 'function') {
+          setTimeout(function () { ctx.neuZeichnen(); }, 1500);
+        }
+      }).catch(function () {
+        vKnopf.disabled = false;
+        vMeldung.className = 'rd-negativ';
+        vMeldung.textContent = 'Der Server ist nicht erreichbar.';
+      });
+    });
+    var vZeile = el('div', '');
+    vZeile.appendChild(vWahl);
+    vZeile.appendChild(vKnopf);
+    box.appendChild(vZeile);
+    box.appendChild(vMeldung);
     box.appendChild(form);
   }
 

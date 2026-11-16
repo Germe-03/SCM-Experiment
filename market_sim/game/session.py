@@ -568,8 +568,19 @@ class GameSession:
                 return {"ok": True, "accepted": True,
                         "message": "Gegenvorschlag angenommen – der Vertrag gilt ab sofort zu deinen Bedingungen."}
             return {"ok": True, "accepted": False,
-                    "message": "Gegenvorschlag abgelehnt (Preis oder Menge passt der Gegenseite nicht). "
+                    "message": f"Gegenvorschlag abgelehnt – {result.get('reason') or 'Bedingungen passen nicht'}. "
                                "Das ursprüngliche Angebot steht weiter."}
+        if kind == "contract_extend":
+            book = getattr(runner, "contracts", None)
+            if book is None:
+                return {"ok": False, "message": "Lieferverträge sind noch nicht verfügbar"}
+            result = book.extend(int(args["id"]), fid, int(args["days"]))
+            if result["accepted"]:
+                return {"ok": True, "accepted": True,
+                        "message": f"Verlängerung angenommen – der Vertrag läuft jetzt {int(args['days']) // 30} Monate ab heute."}
+            return {"ok": True, "accepted": False,
+                    "message": f"Verlängerung abgelehnt – {result.get('reason')}. "
+                               "Mit «Anpassung vorschlagen» kannst du einen anderen Preis oder eine kleinere Menge anbieten."}
         groups = getattr(runner, "holding_groups", None)
         if kind in ("holding_withdraw", "holding_deposit", "holding_request"):
             if groups is None:
