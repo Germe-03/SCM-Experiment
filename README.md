@@ -1,306 +1,249 @@
-# SCM-Experiment
+# Biermarkt Schweiz – agentenbasierte Marktsimulation
 
-Experimente zum Wahlmodul **Supply Chain Management** (FHNW BSc Business AI):
-vom klassischen Beer Game zu einer agentenbasierten Simulation des Schweizer
-Getränkemarkts über 50 Jahre mit wechselnden, konkurrierenden Firmen.
+Eine Simulation des Schweizer Getränkemarkts über 50 Jahre. Über 130 Firmen
+auf vier Stufen der Lieferkette kaufen, produzieren, liefern, investieren,
+forschen, gehen an die Börse, übernehmen sich gegenseitig oder gehen
+Konkurs. Ein interaktives Dashboard zeigt die ganze Entwicklung. In einem
+Spielmodus führt man selbst eine Firma, Monat für Monat, gegen die übrigen
+Firmen.
 
-Repository: <https://github.com/Germe-03/SCM-Experiment>
+Entstanden im Wahlmodul **Supply Chain Management** des Studiengangs
+BSc Business Artificial Intelligence an der FHNW. Ausgangspunkt war das
+klassische Beer Game.
 
-Das Repo hat zwei Teile, die bewusst getrennt bleiben:
-
-| Teil | Ordner | Zweck |
-|---|---|---|
-| Beer-Game-Abgabe | `team_bundle/` | Vier Agenten (Retailer, Wholesaler, Distributor, Factory) für die `supplychainbench`-Engine des Moduls |
-| Markt-Simulation | `market_sim/` | Eigenständige Simulation des Schweizer Getränkemarkts: Firmen, Marken, Kundenklassen, Staat, 50 Jahre |
-
----
-
-## 1. Beer-Game-Abgabe (`team_bundle/`)
-
-Die Engine `supplychainbench_v2` ist ein geschlossenes Wheel des Moduls und
-nicht Teil dieses Repos. Pro Stufe darf nur die Methode `step()` in
-`<rolle>/agent.py` verändert werden; sie sieht nur die lokale Beobachtung und
-gibt eine Bestellmenge (`order_qty`) zurück. Regeln und Ablauf stehen in
-[`team_bundle/README.md`](team_bundle/README.md), die Rollen sind in den
-`walkthrough_*.md` beschrieben.
-
-**Stand:** Alle vier Agenten nutzen noch die Mirror-Policy
-(`order_qty = incoming_order_qty`). Sie ist gültig, erzeugt aber den
-typischen Bullwhip-Effekt. Base-Stock, gleitender Durchschnitt und
-Forecast-Nachrichten (Phase 2) sind die nächsten Schritte.
-
-```bash
-cd team_bundle
-supplychainbench test-bundle .
-```
+![Überblick im Dashboard](docs/bilder/dashboard_overview.png)
 
 ---
 
-## 2. Markt-Simulation (`market_sim/`)
+## Auf einen Blick
 
-Weil die Engine nur genau eine Firma pro Stufe und nur eine Bestellmenge
-kennt, wurde die Markt-Simulation als eigenes Paket gebaut. Die bewährte
-Tick-Mechanik der Engine wurde nachgebaut und per Paritätstest gegen die
-Referenz geprüft. Die Herleitung steht in
-[`docs/market-extension-plan.md`](docs/market-extension-plan.md).
+- **Umfang:** rund 38'000 Zeilen Python und 11'000 Zeilen JavaScript,
+  über 600 automatische Tests, 175 Commits (Juli bis November 2026).
+- **Simulation:** Lieferkette mit vier Stufen, 30 Kundenklassen, fünf
+  Getränkearten, acht Regionen, 50 Jahre mit Tagesrhythmus.
+- **Wirtschaft rundherum:** Banken und Nationalbank mit Leitzins, Börse mit
+  Index und ETFs, Rohstoff- und Strommarkt, Staat mit Steuern, Gesetzen und
+  Bussen, Forschung mit Patenten, Holdings und Fusionen.
+- **Dashboard:** eine einzelne HTML-Datei mit 15 Reitern und über 100
+  Diagrammen, ohne Server lauffähig.
+- **Spielmodus:** Webanwendung mit Firmen-Cockpit, Speicherständen,
+  Lieferverträgen, Holding und einem Berater auf Basis eines Sprachmodells.
+- **Nachvollziehbar:** Jede Erweiterung lässt sich in einer
+  Konfigurationsdatei abschalten. Ein Lauf ist mit gleichem Startwert
+  (Seed) exakt wiederholbar.
 
-### Stand: eine grosse Simulation (Phasen 0–7)
+## Was das Projekt zeigt
 
-Statt einzelner Szenarien läuft jetzt ein langer Lauf über 50 Jahre, in dem
-der Markt von selbst lebt. Bauplan, Begründungen und Messwerte jeder Phase
-stehen in [`docs/bauplan-grosse-simulation.md`](docs/bauplan-grosse-simulation.md).
+| Bereich | Umsetzung im Projekt |
+|---|---|
+| Supply Chain Management | Bestellpolitik (Base-Stock), Lieferantenwahl, Bullwhip-Effekt, Lieferverträge, Logistik mit eigener Flotte oder Kurier |
+| Betriebswirtschaft | Erfolgsrechnung, Bilanz und Geldflussrechnung nach Schweizer Gliederung, Gewinnverwendung nach OR, Kalkulation pro Flasche |
+| Volkswirtschaft | Teuerung, Leitzins nach Taylor-Regel, Konjunkturzyklen, Wechselkurs, Bevölkerungsentwicklung |
+| Agentenbasierte Modellierung | Firmen mit fünf Strategietypen, die lernen, nachahmen und ihre Strategie wechseln |
+| Software-Engineering | Modulare Python-Architektur, Pydantic-Konfiguration, Speicherstände, Paritätstests, über 600 Tests |
+| Datenvisualisierung | Interaktives Dashboard mit Chart.js: Filter, Zeiträume, Vergleiche, Popups |
+| KI-Einsatz | Sprachmodell schreibt Firmengeschichten und berät im Spiel, aber nur auf Basis berechneter Fakten |
 
-- **Lebendiger Markt:** Neueintritte, Bank mit Zins und Kreditlimite,
-  Sanierung statt Zombie-Firmen, Strategiewechsel durch Ausprobieren und
-  Nachahmen, Stornierung blockierter Bestellungen.
-- **Kunden und Marken:** 30 Kundenklassen (Einkommen × Alter ×
-  Trinkverhalten) mit Höchstpreis; Marken tragen ihre eigene Reputation.
-- **Lange Zeit:** Teuerung, Löhne, Produktivität, alternde Bevölkerung,
-  Trends; Rezession, Rohstoffknappheit, Kostenschock und Lohnschub treten
-  zufällig auf.
-- **Getränke und Ausland:** Bier, Wein (Weinlese, Reifung, Jahrgang) und
-  Spirituosen mit festem Gesamtbedarf, Importeure mit Wechselkurs und Zoll,
-  Export.
-- **Orte und Logistik:** acht Regionen, Transportkosten, eigene Flotte oder
-  Transportdienst, Ausbau und neue Standorte mit Bauzeit und Abschreibung.
-- **Staat:** Gewinnsteuer, Straftaten mit versteckten Bussen, die die Firmen
-  erst lernen müssen, Vergiftungsskandal mit Angst, Übernahmen und
-  Wettbewerbsbehörde (Verbot, Zerschlagung).
-- **F&E-Projekte:** teuer, langsam, unsicher; Ergebnisse sind mehr
-  Produktivität, tiefere Rohstoffkosten oder neue Marken (auch alkoholfrei).
+---
 
-Zusätzliche Ausgaben eines Laufs: `brand_report.csv`, `class_report.csv`,
-`rnd_projects.csv`. Jede Erweiterung lässt sich in `config/market.yaml` mit
-`enabled: false` abschalten.
+## Dashboard
 
-**Erweiterung 2 (Phasen 8–12,** siehe
-[`docs/bauplan-erweiterung-2.md`](docs/bauplan-erweiterung-2.md)**):**
-Marktanteil auf allen Stufen, Negativzins auf grosse Kassen, Bilanz «Hat sich
-die Straftat gelohnt?», weitere F&E-Projekte, neuer Vergleich, Marktaufbau,
-Entscheidungsprotokoll mit Konkursanalyse, schematische Schweizer Karte,
-Bevölkerung mit Personas, Marketing, Restaurants, Beteiligungen, neue
-Gesetze mit vorsichtiger Beurteilung ihrer Folgen, regionaler Arbeitsmarkt
-und Texte vom lokalen Sprachmodell (Firmengeschichten, Chronik, Chat).
+Das Dashboard entsteht nach jedem Lauf als eine einzige HTML-Datei. Oben
+rechts wählt man den Zeitraum. Alle Diagramme, Kennzahlen und Tabellen
+richten sich danach.
 
-**Erweiterung 3 (Phasen 13–20,** siehe
-[`docs/bauplan-banken-boerse.md`](docs/bauplan-banken-boerse.md)**):**
-SNB mit Leitzins nach Taylor-Regel, drei Geschäftsbanken (später bis sechs)
-mit Hausbank und höchstens zwei Konten pro Firma, Kreditlinie und
-Kreditklemme, Bankpleite mit 30 % Einlagensicherung und freier Bankwahl,
-Börse mit Tageskursen ab Jahr 5 und verkettetem Index, kleine Beteiligungen
-über Börse und Hausbank. Neue Ausgaben: `bank_reports.csv`,
-`stock_daily.csv`, `stock_weekly.csv`.
+### Markt und Kunden
+Marktanteile und Reputation der Marken, Teuerung und Bevölkerung,
+Wechselkurs und Export, Kunden ohne passenden Preis.
 
-**TODO:**
+![Markt und Kunden](docs/bilder/dashboard_market.png)
 
-- Zigaretten als eigene Kategorie mit Sucht und Regulierung (Idee 15).
-- Begrenzter Regalplatz, damit Läden sich stärker spezialisieren.
-- Bestellungen pro Marke statt Gesamtmengen.
-- Lieferzeit abhängig von der Distanz (heute nur in der Lieferantenwahl).
-- Grösseres Ollama-Modell (z. B. `qwen2.5:7b`) für besseres Deutsch.
-- Börsengang über eine Bank statt «alle Firmen ab Jahr 5 handelbar»
-  (siehe [`docs/bauplan-banken-boerse.md`](docs/bauplan-banken-boerse.md)).
+### Karte
+Acht Regionen der Schweiz mit Bevölkerung, Firmen, Umsatz, Händlermarge,
+Lohnniveau und Arbeitsmarkt.
 
-### Modell in Kürze
+![Karte](docs/bilder/dashboard_map.png)
 
-- **Netzwerk:** Detailhandel → Grosshandel → Verteilung → Hersteller
-  (Brauereien, Weingüter, Brennerei, Importeure). Zu Beginn 27 Firmen
-  (`config/firms.yaml`), jede kauft bei allen aktiven Firmen der Stufe
-  darüber; Firmen kommen und gehen während des Laufs.
-- **Archetypen:** `low_cost`, `standard`, `reliable`, `premium`, `growth`;
-  sie bestimmen Preis, Qualität, Löhne, Risiko und Lagerziel und können
-  gewechselt werden.
-- **Nachfrage:** 30 Kundenklassen mit Höchstpreis (`config/consumers.yaml`),
-  fester Alkoholbedarf aufgeteilt auf Bier, Wein und Spirituosen, Marken mit
-  eigener Reputation (`config/brands.yaml`), Sommer-Saisonalität, Trends.
-- **Beschaffung:** Base-Stock-Bestellungen mit Obergrenze, Aufteilung auf
-  mehrere Lieferanten nach Lieferpreis inkl. Transport, Zuverlässigkeit,
-  Qualität und Reputation; zu lange offene Bestellungen verfallen.
-- **Finanzen:** alle Kosten in realen CHF, Bank mit Zins und Kreditlimite,
-  Sanierung, Steuern, Bussen, Investitionen mit Abschreibung.
-- **Alle Stellschrauben** stehen in `config/market.yaml`; jede Erweiterung
-  lässt sich dort mit `enabled: false` abschalten.
+### Firmen
+Alle Firmen mit Filtern nach Stufe, Kategorie, Region und Strategietyp. Ein
+Klick öffnet die Detailansicht mit Umsatz, Kosten, Cash, Börsenkurs,
+Forschung und allen Entscheidungen.
 
-### Starten
+![Firmen](docs/bilder/dashboard_firms.png)
+
+### Lieferkette
+Marge und Auslastung pro Stufe, verlorene Verkäufe, Bullwhip-Faktor,
+Transportkosten und Flotte.
+
+![Lieferkette](docs/bilder/dashboard_chain.png)
+
+### Finanzen
+Gewinnverwendung nach Obligationenrecht, Cash aller Firmen, Negativzinsen,
+Schulden und Holdings mit ihren Töchtern. Ein Klick auf eine Holding
+öffnet ein Fenster mit Diagrammen zur ganzen Gruppe.
+
+![Finanzen](docs/bilder/dashboard_finance.png)
+
+### Banken
+Leitzins und Teuerung, Eigenkapital, Kredite und Einlagen der Banken,
+Investitionskredite und Kreditausfälle.
+
+![Banken](docs/bilder/dashboard_banks.png)
+
+### Börse
+Börsenindex mit Leitzins, Aktien, ETFs, Rohstoffe und Strompreis im
+direkten Vergleich, mit wählbarem Zeitraum (YTD, 1 bis 10 Jahre oder von
+Monat bis Monat).
+
+![Börse](docs/bilder/dashboard_stocks.png)
+
+### Forschung und Entwicklung
+Projekte pro Jahr, Ausgaben, Patente und ein Forschungsbaum pro Branche.
+
+![Forschung und Entwicklung](docs/bilder/dashboard_rnd.png)
+
+### Staat
+Steuern, Straftaten und Bussen, Skandale und Wettbewerbsaufsicht. Für jede
+Straftat rechnet die Simulation nach, ob sie sich für die Firma gelohnt hat.
+
+![Staat](docs/bilder/dashboard_state.png)
+
+Weitere Reiter: Vergleich (bis 40 Firmen in einem Diagramm), Abschlüsse
+(Erfolgsrechnung, Bilanz, Geldfluss je Firma und Jahr), Kuriere, Ereignisse
+und eine Chronik. Ein Chat unten rechts beantwortet Fragen zum Lauf.
+
+---
+
+## Spielmodus: das Firmen-Cockpit
+
+Man gründet eine eigene Firma als Hersteller, Verteiler, Grosshändler,
+Detailhändler oder Gastronomiebetrieb und führt sie Runde für Runde
+(eine Runde = ein Monat).
+
+- **Reiter wie im Dashboard:** Übersicht, Firma, Markt, Forschung,
+  Logistik, Produktion oder Einkauf, Verträge, Lager, Finanzen, Bank,
+  Abschlüsse, Börse, Rohstoffe, Bevölkerung, Holding.
+- **Entscheide:** Preise pro Marke, Einkauf, Produktionsziel, Personal,
+  Marketing, Forschung, Kredite, Lastwagen, Standorte.
+- **Lieferverträge:** Mindestmengen mit Preis und Laufzeit zwischen den
+  Stufen. Gegenvorschläge und Verlängerungen bekommen sofort eine Antwort,
+  Absagen nennen den Grund.
+- **Holding:** Firmen kaufen, Töchter mit eigenem Chef führen, Geld zwischen
+  Holding und Töchtern verschieben, Anträge der Töchter entscheiden.
+- **Autopilot:** «Bis zum Ende simulieren» übergibt die Firma an den
+  Autopiloten. Mit «Ruder übernehmen» führt man jederzeit wieder selbst.
+- **Sicherheit:** Nach jeder Runde wird automatisch gespeichert. Ein
+  Spielstand speichert nur die Eingaben und spielt sie beim Laden exakt
+  nach.
+- **Berater:** Ein Sprachmodell gibt Tipps, sieht aber nur die eigenen und
+  die öffentlichen Zahlen.
+
+---
+
+## Wie die Simulation funktioniert
+
+- **Lieferkette:** Detailhandel und Gastronomie → Grosshandel → Verteilung →
+  Hersteller (Brauereien, Weingüter, Brennereien, Mineralwasser,
+  Softdrinks, Importeure). Jede Firma bestellt bei mehreren Lieferanten und
+  wählt nach Preis inklusive Transport, Zuverlässigkeit, Qualität und Ruf.
+- **Nachfrage:** 30 Kundenklassen nach Einkommen, Alter und Trinkverhalten,
+  jede mit Höchstpreis. Saison, Trends und eine alternde Bevölkerung
+  verändern die Nachfrage.
+- **Firmen als Agenten:** Fünf Strategietypen (günstig, Standard,
+  zuverlässig, Premium, Wachstum) bestimmen Preis, Qualität, Löhne, Lager
+  und Risiko. Firmen probieren aus, ahmen erfolgreiche Konkurrenten nach und
+  wechseln die Strategie.
+- **Geld:** Alle Beträge in Franken. Banken vergeben Kredite nach Bonität,
+  die Nationalbank setzt den Leitzins, grosse Guthaben zahlen Negativzins.
+  Gewinne werden nach Obligationenrecht verwendet (Reserve, Dividende,
+  Verrechnungssteuer).
+- **Markt im Wandel:** Neue Firmen treten ein, schwache gehen Konkurs oder
+  werden übernommen, Holdings und Fusionen entstehen. Rezessionen,
+  Missernten, Kostenschocks und Skandale treten zufällig auf.
+- **Börse:** Tageskurse nach Ertragswert und Stimmung, ein verketteter
+  Index und Branchen-ETFs.
+
+Ein 50-Jahre-Lauf dauert einige Minuten. Mehrere Seeds lassen sich parallel
+rechnen und statistisch auswerten.
+
+---
+
+## Technik
+
+- **Sprache:** Python 3.12, Pydantic für die Konfiguration, PyYAML, pytest.
+- **Frontend:** reines HTML, CSS und JavaScript mit Chart.js, ohne
+  Build-Schritt.
+- **Spielserver:** Python-Standardbibliothek (`http.server`), die
+  Simulation läuft in einem eigenen Thread und hält zu jedem Monatsanfang an.
+- **Sprachmodell:** GLM über die SwissAI-API (CSCS) oder lokal mit Ollama.
+  Texte mit Zahlen, die nicht aus der Simulation stammen, werden verworfen.
+- **Qualität:** über 600 Tests, darunter ein Paritätstest gegen die
+  Beer-Game-Engine des Moduls und Tests für das wiederholbare Laden von
+  Spielständen.
+
+### Arbeitsweise
+
+Das Projekt ist mit KI-Unterstützung entstanden. Planung, Architektur,
+Spielregeln und Prüfung lagen bei mir. Den Code haben Programmier-Agenten
+(Claude Code, Codex, GLM) nach meinen Vorgaben geschrieben. Jede
+Ausbaustufe hat einen schriftlichen Bauplan mit Begründungen und Messwerten
+im Ordner [`docs/`](docs/).
+
+---
+
+## Starten
 
 ```bash
 python -m venv .venv
 .venv/Scripts/python.exe -m pip install pydantic pyyaml pytest
 ```
 
+Lauf über 50 Jahre mit Dashboard:
+
 ```bash
 python -m market_sim.dashboard --seed 0 --out runs --open
 ```
 
-```bash
-python -m market_sim.run --seed 0 --out runs/seed0
-```
-
-```bash
-python -m market_sim.experiment --seeds 0-9 --skip-years 2 --out runs/experiment
-```
-
-```bash
-python -m pytest market_sim
-```
-
-- `dashboard` rechnet einen Lauf und schreibt `runs/dashboard.html` mit
-  Reitern für Überblick, Markt, Firmen, Vergleich, Lieferkette, Finanzen,
-  Staat, F&E, Marktaufbau und Ereignisse. Der Vergleich zeigt bis zu sechs
-  Firmen in einem Diagramm, wahlweise relativ zum jährlichen Stufenschnitt.
-- `run` schreibt `annual_reports.csv`, `firm_ranking.csv`, `system_kpis.csv`,
-  `events.csv`, `brand_report.csv`, `class_report.csv` und
-  `rnd_projects.csv` und `offence_ledger.csv`.
-- `experiment` rechnet mehrere Seeds parallel und schreibt
-  `experiment_runs.csv` (pro Seed) und `experiment_summary.csv` (Mittelwert,
-  Streuung, Minimum, Maximum pro Kennzahl), ohne die Anlaufjahre.
-- Ein 50-Jahres-Lauf dauert einige Minuten.
-
-
-### Texte und Chat mit dem Sprachmodell
-
-Standard ist GLM-5.3 über die kostenlose SwissAI-API (CSCS,
-`ollama.provider: api` in `config/market.yaml`). Den Schlüssel von
-<https://serving.swissai.svc.cscs.ch/api_key> als Umgebungsvariable
-`SWISSAI_RESEARCH_API_KEY` setzen; er kommt nie ins Repo. Höchstens 14
-Anfragen pro Minute, 112 Texte dauern so rund 8 Minuten. Mit
-`provider: ollama` läuft stattdessen das lokale Modell (`llama3.2:3b`), dann
-verlässt nichts den Rechner, aber ohne Grafikkarte dauert es Stunden. Das
-Modell schreibt nur aus Fakten, die Python berechnet; Texte mit Zahlen, die
-nicht in den Fakten stehen, werden durch eine Kurzfassung ersetzt.
-
-```bash
-python -m market_sim.dashboard --seed 0 --out runs --texts
-```
-
-```bash
-python -m market_sim.serve --dir runs --port 8770
-```
-
-`--texts` schreibt Firmengeschichten und eine Jahreschronik ins Dashboard
-(auf einem Rechner ohne Grafikkarte etwa eine bis zwei Stunden für 50 Jahre,
-danach zwischengespeichert). `serve` liefert das Dashboard unter
-<http://localhost:8770/dashboard.html> aus und beantwortet Fragen im Chat
-unten rechts.
-
-### Spielmodus (Firmen-Cockpit)
-
-Im Spielmodus gründest du selbst eine Firma in einer der fünf Branchen
-(Hersteller, Verteiler, Grosshändler, Detailhandel, Gastro) und führst sie
-Monat für Monat. Alle anderen Firmen laufen wie im Experiment weiter.
+Spielmodus, danach <http://localhost:8771> öffnen:
 
 ```bash
 python -m market_sim.game.server --port 8771 --saves runs/spielstaende
 ```
 
-Danach im Browser <http://localhost:8771> öffnen.
-
-- **Ablauf:** Gründung mit Branche, Region und Spieldauer (5 bis 50 Jahre).
-  Eine Runde ist ein Monat. «Rest des Jahres überspringen» springt zum
-  Januar, «Bis zum Ende simulieren» übergibt die Firma an den Autopiloten.
-  Die Simulation läuft immer bis Jahr 50; danach erzeugt der Server das
-  normale Beobachter-Dashboard (`/dashboard`, gespeichert unter
-  `runs/spiele/<zeit>_<firma>/dashboard.html`).
-- **Sicherung:** Nach jeder Runde wird automatisch nach
-  `runs/spielstaende/automatisch.json` gesichert (die vorherige Sicherung
-  bleibt als `automatisch_vorher.json`). Beim Start lädt der Server diese
-  Sicherung wieder. «Neues Spiel» sichert das alte Spiel vorher als
-  `vor_neuem_spiel.json`.
-- **Reiter:** Übersicht, Firma, Markt, Forschung, Logistik, Einkauf (beim
-  Hersteller: Produktion), Lager, Finanzen, Bank, Abschlüsse, Börse,
-  Rohstoffe, Bevölkerung, Holding, Graubereich, Hilfe.
-- **Händler** kaufen pro Getränkeart und Marke ein, wählen pro Marke einen
-  Grosshändler und setzen pro Marke einen eigenen Verkaufspreis (auch alle
-  um x % auf einmal). Lagerplatz und Regalkosten pro geführter Getränkeart
-  begrenzen das Sortiment.
-- **Hersteller** kaufen Rohstoffe zu Tageskursen ein; produziert wird so viel,
-  wie Kapazität und Rohstoffe zulassen.
-- **Lieferverträge:** Zwischen Hersteller und Verteiler, Verteiler und
-  Grosshändler sowie Grosshändler und Detailhandel/Gastro lassen sich
-  Verträge mit Menge pro Tag, Preis und Laufzeit abschliessen
-  (`market_sim/contracts.py`). Vertragsware wird zuerst bestellt und zuerst
-  geliefert. Andere Firmen nehmen Vorschläge an, wenn Preis und Menge passen,
-  und schlagen dem Spieler selbst Verträge vor.
-- **Holding:** Gekaufte Firmen werden Töchter; für jede Tochter braucht es
-  einen CEO (Avatare in `market_sim/game/static/avatare/`, Bildvorlagen in
-  [`docs/avatar-prompts.md`](docs/avatar-prompts.md)).
-- **Berater:** ein Sprachmodell (GLM über SwissAI) gibt Tipps, sieht aber nur
-  eigene und öffentliche Zahlen.
-- Entwürfe und Schnittstellen: `docs/entwurf-spielmodus.md` und
-  `docs/spielmodus-feedback1.md` bis `docs/spielmodus-feedback6.md`.
-
-### Regeln, die im November 2026 geändert wurden
-
-Diese Änderungen gelten für die ganze Simulation, also auch für das
-Experiment; frühere Läufe sind damit nicht mehr direkt vergleichbar.
-
-- **Übernahmen sind freiwillig:** Angeschlagene Firmen stehen zum Verkauf,
-  Käufer entscheiden selbst nach Preis, Wert und Geld (`state.py`).
-- **Börse:** Alle Firmen vom Start sind ab Tag 1 kotiert, jede neue Firma
-  nach 3 Jahren (`tradable_from_year: 1`, `listing_min_years: 3`). Der
-  Startkurs folgt dem Ertragswert.
-- **Grundkosten nach Grösse:** Kleine Hersteller zahlen die Grundkosten nur
-  anteilig (`fixed_costs.base_reference_units`).
-- **Rohstoffkrisen abgeschwächt:** Missernte ×1.12 (vorher 1.30),
-  Kostenschock ×1.10 (vorher 1.25).
-- **Preisuntergrenze:** Firmen verkaufen nicht dauerhaft unter ihren
-  Vollkosten des Vorjahres plus 2 % (`cost_floor_margin`); bei tiefer
-  Auslastung höchstens bis zum Konkurrenzpreis.
-- **Autopilot bestellt nach dem Absatz:** Händler bestellen mindestens so
-  viel, wie sie verkaufen, mit einem Gedächtnis für die Nachfrage der
-  letzten Monate. Vorher führte die zu tief gemessene Nachfrage zu leeren
-  Regalen und einer Abwärtsspirale.
-- **Abschlüsse:** Für jede Firma gibt es Erfolgsrechnung, Bilanz,
-  Geldflussrechnung und Kalkulation pro Flasche (`financials.py`), im
-  Dashboard im Reiter «Abschlüsse».
-
-### Speicherstände
-
-Mit `--checkpoints` speichert `run` nach jedem Jahr den ganzen Zustand als
-`<out>/checkpoints/year_XX.pkl`. Ein Lauf lässt sich damit fortsetzen, das
-Ergebnis ist exakt dasselbe wie ohne Unterbruch. Speicherstände sind
-Pickle-Dateien; lade nur selbst erzeugte.
+Mehrere Seeds auswerten:
 
 ```bash
-python -m market_sim.run --resume runs/seed0/checkpoints/year_20.pkl --out runs/resumed
+python -m market_sim.experiment --seeds 0-9 --skip-years 2 --out runs/experiment
 ```
 
-### Ergebnisse
+Tests:
 
-Phase 8 ergänzt Umsatzanteile und HHI für alle vorgelagerten Stufen,
-Kategorieanteile für Hersteller sowie Negativzinsen auf grosse Guthaben.
-Die Zinsschwelle ist das Maximum aus dem inflationsbereinigten Mindestbetrag
-und dem konfigurierten Anteil am Vorjahresumsatz. `negative_interest_enabled`
-schaltet die neue Zinsregel ab. `negative_interest_<stage>` misst nur die
-Belastung; `interest_cost_<stage>` enthält weiterhin den Nettozins.
+```bash
+python -m pytest market_sim
+```
 
-`offence_ledger.csv` enthält pro Firma, Straftat und Jahr die tatsächliche
-Ersparnis, Busse, den geschätzten Reputationsschaden, Nettoertrag und das
-Urteil `paid_off`. Die Schadensschätzung ist keine zusätzliche Buchung.
-Neue Forschungsprojekte senken einzelne Materialkomponenten, Transport-
-oder Lagerkosten; Robotik spart Personal bei gleicher Kapazität.
-Projekte können mit `enabled` abgeschaltet und mit `selection_weight`
-innerhalb der Archetyp-Präferenzen gewichtet werden.
-Die Messung steht in [`docs/bauplan-erweiterung-2.md`](docs/bauplan-erweiterung-2.md).
-Checkpoint-Version 11 ist erforderlich; ältere Speicherstände werden abgewiesen.
-
-Die Messwerte jeder Ausbauphase stehen im Messprotokoll von
-[`docs/bauplan-grosse-simulation.md`](docs/bauplan-grosse-simulation.md).
-Stand nach Phase 7 (10 Seeds, 50 Jahre): Gewinn 12 % des Endkundenumsatzes
-(5.6–15.7 %), Service Level 98 %, pro Lauf rund 37 Markteintritte und
-19 Konkurse.
-
-### Offene Punkte
-
-- Bullwhip-Ratio senken (Forecast-Weitergabe, stärkere Glättung).
-- Koeffizienten für Löhne, F&E und Handling sind Schätzungen, nicht an
-  Branchendaten kalibriert.
-- Ein börsenartiger Rohstoffmarkt liegt als Vorschlag in
-  `docs/commodity-market-proposal.md`.
-- Die Beer-Game-Agenten in `team_bundle/` nutzen noch die Mirror-Policy.
+Für Texte und Berater: den Schlüssel der SwissAI-API als Umgebungsvariable
+`SWISSAI_RESEARCH_API_KEY` setzen. Ohne Schlüssel läuft alles andere normal.
 
 ---
 
+## Aufbau des Repositorys
+
+| Ordner | Inhalt |
+|---|---|
+| `market_sim/` | Simulation: Firmen, Kunden, Banken, Börse, Staat, Forschung, Holdings |
+| `market_sim/config/` | Alle Stellschrauben (`market.yaml`), Firmen, Marken, Kunden, Personas |
+| `market_sim/game/` | Spielmodus: Server, Spielablauf, Ansichten und Cockpit im Browser |
+| `market_sim/tests/` | Automatische Tests |
+| `docs/` | Baupläne, Entwürfe und Messprotokolle jeder Ausbaustufe |
+| `team_bundle/` | Ursprüngliche Beer-Game-Agenten für die Engine des Moduls |
+
+Mehr Details zu Regeln und Messwerten:
+[`docs/bauplan-grosse-simulation.md`](docs/bauplan-grosse-simulation.md),
+[`docs/bauplan-erweiterung-2.md`](docs/bauplan-erweiterung-2.md),
+[`docs/bauplan-banken-boerse.md`](docs/bauplan-banken-boerse.md),
+[`docs/entwurf-spielmodus.md`](docs/entwurf-spielmodus.md).
+
 ## Lizenz
 
-Siehe [LICENSE](LICENSE).
+MIT, siehe [LICENSE](LICENSE).
