@@ -120,6 +120,9 @@ Man gründet eine eigene Firma als Hersteller, Verteiler, Grosshändler,
 Detailhändler oder Gastronomiebetrieb und führt sie Runde für Runde
 (eine Runde = ein Monat).
 
+> **Screenshots folgen noch:** Übersicht des Cockpits, Produktion bzw.
+> Verträge und Holding.
+
 - **Reiter wie im Dashboard:** Übersicht, Firma, Markt, Forschung,
   Logistik, Produktion oder Einkauf, Verträge, Lager, Finanzen, Bank,
   Abschlüsse, Börse, Rohstoffe, Bevölkerung, Holding.
