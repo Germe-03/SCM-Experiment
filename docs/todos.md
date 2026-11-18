@@ -22,3 +22,12 @@ Heute ist das Ausland eine Blackbox (`CategoriesConfig.exports` mit share/fx_ela
 - **Wein:** Nur noch 3 Neueintritte statt fast jährlich; zwei davon geben nach 3 bis 4 Jahren auf. Domaine Lavaux SA scheidet in Jahr 48 aus.
 - **Leasing:** Übergabe an eine Nachfolgefirma bei Fusion oder Übernahme ist nur im Test geprüft.
 - **F&E-Baum und Händler-Karte:** nur mit Testdaten geprüft, nicht im Browser.
+
+## 3. Spielstände als fertiger Zustand (Todo 18.11.2026, nicht begonnen)
+
+Heute speichert ein Spielstand nur die Eingaben und rechnet beim Laden die ganze Simulation neu durch. Das dauert bei langen Spielen 10 bis 15 Minuten und ergibt ein anderes Spiel, sobald sich Regeln geändert haben.
+
+- **Neu:** Gespeichert wird immer der aktuelle Stand als fertiger Zustand (ganze Simulation), Laden in Sekunden und unabhängig von späteren Regeländerungen.
+- **Höchstens 3 Spielstände:** frei belegbar, es können verschiedene Spiele oder verschiedene Stände desselben Spiels sein.
+- **Immer der aktuelle Stand:** Speichern legt den Stand von jetzt ab.
+- Offen bei der Umsetzung: Was passiert beim Speichern, wenn alle 3 Plätze belegt sind (überschreiben mit Rückfrage?), und wie die automatische Sicherung dazu passt.
