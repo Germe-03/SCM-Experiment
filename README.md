@@ -71,6 +71,17 @@ Forschung und allen Entscheidungen.
 
 ![Firmen](docs/bilder/dashboard_firms.png)
 
+Detailansicht einer Firma, hier die Brauerei aus dem eigenen Spiel:
+
+![Detailansicht einer Firma](docs/bilder/dashboard_firmendetail.png)
+
+### Vergleich
+Bis zu 40 Firmen in einem Diagramm, wahlweise relativ zum Schnitt ihrer
+Stufe. Hier das Cash von drei Detailhändlern, die alle 50 Jahre im Markt
+waren, mit Tabelle zu bestem und schlechtestem Jahr.
+
+![Vergleich von drei Detailhändlern](docs/bilder/dashboard_vergleich.png)
+
 ### Lieferkette
 Marge und Auslastung pro Stufe, verlorene Verkäufe, Bullwhip-Faktor,
 Transportkosten und Flotte.
@@ -97,6 +108,11 @@ Monat bis Monat).
 
 ![Börse](docs/bilder/dashboard_stocks.png)
 
+«Alles im Vergleich»: eine Aktie, ein ETF, ein Rohstoff oder der Strompreis,
+wahlweise gegen den Börsenindex.
+
+![Alles im Vergleich](docs/bilder/dashboard_boerse_vergleich.png)
+
 ### Forschung und Entwicklung
 Projekte pro Jahr, Ausgaben, Patente und ein Forschungsbaum pro Branche.
 
@@ -108,7 +124,7 @@ Straftat rechnet die Simulation nach, ob sie sich für die Firma gelohnt hat.
 
 ![Staat](docs/bilder/dashboard_state.png)
 
-Weitere Reiter: Vergleich (bis 40 Firmen in einem Diagramm), Abschlüsse
+Weitere Reiter: Abschlüsse
 (Erfolgsrechnung, Bilanz, Geldfluss je Firma und Jahr), Kuriere, Ereignisse
 und eine Chronik. Ein Chat unten rechts beantwortet Fragen zum Lauf.
 
